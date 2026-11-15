@@ -1,17 +1,17 @@
 // node test/civilization/flight.test.ts: ship flight at 30 and 120 fps. The model flies nose first (little slip,
 // never backwards, turn rate capped, no strafing from rest); patrols run round their world in pairs (all sides, in and
 // out, never parked, wingmen in their slot); an attack run fires bursts from well out, hits, never grazes the body and
-// comes home; rival war waves cross your moon slots in wings, pursuit lets you escape; shuttles reach a moon and come home.
+// comes home; rival war waves cross your moon slots in wings, pursuit lets you escape.
 import assert from 'node:assert/strict';
 import { slotRadius } from '../../src/core/orbits.ts';
-import { book, disc, fighter, fighterGun, q, R, report, seeded, SR, watch } from './fakes.ts';
+import { book, craft, disc, fighter, fighterGun, q, R, report, seeded, SR, watch } from './fakes.ts';
 import {
-  ACC, approach, avoid, BRAKE, BURST, chase, circuit, formation, GAP, GEE, GUN, H_TOP, H_TURN, inArc, jink, jinkStep, leash, lowPass, M_TOP, M_TURN, MAX_DT, OUTER, P_ACC, P_TOP, P_TURN, PATROL_V, pairUp, RATE, RF_TURN, RING_IN, RING_OUT, rivalTop, ROW,
+  ACC, BURST, chase, formation, GAP, GEE, GUN, H_TOP, H_TURN, inArc, jink, jinkStep, leash, lowPass, M_TOP, M_TURN, MAX_DT, OUTER, P_ACC, P_TOP, P_TURN, PATROL_V, pairUp, RATE, RING_IN, RING_OUT, ROW,
   startJink, steps, strafe, thrust, TURN, want, wrap, type Craft, type Fighter, type Strafer,
 } from '../../src/evolution/civilization/flight.ts';
 import { createShots, pull, SHOTS, trigger } from '../../src/evolution/civilization/guns.ts';
-import { breakOff, breakStep, clear, ferry, guard, runStep, scan } from '../../src/evolution/civilization/nav.ts';
-import { DIG, SPEED } from '../../src/evolution/civilization/mining.ts';
+import { breakOff, breakStep, guard, runStep } from '../../src/evolution/civilization/nav.ts';
+import { OUT_V, plan, settle, step, type Away, type Frame } from '../../src/evolution/civilization/away.ts';
 import { CHASE_S, CHASE_V, LEASH, PIRATE_SPEED } from '../../src/evolution/civilization/rules.ts';
 
 const dist = (c: Craft) => Math.hypot(c.x, c.y) / R;
@@ -82,7 +82,7 @@ for (const fps of [30, 120]) {
 const fired: Record<string, { t: number; x: number; y: number }> = {};
 for (const fps of [30, 120]) for (const side of [0, 1.3, 2.6, 3.9, 5.2]) {
   const s = patrol(1, 120, 8, () => {})[0], tr = 0.4 * R, v = 4 * R, dt = 1 / fps, k = steps(dt), h = dt / k;
-  const a = Math.atan2(s.y, s.x) + Math.PI + side * 0.2, ux = Math.cos(a), uy = Math.sin(a), body = { m: 1, r: tr, motion: { x: 20 * R * ux, y: 20 * R * uy, vx: -ux * v, vy: -uy * v } };
+  const a = Math.atan2(s.y, s.x) + Math.PI + side * 0.2, ux = Math.cos(a), uy = Math.sin(a), body = disc(20 * R * ux, 20 * R * uy, tr, -ux * v, -uy * v);
   let t = 0, low = Infinity, near = Infinity, first: { t: number; gap: number; out: number } | undefined, hit: { t: number; out: number } | undefined, hits = 0, rounds = 0, broke = -1;
   const shots = createShots(SHOTS, seeded(7 + side * 10)), g = trigger(), gun = fighterGun(() => (hits++, (hit ??= { t, out: Math.hypot(body.motion.x, body.motion.y) / R })));
   s.mode = 'run';
@@ -165,83 +165,51 @@ for (const fps of [30, 120]) {
   assert.ok(off.dropped <= 10, `a target leaving at 20 R/s escapes within 10 s: ${off.dropped}`);
   assert.ok(walk.dropped === Infinity && walk.far <= 8, `a target at 5 R/s is kept within 8 R: ${walk.far}`);
 }
-// Rival ships away round a moving you (a hand copy of rivals.ts's ships-away loop: fighters going or massing, frigates on
-// their battery circuit, a probe, a miner, homing), tops from the shared rivalTop. You (R), their world (radius R) and a
+// Rival ships away round a moving you (away.ts, as rivals.ts flies them: fighters going or massing, frigates on their
+// battery circuit, a probe, a miner, homing), tops from the shared rivalTop. You (R), their world (radius R) and a
 // rock move each frame; a ship touching you dies. Every ship every sub-step: speed ≤ max(top, last), |Δv| ≤ GEE × thrust.
 {
-  type Away = Strafer & { wx: number; wy: number; k: number; sense: number; role: 'fighter' | 'frigate' | 'probe' | 'miner'; t: number; home: boolean; rock?: ReturnType<typeof disc>; dig: number; da: number; dead: boolean; docked: number; landed: number };
-  const OUT_V = 5, MASS_IN = [1.5, 1.7], MASS_OUT = [1.9, 2.1], PROBE_S = 10, DIG_S = 2, DOCK = 1.3; // rivals.ts
-  const sp = OUT_V * R, acc = sp * P_ACC, brake = BRAKE * acc, outer = slotRadius(R, 0);
-  type Opts = { fps: number; T: number; phase: 'go' | 'mass' | 'home'; ships: Away['role'][]; at?: (a: number) => [number, number]; rock?: [number, number, number, number]; you: (me: ReturnType<typeof disc>, ships: Away[], dt: number, t: number) => void; world?: (w: ReturnType<typeof disc>, me: ReturnType<typeof disc>, dt: number, t: number) => void };
-  const stats = { over: 0, jolt: 0 };
+  type Ship = Away & { dead: boolean; docked: number; landed: number };
+  const sp = OUT_V * R, acc = sp * P_ACC, outer = slotRadius(R, 0);
+  type Opts = { fps: number; T: number; phase: 'go' | 'mass' | 'home'; ships: Away['role'][]; at?: (a: number) => [number, number]; rock?: [number, number, number, number]; you: (me: ReturnType<typeof disc>, ships: Ship[], dt: number, t: number) => void; world?: (w: ReturnType<typeof disc>, me: ReturnType<typeof disc>, dt: number, t: number) => void };
+  const stats = { over: 0, jolt: 0, land: 0, dock: 0 }; // land: a miner's gap to its rock's surface at touchdown; dock: a ship's distance from its world's centre docking
   function away(o: Opts) {
     const dt = 1 / o.fps, n = steps(dt), h = Math.min(dt, MAX_DT) / n, me = disc(0, 0, R), world = disc(10 * R, 0, R), rock = o.rock ? disc(o.rock[0], o.rock[1], 0.3 * R, o.rock[2], o.rock[3]) : undefined;
     const bodies = rock ? [me, world, rock] : [me, world], bm = world.motion, pm = me.motion;
-    const ships: Away[] = o.ships.map((role, i) => {
+    const ships: Ship[] = o.ships.map((role, i) => {
       const a = Math.PI + (i - o.ships.length / 2) * 0.4, [x, y] = o.at ? o.at(a) : [bm.x + Math.cos(a) * 1.1 * R, bm.y + Math.sin(a) * 1.1 * R];
-      return { role, x, y, vx: bm.vx, vy: bm.vy, heading: a, burn: 0, out: false, wx: 0, wy: 0, k: i * 977, sense: 1, t: 0, home: o.phase === 'home', rock: role === 'miner' ? rock : undefined, dig: 0, da: 0, dead: false, docked: -1, landed: -1 };
+      return { role, x, y, vx: bm.vx, vy: bm.vy, heading: a, burn: 0, out: false, wx: 0, wy: 0, k: i * 977, sense: 1, t: 0, home: o.phase === 'home', rock: role === 'miner' ? rock : undefined, dig: 0, da: 0, fired: Infinity, dead: false, docked: -1, landed: -1 };
     });
-    let phase = o.phase, homeAt = -1, fastest = 0, probeV = 0, near8 = 0;
+    let homeAt = -1, fastest = 0, probeV = 0, near8 = 0;
     const c = { x: bm.x, y: bm.y, vx: bm.vx, vy: bm.vy }, fv = { x: bm.vx, y: bm.vy }, lash = { far: 0, slow: 0 };
-    for (let f = 1, t = dt; f <= o.T * o.fps; f++, t += dt) {
+    const f: Frame = { you: me, world, phase: o.phase, c, fv, outer, sr: SR, bodies, own: (b, s) => b === world || b === s.rock, lance: { u: 0, reload: Infinity } };
+    for (let fr = 1, t = dt; fr <= o.T * o.fps; fr++, t += dt) {
       o.you(me, ships.filter((s) => !s.dead && s.docked < 0), dt, t);
       o.world?.(world, me, dt, t);
       for (const b of bodies) [b.motion.x, b.motion.y] = [b.motion.x + b.motion.vx * dt, b.motion.y + b.motion.vy * dt];
-      if (phase === 'go') {
+      if (f.phase === 'go') {
         const outpaced = chase(c, pm.x, pm.y, pm.vx, pm.vy, CHASE_V * sp, dt);
-        if (leash(lash, Math.hypot(c.x - pm.x, c.y - pm.y), LEASH * HALF_DIAG * R, outpaced, dt)) [phase, homeAt] = ['home', t];
+        if (leash(lash, Math.hypot(c.x - pm.x, c.y - pm.y), LEASH * HALF_DIAG * R, outpaced, dt)) [f.phase, homeAt] = ['home', t];
       }
       lowPass(fv, c.vx, c.vy, dt);
-      const live = ships.filter((s) => !s.dead && s.docked < 0), massing = phase === 'mass', up = massing || phase === 'go', flying = up ? live.filter((s) => s.role === 'fighter') : [];
-      const wc = massing ? bm : c, wfv = massing ? { x: bm.vx, y: bm.vy } : fv, keep = massing ? R + (2 + ROW[1]) * SR : 1.25 * R + (2 + ROW[1]) * SR;
-      const route = (s: Away) => {
-        const x = s.x - wc.x, y = s.y - wc.y;
-        if (!massing) return strafe(s, x, y, s.vx - wfv.x, s.vy - wfv.y, RING_IN * R, outer + RING_OUT * R, keep, sp);
-        circuit(s, x, y, MASS_IN.map((q) => q * R), MASS_OUT.map((q) => q * R), sp, RF_TURN);
-        avoid(x, y, keep, 2 * R);
-      };
-      const st = live.map((s) => {
-        s.t += dt;
-        if ((s.role === 'probe' && s.t > PROBE_S) || (s.role === 'miner' && !s.rock)) s.home = true;
-        const battery = s.role === 'frigate', wave = s.role === 'fighter', home = battery ? !up : wave ? !flying.length : s.home, digging = !home && !!s.rock && s.dig > 0;
-        const fc = home || battery ? { x: bm.vx, y: bm.vy } : wave ? wfv : s.rock ? { x: s.rock.motion.vx, y: s.rock.motion.vy } : { x: pm.vx, y: pm.vy };
-        return { wave, home, digging, fc, top: rivalTop(sp, wave, home || battery || (wave && massing) || s.rock ? fc : undefined), near: digging ? [] : scan(s, bodies, (b) => b === world || b === s.rock, SR, sp, battery ? RF_TURN : P_TURN) };
-      });
+      const live = ships.filter((s) => !s.dead && s.docked < 0), st = plan(live, f, dt);
       for (let k = 0; k < n; k++) live.forEach((s, i) => {
-        const { wave, home, digging, fc, top, near } = st[i], rk = s.rock;
-        if (digging) return;
-        if (home) approach(s, bm.x, bm.y, bm.vx, bm.vy, R, sp, brake);
-        else if (s.role === 'frigate') {
-          const x = s.x - bm.x, y = s.y - bm.y;
-          circuit(s, x, y, MASS_OUT.map((q) => q * R), MASS_OUT.map((q) => q * R), 0.5 * sp, RF_TURN);
-          avoid(x, y, R + (2 + ROW[1]) * SR, 2 * R);
-          [want.x, want.y] = [want.x + bm.vx, want.y + bm.vy];
-        } else if (wave) formation(flying, flying.indexOf(s), massing ? 0 : 3, wc.x, wc.y, wfv, SR, R, 1.3 * sp, keep, route, massing ? 1 : 0);
-        else if (s.role === 'probe') {
-          strafe(s, s.x - pm.x, s.y - pm.y, s.vx - pm.vx, s.vy - pm.vy, outer + 1.5 * R, outer + 4 * R, outer + R, sp);
-          [want.x, want.y] = [want.x + pm.vx, want.y + pm.vy];
-        } else approach(s, rk!.motion.x, rk!.motion.y, rk!.motion.vx, rk!.motion.vy, rk!.r + 2 * SR, sp, brake);
-        clear(s, near, sp, 0, top);
+        if (st[i].digging) return;
         const v0 = Math.hypot(s.vx, s.vy), x0 = s.vx, y0 = s.vy;
-        thrust(s, acc, s.role === 'frigate' ? RF_TURN : P_TURN, h, fc.x, fc.y, top);
+        step(live, i, st[i], f, h);
         const v = Math.hypot(s.vx, s.vy);
-        stats.over = Math.max(stats.over, v / Math.max(top, v0));
+        stats.over = Math.max(stats.over, v / Math.max(st[i].top, v0));
         stats.jolt = Math.max(stats.jolt, Math.hypot(s.vx - x0, s.vy - y0) / (GEE * acc * h));
-        if (s.role === 'fighter' && phase === 'go') fastest = Math.max(fastest, v / R);
-        if (s.role === 'probe' && !home) probeV = Math.max(probeV, v / R);
+        if (s.role === 'fighter' && f.phase === 'go') fastest = Math.max(fastest, v / R);
+        if (s.role === 'probe' && !st[i].home) probeV = Math.max(probeV, v / R);
       });
-      for (const s of live) {
-        const home = st[live.indexOf(s)].home, rk = s.rock;
-        if (s.role === 'miner' && !home && rk && (s.dig > 0 || Math.hypot(rk.motion.x - s.x, rk.motion.y - s.y) < rk.r + 3 * SR)) {
-          if (!s.dig) [s.da, s.landed] = [Math.atan2(s.y - rk.motion.y, s.x - rk.motion.x), t];
-          s.dig += dt;
-          [s.x, s.y, s.vx, s.vy] = [rk.motion.x + Math.cos(s.da) * (rk.r + SR), rk.motion.y + Math.sin(s.da) * (rk.r + SR), rk.motion.vx, rk.motion.vy];
-          if (s.dig >= DIG_S) [s.home, s.rock] = [true, undefined];
-        }
-        if (home && Math.hypot(bm.x - s.x, bm.y - s.y) < DOCK * R) s.docked = t;
+      live.forEach((s, i) => {
+        const dug = s.dig, gap = s.rock ? Math.hypot(s.rock.motion.x - s.x, s.rock.motion.y - s.y) - s.rock.r : 0, end = settle(s, st[i], f, dt);
+        if (!dug && s.dig) [s.landed, stats.land] = [t, Math.max(stats.land, gap)];
+        if (end === 'docked') [s.docked, stats.dock] = [t, Math.max(stats.dock, Math.hypot(bm.x - s.x, bm.y - s.y))];
         else if (Math.hypot(pm.x - s.x, pm.y - s.y) < R + SR) s.dead = true;
-        if (s.role === 'probe' && !home && Math.hypot(pm.x - s.x, pm.y - s.y) < 8 * R) near8 += dt;
-      }
+        if (s.role === 'probe' && !st[i].home && Math.hypot(pm.x - s.x, pm.y - s.y) < 8 * R) near8 += dt;
+      });
     }
     return { ships, homeAt, fastest, probeV, near8, rammed: ships.filter((s) => s.dead).length };
   }
@@ -283,12 +251,13 @@ for (const fps of [30, 120]) {
   rows.push(`10 fps (dt 0.1), you charging 12: wave top ${low.fastest.toFixed(2)} R/s, rammed ${low.rammed} of 6`);
   console.log(`rival ships away: speed ≤ ${stats.over.toFixed(6)} × max(top, last), |Δv|/dt ≤ ${stats.jolt.toFixed(3)} × GEE × thrust;\n  ${rows.join('\n  ')}`);
   assert.ok(stats.over <= 1 + 1e-6 && stats.jolt <= 1 + 1e-6, `rival ships away: never over max(top, last), |Δv| ≤ GEE × thrust: ${stats.over}, ${stats.jolt}`);
+  assert.ok(stats.land <= 3 * SR && stats.dock <= 1.5 * R, `a miner lands touching its rock, a ship docks at its world: ${stats.land / SR} sr, ${stats.dock / R} R`);
 }
 {
   report(models);
   console.log(`war wave crossings of 3.2 R a ship in 30 s: median ${q(crossings, 0.5)}`);
   // From rest, asked 90° off its nose: it turns first; no sideways motion off the nose meanwhile.
-  const c: Craft = { x: 0, y: 0, vx: 0, vy: 0, heading: 0, burn: 0 }, h = 1 / 60;
+  const c = craft(0, 0), h = 1 / 60;
   let side = 0, toward = 0;
   while (Math.abs(Math.PI / 2 - c.heading) > Math.PI / 6) {
     [want.x, want.y] = [0, PATROL_V * R];
@@ -299,37 +268,12 @@ for (const fps of [30, 120]) {
   console.log(`from rest 90° off the nose: ${side.toFixed(4)} R sideways off the nose (${toward.toFixed(3)} R toward the wanted course) before the nose is within 30°`);
   assert.ok(side < 0.05, `turns before it goes: ${side}`);
 }
-// A miner shuttle (view.ts): out to a moon on a 3.2 R slot, dig, home to the pad under it, each leg within LEG_S.
-{
-  const LEG_S = 15, PAD = 0.08, mr = 0.2 * R, w = 0.5; // view.ts LEG_S, PAD; moon radius, its angular speed (rad/s)
-  for (const fps of [30, 120]) {
-    const dt = 1 / fps, k = steps(dt), h = dt / k, a0 = 0.3, f: Craft = { x: Math.cos(a0) * R * (1 + PAD), y: Math.sin(a0) * R * (1 + PAD), vx: 0, vy: 0, heading: a0, burn: 0 };
-    let t = 0, out = 0, home = 0, low = Infinity, leg: 'out' | 'dig' | 'home' | 'dock' = 'out', a = 0;
-    const moon = (s: number) => ({ x: Math.cos(2 + w * s) * 3.2 * R, y: Math.sin(2 + w * s) * 3.2 * R, vx: -Math.sin(2 + w * s) * 3.2 * R * w, vy: Math.cos(2 + w * s) * 3.2 * R * w });
-    for (let lt = 0; leg !== 'dock' && t < 40; t += dt, lt += dt) {
-      for (let j = 0; j < k; j++) {
-        const m = moon(t + j * h);
-        if (leg === 'out') {
-          const dx = m.x - f.x, dy = m.y - f.y, d = Math.hypot(dx, dy) || 1, go = Math.max(0, d - mr - PAD * R) / d;
-          ferry(f, dx * go, dy * go, m.vx, m.vy, SPEED * R, R, h, true);
-        } else if (leg === 'home') ferry(f, Math.cos(a) * R * (1 + PAD) - f.x, Math.sin(a) * R * (1 + PAD) - f.y, 0, 0, SPEED * R, R, h, false);
-        low = Math.min(low, dist(f));
-      }
-      const m = moon(t);
-      if (leg === 'out' && Math.hypot(m.x - f.x, m.y - f.y) < mr + 0.25 * R) [leg, out, lt] = ['dig', lt, 0];
-      else if (leg === 'dig' && lt >= DIG) [leg, lt, a] = ['home', 0, Math.atan2(m.y, m.x)];
-      else if (leg === 'home' && Math.hypot(Math.cos(a) * R * (1 + PAD) - f.x, Math.sin(a) * R * (1 + PAD) - f.y) < 0.25 * R) [leg, home] = ['dock', lt];
-    }
-    console.log(`shuttle ${fps} fps: out to a 3.2 R moon in ${out.toFixed(2)} s, home in ${home.toFixed(2)} s, never under ${low.toFixed(3)} R`);
-    assert.ok(leg === 'dock' && out > 0 && out < LEG_S && home < LEG_S && low >= 1 - 1e-9, `a shuttle reaches its moon and comes home: ${leg}, ${out}, ${home}`);
-  }
-}
 // A top speed in space (pirates: `thrust` with `top`). Top omitted: the same path as before (a fixed-seed trace, numbers
 // recorded before `top` existed). With a top, over random courses (≤ 50 × top), random frames (0–40 × top) and jinks, hurt
 // or not, for each class: the speed never rises above max(top, the last), the velocity changes ≤ GEE × thrust a second
 // (turns included), a ship above its top only slows; 0 → 95% of its top within 0.85 s, a raider's 85° turn within 1.15 s.
 {
-  const rnd = seeded(13), c: Craft = { x: 0, y: 0, vx: 0, vy: 0, heading: 0, burn: 0 };
+  const rnd = seeded(13), c = craft(0, 0);
   let fx = 0, fy = 0;
   for (let i = 0; i < 2000; i++) {
     if (i % 50 === 0) [want.x, want.y, fx, fy] = [(rnd() - 0.5) * 20, (rnd() - 0.5) * 20, (rnd() - 0.5) * 10, (rnd() - 0.5) * 10];
@@ -343,7 +287,7 @@ for (const fps of [30, 120]) {
     const ss = k * cruise, top = tk * ss, acc = P_ACC * ss, rr = seeded(kind.length);
     let over = 0, dvMax = 0, rise = 0;
     for (const fps of [30, 120]) {
-      const h = Math.min(1 / fps, MAX_DT) / steps(1 / fps), c: Craft = { x: 0, y: 0, vx: (rr() - 0.5) * 6 * top, vy: (rr() - 0.5) * 6 * top, heading: rr() * 7, burn: 0 }, jk = jink();
+      const h = Math.min(1 / fps, MAX_DT) / steps(1 / fps), c = craft(0, 0, (rr() - 0.5) * 6 * top, (rr() - 0.5) * 6 * top, rr() * 7), jk = jink();
       for (let i = 0; i < 20000; i++) {
         if (i % 40 === 0) {
           [fx, fy] = rr() < 0.3 ? [0, 0] : [(rr() - 0.5) * 80 * top, (rr() - 0.5) * 80 * top].map((x) => x * rr() ** 2) as [number, number];
@@ -363,12 +307,12 @@ for (const fps of [30, 120]) {
     }
     // From rest along the nose: time to cruise and to 95% of its top; a raider at its top asked 85° off: time until its course is within 0.05 rad.
     const to = (target: number) => {
-      const c: Craft = { x: 0, y: 0, vx: 0, vy: 0, heading: 0, burn: 0 };
+      const c = craft(0, 0);
       let t = 0;
       for (; Math.hypot(c.vx, c.vy) < target && t < 5; t += 1 / 120) [want.x, want.y] = [top, 0], thrust(c, acc, turn, 1 / 120, 0, 0, top);
       return t;
     };
-    const a = 85 * (Math.PI / 180), c = { x: 0, y: 0, vx: top, vy: 0, heading: 0, burn: 0 };
+    const a = 85 * (Math.PI / 180), c = craft(0, 0, top);
     let turnT = 0;
     for (; Math.abs(wrap(Math.atan2(c.vy, c.vx) - a)) > 0.05 && turnT < 5; turnT += 1 / 120) [want.x, want.y] = [Math.cos(a) * top, Math.sin(a) * top], thrust(c, acc, turn, 1 / 120, 0, 0, top);
     const cr = to(ss), t95 = to(0.95 * top);

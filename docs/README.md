@@ -132,7 +132,7 @@ The concept frames the run as a climb up the Kardashev scale; `gamedesign.html` 
 | `evolution/civilization/rules.ts`, `stage.ts`, `view.ts`, `lattice.ts`, `combat.ts`, `weapon.ts`, `mining.ts` | [civilizationgameplay.md](civilizationgameplay.md); star contact (`stage.ts`) and the energy beam shot (`combat.ts`) also in [stargameplay.md](stargameplay.md) |
 | `evolution/civilization/flight.ts`, `nav.ts`, `crash.ts`, `guns.ts`, `ships.ts` | [shipsandflight.md](shipsandflight.md); defence duties, the frigate and rockets in [civilizationgameplay.md](civilizationgameplay.md) |
 | `evolution/civilization/pirates.ts` | [gameevents.md](gameevents.md) (Pirates); their routes in [shipsandflight.md](shipsandflight.md) |
-| `evolution/civilization/rivals.ts` | [aliencivilizations.md](aliencivilizations.md) |
+| `evolution/civilization/rivals.ts`, `away.ts` (its ships away) | [aliencivilizations.md](aliencivilizations.md) |
 | `evolution/star/rules.ts`, `stage.ts`, `look.ts` | [stargameplay.md](stargameplay.md); star page cost in [techandperformance.md](techandperformance.md) |
 | `evolution/star/system.ts` (system planets: catch, carry, release) | [stargameplay.md](stargameplay.md#system-planets-i) |
 | `evolution/star/colony.ts` (colony fleets, colonies, terraforming) | [stargameplay.md](stargameplay.md#colonies-and-terraforming-l); the people it adds or kills in [civilizationgameplay.md](civilizationgameplay.md) |

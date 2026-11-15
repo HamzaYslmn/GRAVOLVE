@@ -19,19 +19,14 @@ const you = P(150, COMP.dust), metal400 = P(400, COMP.metallic);
 const me = { player: true };
 
 // Lighter and slow: the heavier body swallows you (the stick speed is in ITS diameters: 8 of them ≈ 8.9 of yours here).
-assert.equal(hit(you, metal400, 6, me).kind, 'eaten');
-// Lighter and medium or fast: the player is never partly accreted, it bounces (and chips).
-assert.equal(hit(you, metal400, 20, me).kind, 'bounce');
-assert.equal(hit(you, metal400, 20).kind, 'accrete'); // a rock in your place would be: the heavier keeps part of it
-// The player margin: a slightly heavier body (< 1.15×) merges into you, the same as an equal one; 1.2× swallows you.
-assert.equal(hit(you, P(160, COMP.dust), 6, me).kind, 'eat');
-assert.equal(hit(you, P(150, COMP.dust), 6, me).kind, 'eat');
-assert.equal(hit(you, P(180, COMP.dust), 6, me).kind, 'eaten');
-// Molten bodies stick at higher speed (×1.5).
-assert.equal(hit(metal400, P(40, COMP.dust), 10).kind, 'accrete');
-assert.equal(hit(metal400, P(40, COMP.dust), 10, { stick: 12 }).kind, 'eat');
-assert.equal(hit(metal400, P(40, COMP.dust), 10, { repel: true }).kind, 'bounce'); // a repelled hit never feeds anything (a solid world bounces small bodies)
-assert.equal(hit(metal400, P(40, COMP.dust), 2, { repel: true }).kind, 'bounce');
+// Lighter and medium or fast: the player is never partly accreted, it bounces (and chips); a rock in your place accretes
+// (the heavier keeps part of it). The player margin: a slightly heavier body (< 1.15×) merges into you, the same as an
+// equal one; 1.2× swallows you. Molten bodies stick at higher speed (×1.5); a repelled hit never feeds anything (a solid world bounces small bodies).
+const d40 = P(40, COMP.dust);
+for (const [a, b, v, o, kind] of [
+  [you, metal400, 6, me, 'eaten'], [you, metal400, 20, me, 'bounce'], [you, metal400, 20, {}, 'accrete'], [you, P(160, COMP.dust), 6, me, 'eat'], [you, P(150, COMP.dust), 6, me, 'eat'],
+  [you, P(180, COMP.dust), 6, me, 'eaten'], [metal400, d40, 10, {}, 'accrete'], [metal400, d40, 10, { stick: 12 }, 'eat'], [metal400, d40, 10, { repel: true }, 'bounce'], [metal400, d40, 2, { repel: true }, 'bounce'],
+] as const) assert.equal(hit(a, b, v, o).kind, kind, `${a.m} on ${b.m} at ${v} ${JSON.stringify(o)}`);
 
 // Heavier and slow: a whole merge, nothing lost.
 const slow = hit(metal400, you, 6);
@@ -69,22 +64,18 @@ near(chip, 36.3, 0.5); near(shatter, 66.3, 0.5); near(dead, 148.2, 0.5);
 const lost = (v: number) => { const o = hit(big, peer, v, me); assert.equal(o.kind, 'bounce'); return [1 - o.a.rest / big.m, 1 - o.b.rest / peer.m]; };
 const [y30, p30] = lost(30), [y60, p60] = lost(60);
 near(y30, 0.058, 0.005); near(p30, 0.075, 0.005); near(y60, 0.40, 0.01); near(p60, 0.465, 0.01);
-// Grazing: b = 0.9 > b_crit 0.5 at 30 diameters/s is hit-and-run; b = 0.4 is a hit.
-assert.equal(hit(big, peer, 30, me, 0.9).kind, 'graze');
-assert.equal(hit(big, peer, 30, me, 0.4).kind, 'bounce');
-// A 10% body: whole merge below 8, partial accretion 8..24 (ξ 1 → 0), bounce above; either side can break.
+// Grazing: b = 0.9 > b_crit 0.5 at 30 diameters/s is hit-and-run; b = 0.4 is a hit. A 10% body: whole merge below 8,
+// partial accretion 8..24 (ξ 1 → 0), bounce above; either side can break. Heavier bodies: 1.2× swallows you below its
+// stick speed, 1.1× merges into you; a 10× body is a well (eats at 10 of yours).
 const t10 = P(big.m * 0.1, COMP.stony);
-assert.equal(hit(big, t10, 7.9, me).kind, 'eat');
+for (const [b, v, kind, sin = 0] of [[peer, 30, 'graze', 0.9], [peer, 30, 'bounce', 0.4], [t10, 7.9, 'eat'], [t10, 24, 'bounce'], [P(big.m * 1.2, COMP.stony), 4, 'eaten'], [P(big.m * 1.1, COMP.stony), 4, 'eat'], [P(big.m * 10, COMP.stony), 10, 'eaten']] as const) {
+  assert.equal(hit(big, b, v, me, sin).kind, kind, `${b.m / big.m}× at ${v}, sin ${sin}`);
+}
 const a12 = hit(big, t10, 12, me);
 assert.equal(a12.kind, 'accrete'); near(a12.xi, 0.75, 1e-9);
-assert.equal(hit(big, t10, 24, me).kind, 'bounce');
 assert.ok(hit(big, t10, 30, me).b.d >= 5, 'a fast 10% body is destroyed, not just you');
 // A crumb (0.1%) hitting a planet above 3·v_m is blown apart (d ≥ DEATH_D).
 assert.ok(hit(big, P(big.m * 1e-3, COMP.stony), 30, me).b.d >= 5);
-// Heavier bodies: 1.2× swallows you below its stick speed, 1.1× merges into you; a 10× body is a well (eats at 10 of yours).
-assert.equal(hit(big, P(big.m * 1.2, COMP.stony), 4, me).kind, 'eaten');
-assert.equal(hit(big, P(big.m * 1.1, COMP.stony), 4, me).kind, 'eat');
-assert.equal(hit(big, P(big.m * 10, COMP.stony), 10, me).kind, 'eaten');
 // The start: a 0.1× meal at 5 diameters/s is a full merge.
 const s0 = P(massOf(START_R, COMP.dust), COMP.dust), start = hit(s0, P(0.1 * s0.m, COMP.stony), 5, me);
 assert.equal(start.kind, 'eat'); near(start.b.rest, 0.1 * s0.m, 1e-9);

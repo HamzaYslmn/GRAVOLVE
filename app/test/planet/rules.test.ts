@@ -12,15 +12,8 @@ const ROCKY: Comp = { rock: 0.6, metal: 0.15, ice: 0.2, gas: 0.05 };
 const GASSY: Comp = { gas: 0.75, ice: 0.15, rock: 0.1 };
 
 // Tiers: doc names and masses, by composition.
-assert.equal(tierName(10 ** 3.6, ROCKY, 0), 'Planetoid');
-assert.equal(tierName(2e4, ROCKY, 5), 'Protoplanet');
-assert.equal(tierName(2e4, ROCKY, 0), 'Dwarf planet');
-assert.equal(tierName(5e4, ROCKY, 0), 'Rocky planet');
-assert.equal(tierName(2e5, ROCKY, 0), 'Super-Earth');
-assert.equal(tierName(2e5, { gas: 0.3, rock: 0.7 }, 0), 'Mini-Neptune');
-assert.equal(tierName(4e5, { gas: 0.3, ice: 0.35, rock: 0.35 }, 0), 'Ice giant');
-assert.equal(tierName(2e6, GASSY, 0), 'Gas giant');
-assert.equal(tierName(5e6, GASSY, 0), 'Super-Jupiter');
+for (const [m, comp, heat, name] of [[10 ** 3.6, ROCKY, 0, 'Planetoid'], [2e4, ROCKY, 5, 'Protoplanet'], [2e4, ROCKY, 0, 'Dwarf planet'], [5e4, ROCKY, 0, 'Rocky planet'], [2e5, ROCKY, 0, 'Super-Earth'],
+  [2e5, { gas: 0.3, rock: 0.7 }, 0, 'Mini-Neptune'], [4e5, { gas: 0.3, ice: 0.35, rock: 0.35 }, 0, 'Ice giant'], [2e6, GASSY, 0, 'Gas giant'], [5e6, GASSY, 0, 'Super-Jupiter']] as const) assert.equal(tierName(m, comp, heat), name);
 assert.equal(nextGoal(5e5, ROCKY), undefined); // rocky past Super-Earth: the goal is life
 assert.equal(nextGoal(5e6, GASSY)!.name, 'Brown dwarf');
 assert.ok(tierIndex(1e5) === tierIndex(10 ** 4.6) + 1);
@@ -220,12 +213,8 @@ const small = circAt(10 ** 3.5), huge = circAt(1e7);
 assert.equal(matchWindow(small.r, small.circ), 2 * small.r);
 assert.ok(matchWindow(huge.r, huge.circ) > 2 * huge.r, `giant window ${(matchWindow(huge.r, huge.circ) / (2 * huge.r)).toFixed(2)} D/s`);
 // pickSlot: the free ring a body sits nearest, any ring (user 2026-11-15); a held ring wins until another is STAY nearer.
-assert.equal(pickSlot(slotRadius(1, 2), 1, 4, 0), 2);
-assert.equal(pickSlot(slotRadius(1, 2) + 0.1, 1, 4, 0b100), 3);
-assert.equal(pickSlot(slotRadius(1, 2) - 0.1, 1, 4, 0b100), 1);
-assert.equal(pickSlot(slotRadius(1, 1), 1, 4, 0b1111), -1);
-assert.equal(pickSlot(slotRadius(1, 0), 1, 0, 0), -1);
-assert.equal(pickSlot(20, 1, 2, 0), 1);
-{ const mid = slotRadius(1, 1) + 0.625; assert.equal(pickSlot(mid + 0.05, 1, 4, 0, 1), 1); assert.equal(pickSlot(mid + 0.1, 1, 4, 0, 1), 2); assert.equal(pickSlot(mid + 0.05, 1, 4, 0), 2); }
+const mid = slotRadius(1, 1) + 0.625;
+for (const [args, k] of [[[slotRadius(1, 2), 1, 4, 0], 2], [[slotRadius(1, 2) + 0.1, 1, 4, 0b100], 3], [[slotRadius(1, 2) - 0.1, 1, 4, 0b100], 1], [[slotRadius(1, 1), 1, 4, 0b1111], -1], [[slotRadius(1, 0), 1, 0, 0], -1],
+  [[20, 1, 2, 0], 1], [[mid + 0.05, 1, 4, 0, 1], 1], [[mid + 0.1, 1, 4, 0, 1], 2], [[mid + 0.05, 1, 4, 0], 2]] as const) assert.equal(pickSlot(...args), k, `pickSlot(${args})`);
 for (const w of [small, huge]) assert.ok(gripWindow(w.r, w.circ) >= Math.SQRT2 * w.circ && gripWindow(w.r, w.circ) >= 2 * matchWindow(w.r, w.circ));
 console.log(`planet ok: outer slot vs view half height ${[10 ** 3.5, 1e4, 10 ** 4.5, 1e5, 10 ** 5.5, 1e6].map((m) => `${outer(m).toFixed(1)}/${halfH(m).toFixed(1)}`).join(' ')} R; match window ${[10 ** 3.5, 10 ** 5.5, 10 ** 6.5, 1e7].map((m) => { const w = circAt(m); return (matchWindow(w.r, w.circ) / (2 * w.r)).toFixed(2); }).join(' / ')} D/s at 10^3.5 / 10^5.5 / 10^6.5 / 10^7; widest moon (stony/icy/gas-rich/metallic) ${widest.map((w) => w.map((s) => `${(100 * s).toFixed(1)}%`).join('/')).join(' · ')} of 10^4 · 10^6 · 10^7`);

@@ -4,6 +4,7 @@
 // debris clusters are found (≥ 4 small bodies close together), and the miner cap from metal holds.
 import assert from 'node:assert/strict';
 import { assign, BIG, clusters, DEBRIS_N, inReach, LINK_HOLD, minerCap, PER_SITE, reach, scores, type Needs, type Site } from '../../src/evolution/civilization/mining.ts';
+import { lcg } from '../helpers.ts';
 
 const SLOTS = 5, R = reach(SLOTS), calm: Needs = { fleetShort: false, energyShort: false };
 const rock = { rock: 1 }, icy = { ice: 0.8, rock: 0.2 };
@@ -66,9 +67,7 @@ assert.deepEqual(pick([site(1, 5, { share: 0 })]), [undefined], 'a mined-out sit
 
 // No flip-flop: 6 miners, 5 sites of near-equal worth, ±5% noise on every score, re-scored 5000 times (every 2 s ≈ 2.8 h).
 {
-  let seed = 7;
-  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  const sites = [site(1, 5), site(2, 5.2), site(3, 5.5, { comp: { metal: 1 } }), site(4, 6), site(5, 6.3, { kind: 'debris' })];
+  const rnd = lcg(7), sites = [site(1, 5), site(2, 5.2), site(3, 5.5, { comp: { metal: 1 } }), site(4, 6), site(5, 6.3, { kind: 'debris' })];
   let miners: (number | undefined)[] = new Array(6).fill(undefined), switches = 0;
   for (let i = 0; i < 5000; i++) {
     const sc = scores(sites, calm, SLOTS);

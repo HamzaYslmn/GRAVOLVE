@@ -8,13 +8,11 @@ import { drop, hitKelvin, shed, unmoon, type Body, type Hit } from '../asteroid/
 import { burnShare, COMP, G_WORLD, pairPull, pieceShares, pullMass, SPREAD, youPull } from '../asteroid/rules';
 import { thrustOf } from '../asteroid/player';
 import { A_ENG, alarmStep, DEFEND_SHIELD, DODGE, evade, GATHER_U, newWave, next, restStep, SITE, stance, stationStep, STOCK_RATE, volley, WAVE_COST, waveStep, WORLD_FLAGS, type Entry, type Stance, type Wave } from '../rivals/ledger';
+import { isWave, OUT_V, plan, settle, step, type Away, type Centre, type Frame, type Role } from './away';
 import type { Ctx } from './combat';
 import { bump, bumps, MISS_V, sparks } from './crash';
-import {
-  approach, avoid, BRAKE, chase, circuit, formation, inArc, leadAt, leash, lowPass, MAX_DT, P_ACC, P_TURN, RF_TURN, rivalTop, RING_IN, RING_OUT, ROW, steps, strafe, thrust, want, type Circler, type Strafer,
-} from './flight';
+import { chase, inArc, leash, lowPass, MAX_DT, steps } from './flight';
 import { lineClear, pick, pull, seeker, trigger, type Gun, type Missile, type Trigger } from './guns';
-import { clear, scan } from './nav';
 import {
   ARMS, BEATEN, beamPop, CHASE_V, FRIGATE_S, FRIGATE_STOCK, HIT_KILL, HIT_MIN, intercept, LEASH, raid, RIVAL_AIM, RIVAL_FIRE, RIVAL_FIRST, RIVAL_HIT_MAX, RIVAL_LEAD, RIVAL_LOADED, RIVAL_MASS, RIVAL_ROCK, SALVO_LEAD,
   RIVAL_TRAVEL, rivalFrigates, rivalLevel, rivalSalvo, rivalShips, shellR, SHIELD_K, shieldHolds, shieldMax, shieldMeet, shieldRegen, shieldShot, SLUG_SPEED, strength, T_SEE, waveFighters, weaponHit, type Arm, type Raid, type Shield,
@@ -51,22 +49,14 @@ const REACH = 1.7; // ...or within this many camera half-diagonals, so one spawn
 const KEEP = [8, 12]; // your radii: on screen, so it sees you and fires
 const APART = 6; // your radii: another rival world this close pushes it away...
 const APART_V = 1; // ...at up to this many of your radii/s
-// Ships away from home (war wave, probe, miner), absolute world units; flight as pirates (flight.ts); tops in space: flight.ts rivalTop.
-const OUT_V = 5; // your radii/s cruise (pirates 4–5.5)
-const MASS_IN = [1.5, 1.7]; // rival radii: a massing wave's circuit round its world, waypoints in and out (inside its rock's circle)
-const MASS_OUT = [1.9, 2.1];
-const PROBE_S = 10; // s a probe circles you before it goes home
+// Ships away from home (war wave, probe, miner): their flight is away.ts.
 const PROBE_AGAIN = 25; // s between probes
 const GATHER_R = 8; // rival radii: a miner takes free rocks this close to its world...
 const GATHER_M = [1e-4, 0.03]; // ...of this share of its mass
 const STRIP_SHARE = 0.3; // of the rock per trip (a rock under 1e-4 of the world is taken whole)
-const DIG_S = 2;
-const DOCK = 1.3; // rival radii: a ship flying home lands this close
 
-type Role = 'probe' | 'miner' | 'frigate' | 'fighter';
-/** A ship away from home: `rock` a miner's, `dig` s on it, `t` s out, `home` flying back, `load` a miner's haul; a frigate's nose `glow` (s charged), s since it `fired` a salvo. */
-type Out = Foe & Circler & Strafer & { role: Role; hp: number; g: Trigger; rock?: Body; dig: number; da: number; t: number; home: boolean; load: boolean; dead: boolean; glow: number; fired: number };
-type Centre = { x: number; y: number; vx: number; vy: number };
+/** A ship away from home (away.ts Away): `load` a miner's haul; a frigate's nose `glow` (s charged). */
+type Out = Foe & Away & { hp: number; g: Trigger; rock?: Body; load: boolean; dead: boolean; glow: number };
 
 export type Rival = {
   b: Body; level: number; sh: Shield; pop: number; seen: number; fireT: number; rockT: number; shipT: number;
@@ -81,8 +71,8 @@ export type Rival = {
   frig: number; frigT: number; // frigates it has (rivalFrigates; built apart from wave ships), s to the next rebuilt one
   wound: { k: number }; raid?: Raid; // heavy fire on it not yet landed; its wave's caps on your people
   silo: { load: number; glow: number }; thrust: { x: number; y: number }; // its missile silo; its engines' last Δv/s (the plume)
+  af?: Frame; // its ships away's frame (away.ts), reused
 };
-const isWave = (s: Out) => s.role === 'frigate' || s.role === 'fighter';
 
 export function createRivals(ctx: Ctx) {
   const list: Rival[] = [];
@@ -279,66 +269,26 @@ export function createRivals(ctx: Ctx) {
     // A lost frigate is rebuilt slowly, for FRIGATE_STOCK wave ships' worth of stock.
     if (!r.open && r.frig < rivalFrigates(r.level) && r.stock >= FRIGATE_STOCK * WAVE_COST[temper] && (r.frigT -= dt) <= 0) [r.frig, r.stock, r.frigT] = [r.frig + 1, r.stock - FRIGATE_STOCK * WAVE_COST[temper], FRIGATE_S];
 
-    const dtc = Math.min(dt, MAX_DT), n = steps(dtc), h = dtc / n, acc = sp * P_ACC, brake = BRAKE * acc, mR = me.r, L = ARMS.lance, mIn = MASS_IN.map((q) => q * R), mOut = MASS_OUT.map((q) => q * R);
+    const dtc = Math.min(dt, MAX_DT), n = steps(dtc), h = dtc / n, mR = me.r, L = ARMS.lance;
     [r.gun.u, r.lance.u] = [ARMS.round.u * mR, L.u * R];
     const outer = slotRadius(mR, Math.max(0, ...ctx.moons.list().map((m) => m.slot)));
     const page = ctx.page, unit = shipUnit(mR, ctx.cam.zoom), aims = [...ctx.miners, ...ctx.mine];
     lowPass(r.fv, r.c.vx, r.c.vy, dt);
-    // The war wave: massing, its fighters in a V on the first round their world; out, wings of three in trail on strafing
-    // runs at you (round the chasing centre, frame velocity low-passed). Its frigates keep their battery circuit at home.
-    const phase = r.wave?.phase, massing = phase === 'mass', up = phase === 'mass' || phase === 'go', flying = up ? r.out.filter((s) => s.role === 'fighter') : [];
-    const wc = massing ? bm : r.c, wfv = massing ? { x: bm.vx, y: bm.vy } : r.fv, keep = massing ? R + (2 + ROW[1]) * sr : 1.25 * mR + (2 + ROW[1]) * sr;
-    const route = (s: Out) => {
-      const x = s.x - wc.x, y = s.y - wc.y;
-      if (!massing) return strafe(s, x, y, s.vx - wfv.x, s.vy - wfv.y, RING_IN * mR, outer + RING_OUT * mR, keep, sp);
-      circuit(s, x, y, mIn, mOut, sp, RF_TURN);
-      avoid(x, y, keep, 2 * R);
-    };
-    const st = r.out.map((s) => {
-      s.t += dt;
-      if ((s.role === 'probe' && s.t > PROBE_S) || (s.role === 'miner' && (!s.rock || !s.rock.m))) s.home = true;
-      const battery = s.role === 'frigate', wave = isWave(s) && !battery, home = battery ? !up : wave ? !flying.length : s.home, digging = !home && !!s.rock && s.dig > 0;
-      // The frame it flies in: home (a frigate on its battery circuit too), the wave's, you (a probe), or its rock.
-      const fc = home || battery ? { x: bm.vx, y: bm.vy } : wave ? wfv : s.rock ? { x: s.rock.motion.vx, y: s.rock.motion.vy } : { x: pm.vx, y: pm.vy };
-      return { wave, home, digging, fc, top: rivalTop(sp, wave, home || battery || (wave && massing) || s.rock ? fc : undefined), near: digging ? [] : scan(s, bodies, (b) => b === r.b || b === r.rock || b === s.rock, sr, sp, s.role === 'frigate' ? RF_TURN : P_TURN) };
-    });
-    for (let k = 0; k < n; k++) r.out.forEach((s, i) => {
-      const { wave, home, digging, fc, top, near } = st[i], rock = s.rock;
-      if (digging) return;
-      if (home) approach(s, bm.x, bm.y, bm.vx, bm.vy, R, sp, brake);
-      else if (s.role === 'frigate') {
-        // The battery: its circuit round its world; charging or firing, nearly still with its nose on the lead point.
-        const x = s.x - bm.x, y = s.y - bm.y;
-        if (phase === 'go' && s.fired >= L.reload && me.m) {
-          const a = leadAt(s, pm.x, pm.y, pm.vx, pm.vy, r.lance.u);
-          [want.x, want.y] = [Math.cos(a) * 0.15 * sp, Math.sin(a) * 0.15 * sp];
-        } else circuit(s, x, y, mOut, mOut, 0.5 * sp, RF_TURN);
-        avoid(x, y, R + (2 + ROW[1]) * sr, 2 * R);
-        [want.x, want.y] = [want.x + bm.vx, want.y + bm.vy];
-      } else if (wave) formation(flying, flying.indexOf(s), massing ? 0 : 3, wc.x, wc.y, wfv, sr, mR, 1.3 * sp, keep, route, massing ? 1 : 0);
-      else if (s.role === 'probe') {
-        strafe(s, s.x - pm.x, s.y - pm.y, s.vx - pm.vx, s.vy - pm.vy, outer + 1.5 * mR, outer + 4 * mR, outer + mR, sp);
-        [want.x, want.y] = [want.x + pm.vx, want.y + pm.vy];
-      } else approach(s, rock!.motion.x, rock!.motion.y, rock!.motion.vx, rock!.motion.vy, rock!.r + 2 * sr, sp, brake);
-      clear(s, near, sp, 0, top);
-      thrust(s, acc, s.role === 'frigate' ? RF_TURN : P_TURN, h, fc.x, fc.y, top);
-    });
+    const phase = r.wave?.phase, f = (r.af ??= { you: me, world: r.b, phase, c: r.c, fv: r.fv, outer, sr, bodies, own: (b, s) => b === r.b || b === r.rock || b === s.rock, lance: { u: 0, reload: L.reload } });
+    f.you = me, f.phase = phase, f.c = r.c, f.fv = r.fv, f.outer = outer, f.sr = sr, f.bodies = bodies, f.lance.u = r.lance.u;
+    const st = plan(r.out, f, dt);
+    for (let k = 0; k < n; k++) for (let i = 0; i < r.out.length; i++) step(r.out, i, st[i], f, h);
     for (let i = r.out.length - 1; i >= 0; i--) {
-      const s = r.out[i], { wave, home, digging } = st[i], rock = s.rock;
+      const s = r.out[i], { wave, digging } = st[i], rock = s.rock, end = settle(s, st[i], f, dt);
       // A miner lands on its rock, digs, takes a share of it (the rest is yours to eat), and flies home loaded.
-      if (s.role === 'miner' && !home && rock && (s.dig > 0 || Math.hypot(rock.motion.x - s.x, rock.motion.y - s.y) < rock.r + 3 * sr)) {
-        if (!s.dig) s.da = Math.atan2(s.y - rock.motion.y, s.x - rock.motion.x);
-        s.dig += dt;
-        [s.x, s.y, s.vx, s.vy] = [rock.motion.x + Math.cos(s.da) * (rock.r + sr), rock.motion.y + Math.sin(s.da) * (rock.r + sr), rock.motion.vx, rock.motion.vy];
-        if (Math.random() < dt * 4) ctx.fx.puff(rock.motion.x + Math.cos(s.da) * rock.r, rock.motion.y + Math.sin(s.da) * rock.r, Math.cos(s.da), Math.sin(s.da), 1, 3 * unit, 0.1 * R, rock.tint);
-        if (s.dig >= DIG_S) {
-          const lost = rock.m * STRIP_SHARE;
-          if (rock.m - lost < GATHER_M[0] * r.b.m) ctx.kill(rock);
-          else shed(rock, lost);
-          [s.home, s.load, s.rock] = [true, true, undefined];
-        }
+      if ((end === 'dig' || end === 'dug') && Math.random() < dt * 4) ctx.fx.puff(rock!.motion.x + Math.cos(s.da) * rock!.r, rock!.motion.y + Math.sin(s.da) * rock!.r, Math.cos(s.da), Math.sin(s.da), 1, 3 * unit, 0.1 * R, rock!.tint);
+      if (end === 'dug') {
+        const lost = rock!.m * STRIP_SHARE;
+        if (rock!.m - lost < GATHER_M[0] * r.b.m) ctx.kill(rock!);
+        else shed(rock!, lost);
+        s.load = true;
       }
-      if (home && Math.hypot(bm.x - s.x, bm.y - s.y) < DOCK * R) {
+      if (end === 'docked') {
         if (s.load) r.stock += GATHER_U;
         r.out.splice(i, 1);
         continue;

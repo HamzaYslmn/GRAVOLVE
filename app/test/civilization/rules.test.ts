@@ -1,9 +1,9 @@
 // node test/civilization/rules.test.ts: population, energy and dose (by tier), tier, mining (the weighted mix),
 // shield, fleet caps, rockets, a sample run (tiers, builds and bare moons printed), slug damage and duels, planetary combat
-// (ARMS: weapon fire on shields, the stun, landings, time-to-break table, a rival's rock), the shield as a shell (a before →
-// after damage table), its burn-up rule, shield layers, the siege switch, rival level and mass by temper.
+// (ARMS: weapon fire on shields, the stun, landings, time-to-break table, a rival's rock), the shield as a shell (a damage
+// table), its burn-up rule, shield layers, the siege switch, rival level and mass by temper.
 import assert from 'node:assert/strict';
-import { burnShare, collide, COMP, impactHeat, pieceShares, radiusOf, shellPass, SPECK, V_STICK, type Phys } from '../../src/evolution/asteroid/rules.ts';
+import { burnShare, collide, COMP, pieceShares, radiusOf, shellPass, SPECK, V_STICK, type Phys } from '../../src/evolution/asteroid/rules.ts';
 import { GAP, RATE } from '../../src/evolution/civilization/flight.ts';
 import { pull, trigger } from '../../src/evolution/civilization/guns.ts';
 import { EXTINCT, magnet, PLANET_M, SUPER_M } from '../../src/evolution/planet/rules.ts';
@@ -12,11 +12,12 @@ import {
   buildSpeed, capacity, cityLevel, dose, energy, fedCapacity, GEO, geo, killRate, RADIO_LIMIT, radioDose, radioLimit, lack, mineable, mineMix, MINE_RATE, NEED, P0, popHit, popStep,
   ASLEEP_FALL, FLEET, shellR, fleetCap, FRAG, ROCKET, rocketRange, rocketSpread, shieldFed, shieldMax, upkeep, units, type Ore,
   FUEL_E, FUEL_LOW, fuelBurn, reactor, REACTOR, refine, SOLAR, solar, solarWings, UNIT, WORK_E, SHIELD_FLOOR, SHIELD_K, shieldCost, shieldHolds, shieldMeet, shieldPunch, shieldRegen, SHIELD_STOP, START_SHIPS, tier, TIER_MAX,
-  BEATEN, chargeRate, DRIVER_COOL, fireDir, fleetSize, HIT_MIN, intercept, RIVAL_LEAD, RIVAL_MASS, RIVAL_HIT_MAX, rivalLevel, SLUG_E, SLUG_ORE, SLUG_SHARE, SLUG_SPEED,
+  BEATEN, chargeRate, DRIVER_COOL, fireDir, fleetSize, HIT_MIN, intercept, RIVAL_LEAD, RIVAL_MASS, RIVAL_HIT_MAX, rivalLevel, SLUG_E, SLUG_ORE, SLUG_SHARE,
   BEAM_BITE, BEAM_COOL, beamLeft, beamPop, CUT, CUT_SPREAD, cutSpread, edible, KEEP, pieceSize, split, strikeK, type Shield,
   ARMS, buildOrder, BURN_WAVE, LANDING, raid, rivalFrigates, SHIELD_REGEN, SHIELD_STUN, shieldShot, weaponHit, shieldLayers, siegeWing, SIEGE, sortieStep, CALM_S,
   homeDig, HOME_RICH, HOME_VOL,
 } from '../../src/evolution/civilization/rules.ts';
+import { slugK } from '../helpers.ts';
 
 const near = (a: number, b: number, eps = 1e-6) => Math.abs(a - b) <= eps;
 const clock = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
@@ -176,11 +177,10 @@ assert.equal(lack({ water: 0.7, air: 0.8, magnet: 0.6 }), undefined);
   assert.deepEqual(shieldCost(2), { ore: 20, vol: 10, t: 25 });
 }
 // The residual (rules.ts strikeK on what the shell let through): never above the hit itself, nothing once held; shieldHolds
-// agrees with shieldMeet. Before: the old all-or-nothing shield (a whole hit up to 1.15 × its maximum and ≤ 10% of you per
-// level, else all of it, the shield gone). Your world PLANET_M stony, no air; v in stick speeds (the fall from the shell left out).
+// agrees with shieldMeet. Your world PLANET_M stony, no air; v in stick speeds (the fall from the shell left out).
 {
   const R = radiusOf(PLANET_M, COMP.stony), K = (q: number, v: number) => strikeK(q, v * V_STICK, V_STICK, R, 0, true);
-  const dead = (k: number) => (k < HIT_MIN ? 0 : 1 - popHit(10, k) / 10), old = (k: number, q: number, L: number) => (k >= HIT_MIN && k <= SHIELD_K * L * (1 - SHIELD_FLOOR) && q <= 0.1 * L ? 0 : k);
+  const dead = (k: number) => (k < HIT_MIN ? 0 : 1 - popHit(10, k) / 10);
   const cell = (k: number) => `${k.toFixed(0)} K ${Math.round(100 * dead(k))}%${k >= EXTINCT[1] ? ' wiped' : ''}`;
   const rows: string[] = [];
   for (const q of [0.001, 0.005, 0.01, 0.02, 0.05, 0.125, 0.25]) for (const v of [0.5, 1, 2, 4]) {
@@ -191,11 +191,11 @@ assert.equal(lack({ water: 0.7, air: 0.8, magnet: 0.6 }), undefined);
       if (k0 >= HIT_MIN) assert.equal(holds, k === 1, `shieldHolds agrees with shieldMeet: ${q * 100}% at ${v}× on L${L}`);
       if (k > 0) assert.ok(left < k0, `${q * 100}% at ${v}× on L${L}: ${left.toFixed(1)} K through < ${k0.toFixed(1)} K`);
       if (k0 < HIT_MIN) assert.ok(k === 0 && sh.s === SHIELD_K * L, 'under HIT_MIN: free');
-      if (L !== 2) out.push(`L${L} old ${cell(old(k0, q, L))} → ${k >= 1 ? 'held' : k > 0 ? `k ${k.toFixed(2)}, ${(100 * q * keep).toFixed(2)}% lands ${cell(left)}` : 'free'}`);
+      if (L !== 2) out.push(`L${L} ${k >= 1 ? 'held' : k > 0 ? `k ${k.toFixed(2)}, ${(100 * q * keep).toFixed(2)}% lands ${cell(left)}` : 'free'}`);
     }
     rows.push(`  ${q * 100}% at ${v}×: hit ${cell(k0)} | ${out.join(' | ')}`);
   }
-  console.log(`shield damage, before → after (K at your ground, % of the people dead):\n${rows.join('\n')}`);
+  console.log(`shield damage through L1 / L3 (K at your ground, % of the people dead):\n${rows.join('\n')}`);
 }
 // Burn-up: the shell takes a body only if what reaches your ground after your air delivers ≥ HIT_MIN (strikeK, as field.ts
 // burns before the hit); anything gentler costs it nothing. Weapon fire (shieldShot) has no minimum.
@@ -428,12 +428,11 @@ for (const you of [10 ** 4.5, 1e5, 10 ** 5.5, 796e3]) {
   assert.ok(peer.b.d < 0.01 && peer.b.rest === you, 'a peer planet is unaffected');
 }
 // Raw heat on a shield (what weapon.ts puts on it): ~12.6 K a slug on a peer.
-const slugK = (you: number) => 430 * impactHeat(SLUG_SHARE / (1 + SLUG_SHARE), SLUG_SPEED, 8, radiusOf(you, COMP.stony));
 assert.ok(slugK(1e5) > 12 && slugK(1e5) < 13.5, `slug on a shield ${slugK(1e5)}`);
 
-// Pirate fleets: 1–14 ships over 10⁴ rolls, mostly few, sometimes many; a hauler per 5 (at least one), a marauder from 10.
+// Pirate fleets: 1–14 ships over a sweep of 10⁴ rolls, mostly few, sometimes many; a hauler per 5 (at least one), a marauder from 10.
 {
-  const n = Array.from({ length: 1e4 }, () => fleetSize(Math.random()));
+  const n = Array.from({ length: 1e4 }, (_, i) => fleetSize(i / 1e4));
   const lo = Math.min(...n.map((f) => f.n)), hi = Math.max(...n.map((f) => f.n)), small = n.filter((f) => f.n <= 4).length / n.length, big = n.filter((f) => f.n >= 10).length / n.length;
   console.log(`pirate fleets: ${lo}–${hi} ships, ${(100 * small).toFixed(0)}% of 1–4, ${(100 * big).toFixed(0)}% of 10+`);
   assert.ok(lo >= 1 && hi <= 14 && small > 0.4 && big > 0.05, 'fleet sizes 1–14, mostly small, sometimes huge');

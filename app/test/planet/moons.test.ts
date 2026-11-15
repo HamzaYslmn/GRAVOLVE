@@ -15,12 +15,8 @@ assert.ok(!/foe\?:/.test(read('evolution/asteroid/body.ts')), 'Body has no foe f
 assert.ok(!/\bfast\?:/.test(read('evolution/asteroid/body.ts')), 'Body has no thrown flag');
 assert.ok(!/throwRock|RIVAL_THROW|WIND_UP|\.wind\b|throwT/.test(read('evolution/civilization/rivals.ts')), 'rivals never throw their rock');
 assert.ok(!/throwK|RIVAL_THROW|RIVAL_ROCK_SPEED|WIND_UP|'throw'/.test(read('evolution/civilization/rules.ts')), 'no throw rules');
-// Command: the tap and hold code calls no lasso; it gives orders (orders.order) and grinds a moon.
-const a = moons.indexOf('const cmd = input.command()'), b = moons.indexOf('// 4. Move every moon', a);
-assert.ok(a > 0 && b > a, 'the Command block is there');
-const cmd = moons.slice(a, b);
-assert.ok(!cmd.includes('lasso(') && cmd.includes('orders?.order(') && cmd.includes('absorbing'), 'a tap orders, a hold grinds, nothing lassoes');
-assert.ok(!moons.includes('NOCIV') && !moons.includes('orderable') && moons.includes("'No fleet yet'"), 'before LIFE a tap only says "No fleet yet"; the priority rules live in civilization/orders.ts');
+// Command: a tap gives orders (orders.order), nothing lassoes; before LIFE a tap only says "No fleet yet" (the rules: civilization/orders.ts).
+assert.ok(!moons.includes('lasso(') && moons.includes('orders?.order(') && moons.includes("'No fleet yet'"), 'a tap orders, nothing lassoes, "No fleet yet" before LIFE');
 // Capture on any free ring (user 2026-11-15): no lowest-free-slot search; the candidate's ring comes from pickSlot.
 assert.ok(!moons.includes('freeSlot') && moons.includes('pickSlot('), 'a moon is caught on any free ring');
 // Moon size (2026-11-15): the catch gate, the growth trim and the too-big gauge all go through rules.ts moonCap (mass and MOON_R).

@@ -2,7 +2,7 @@
 // bodies, crack and haul rocks, leave, evade, retreat and keep the raiding rules.
 import assert from 'node:assert/strict';
 import { slotRadius } from '../../src/core/orbits.ts';
-import { book, fighterGun, q, R, report, seeded, SR, watch } from './fakes.ts';
+import { beltM, book, fighterGun, q, R, report, seeded, SR, watch } from './fakes.ts';
 import { ACC, BURST, GAP, GEE, GUN, GUN_ARC, H_TOP, H_TURN, inArc, jink, jinkStep, leadAt, M_TOP, M_TURN, P_ACC, P_TOP, P_TURN, RATE, SPECK, startJink, thrust, TURN, want, type Craft } from '../../src/evolution/civilization/flight.ts';
 import { createShots, menace, pull, SHOTS, trigger, type Hull } from '../../src/evolution/civilization/guns.ts';
 import { createPirates } from '../../src/evolution/civilization/pirates.ts';
@@ -315,13 +315,13 @@ const models = { pirates: book() };
     assert.ok(rich.stolen > 0 && rich.stolen <= STEAL + 1e-9, `stolen ≤ STEAL a hauler: ${rich.stolen}`);
   }
 
-  // 8b. Raid harm with a real shield: pirate rounds (PIRATE_K) now drain it first (rules.ts shieldShot, its stun keeping it
-  // from mending under fire); the old body rule ignored them (under its minimum), so they stole with the shield up.
-  // A rich store (500 u), an attack due for 60 s, 3 seeds, shield levels 1 and 2, old rule against new.
+  // 8b. Raid harm with a real shield: pirate rounds (PIRATE_K) drain it first (rules.ts shieldShot, its stun keeping it from
+  // mending under fire), and while it holds nothing is stolen; with it ignored (as the old body rule did: under its minimum)
+  // they steal from the start. A rich store (500 u), an attack due for 60 s, 3 seeds, shield levels 1 and 2.
   {
-    const harm = (L: number, rule: 'old' | 'new', seed: number, store = 500) => {
+    const harm = (L: number, seed: number, store = 500, up = true) => {
       const sh: Shield = { level: L, s: SHIELD_K * L }, w = world(seed, { moons: 4, civ: true, stock: store }), dt = 1 / 60, civ = w.ctx.civ as unknown as { shieldTake: (k: number, share: number) => boolean; stocks: { ore: number } };
-      civ.shieldTake = (k) => (rule === 'old' ? false : sh.s > 0 ? (shieldShot(sh, k), true) : (shieldShot(sh, k), false));
+      civ.shieldTake = (k) => { const held = up && sh.s > 0; if (up) shieldShot(sh, k); return held; };
       w.pirates.launch(U(6));
       let down = 0, chip = 0, first = Infinity;
       for (let t = 0; t < 60; t += dt) {
@@ -336,21 +336,18 @@ const models = { pirates: book() };
       }
       return { stolen: store - civ.stocks.ore, down, chip, first };
     };
-    const rows: string[] = [];
-    let stolenOld = 0, stolenNew = 0;
-    for (const L of [1, 2]) for (const rule of ['old', 'new'] as const) {
-      const rs = [11, 12, 13].map((s) => harm(L, rule, s)), m = (f: (r: (typeof rs)[number]) => number) => rs.reduce((a, r) => a + f(r), 0) / rs.length;
-      if (rule === 'old') stolenOld += m((r) => r.stolen);
-      else stolenNew += m((r) => r.stolen);
+    const rows: string[] = [], ignored = [11, 12, 13].reduce((a, s) => a + harm(1, s, 500, false).stolen, 0) / 3;
+    for (const L of [1, 2]) {
+      const rs = [11, 12, 13].map((s) => harm(L, s)), m = (f: (r: (typeof rs)[number]) => number) => rs.reduce((a, r) => a + f(r), 0) / rs.length;
+      assert.ok(m((r) => r.stolen) < ignored, `an L${L} shield protects the store first (${m((r) => r.stolen)} vs ${ignored} ignored)`);
       const firsts = rs.map((r) => r.first).filter(Number.isFinite);
-      rows.push(`L${L} ${rule}: stolen ${m((r) => r.stolen).toFixed(1)} u, first theft ${firsts.length ? `${(firsts.reduce((a, b) => a + b, 0) / firsts.length).toFixed(1)} s` : 'never'}, shield down ${m((r) => r.down).toFixed(1)} s, chipped ${(100 * m((r) => r.chip)).toFixed(3)}% of you`);
+      rows.push(`L${L}: stolen ${m((r) => r.stolen).toFixed(1)} u, first theft ${firsts.length ? `${(firsts.reduce((a, b) => a + b, 0) / firsts.length).toFixed(1)} s` : 'never'}, shield down ${m((r) => r.down).toFixed(1)} s, chipped ${(100 * m((r) => r.chip)).toFixed(3)}% of you`);
     }
-    for (const rule of ['old', 'new'] as const) {
-      const rs = [11, 12, 13].map((s) => harm(1, rule, s, 0));
-      rows.push(`L1 ${rule}, empty store: chipped ${(100 * rs.reduce((a, r) => a + r.chip, 0) / rs.length).toFixed(3)}% of you (water and air), shield down ${(rs.reduce((a, r) => a + r.down, 0) / rs.length).toFixed(1)} s`);
+    {
+      const rs = [11, 12, 13].map((s) => harm(1, s, 0));
+      rows.push(`L1, empty store: chipped ${(100 * rs.reduce((a, r) => a + r.chip, 0) / rs.length).toFixed(3)}% of you (water and air), shield down ${(rs.reduce((a, r) => a + r.down, 0) / rs.length).toFixed(1)} s`);
     }
-    console.log(`raid harm (60 s attack on a 500 u store, 3 seeds):\n  ${rows.join('\n  ')}`);
-    assert.ok(stolenNew <= stolenOld + 1e-9, `a shield now protects the store first (${stolenNew} vs ${stolenOld})`);
+    console.log(`raid harm (60 s attack on a 500 u store, 3 seeds; ${ignored.toFixed(1)} u stolen with the shield ignored):\n  ${rows.join('\n  ')}`);
   }
 
   // 8c. The last of your stock (0.5 u): the round that takes it fills the hauler and chips nothing; the next one chips.
@@ -473,7 +470,7 @@ const models = { pirates: book() };
   // Cost: pirates.update for 14 ships among 400 bodies (0.001–0.05 of you, belt-like), 60 fps, 10 s.
   {
     const w = world(21, { still: true }), rnd = seeded(5);
-    for (let i = 0; i < 400; i++) w.bodies.push(w.mk((rnd() - 0.5) * 120 * R, (rnd() - 0.5) * 70 * R, (rnd() - 0.5) * 0.4 * R, (rnd() - 0.5) * 0.4 * R, Math.min(0.05, 0.001 * (1 - rnd()) ** (-1 / 0.6)), { rock: 1 }));
+    for (let i = 0; i < 400; i++) w.bodies.push(w.mk((rnd() - 0.5) * 120 * R, (rnd() - 0.5) * 70 * R, (rnd() - 0.5) * 0.4 * R, (rnd() - 0.5) * 0.4 * R, beltM(rnd), { rock: 1 }));
     w.pirates.launch(0.9999);
     const dt = 1 / 60, times: number[] = [], up = w.pirates.update;
     w.pirates.update = (d, civ) => {

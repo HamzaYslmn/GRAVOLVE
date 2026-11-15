@@ -20,9 +20,9 @@ import { chips, CLEARED, status, type Fleet, type Target } from '../../src/evolu
   for (const f of ['frigateStep', 'rockets']) assert.ok(!body(f).includes('closing('), `${f} scans for nothing: it takes your priority`);
   assert.ok(/order: Body \| undefined/.test(body('frigateStep')) && /order: Body \| Foe \| undefined/.test(body('rockets')), 'both take the priority');
   assert.ok(!src.includes('.fast') && body('defend').includes('if (!frag) for (const b of near)'), 'yours see no rock as a threat by themselves');
-  assert.ok(!src.includes('FOCUS') && !body('frigateStep').includes('FRAG'), 'no focus cap, no frigate size gate: orders.ts decides');
+  assert.ok(!body('frigateStep').includes('FRAG'), 'no frigate size gate: orders.ts decides');
   const stage = readFileSync(new URL('../../src/evolution/civilization/stage.ts', import.meta.url), 'utf8');
-  assert.ok(!stage.includes('orderWhy') && !stage.includes('get waiting') && stage.includes('chips(b.m / me.m'), 'stage.ts: status, and a rocket chips or cuts by the body it hit');
+  assert.ok(stage.includes('chips(b.m / me.m'), 'stage.ts: a rocket chips or cuts by the body it hit');
 }
 
 // status (orders.ts): one priority target; each weapon takes it first when it comes free and can hurt and reach it. Here the

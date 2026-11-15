@@ -163,9 +163,10 @@ round with a flash; only the body it was aimed at gets the gun's effect.
   raider); at 20 R/s 0.87–0.90 (220 of 222 and 213 of 217 rounds on target); at a 4% rock 60% of the rounds hit (62% at
   25 R/s, worst run 44%); at most 9 rounds in flight in those runs (pool 96).
 - Weapon fire now always lands on a shield (`shieldShot`, 3 s stun). Pirate raid harm (Node, `pirates.test.ts` 8b, 60 s
-  attack on a 500 u store, 3 seeds; old rule against new): L1 stolen 20.3 → 16.3 u, first theft 10.4 → 13.2 s, shield
-  down 0 → 22 s; L2 stolen 20.3 → 10.7 u, first theft 10.4 → 23.2 s, down 0 → 14 s; an empty store at L1 chipped 0.52 →
-  0.31% of you (water and air).
+  attack on a 500 u store, 3 seeds; it asserts each level steals strictly less than the shield ignored, as the old rule
+  did): 21.3 u stolen ignored; L1 12.0 u, first theft 33.5 s, shield down 13.6 s; L2 10.3 u, first theft 18.9 s, down
+  8.0 s; an empty store at L1 chipped 0.21% of you (water and air; 0.41% ignored, measured before the ignored rows were
+  dropped, 2026-11-15).
 - Targets: `pick` (distance × class weight: missile 0.5, frigate 0.7, fighter 1, probe and miner 1.5) for your home ships
   and rival wave fighters; `nearest` stays for pirates.
 - A pirate gun holds fire while another body is on its line, bar the rocks its fleet works, which take the hit too
@@ -190,7 +191,7 @@ Miner shuttles use the same flight model, relative to your world (`ferry`): they
 and brake onto their site's near side (2.4 R/s²): a moon, a free body, a debris cluster or an open rival world [G].
 They round your world at 1.25 R on the way out, land within 0.25 R of the spot, dig, then fly straight home and land
 0.08 R off the surface; both legs steer round bodies with a 2 ship-radii pad (so they reach sites in debris) and can
-hit them. A leg longer than 15 s gives up. Measured (`flight.test.ts`, a moon on a 3.2 R circle, nothing else): out
+hit them. A leg longer than 15 s gives up. Measured (`nav.test.ts`, a moon on a 3.2 R circle, nothing else): out
 in 2.1 s, home in 1.5 s at 30 and 120 fps. Trip timing, numbers and what they bring:
 [civilizationgameplay.md](civilizationgameplay.md) → Miners on moons, Roaming miners and the mining link.
 
@@ -320,7 +321,7 @@ stay dangerous. Plan: Fable (2026-11-14); what was built, measured in `nav.test.
   in 30 s at 4 R/s and 18 at 5.5 R/s, 1.1–7.6 R out, 7–9 gun windows a ship in 25 s; leaving at 20 R/s you are dropped
   after 8.4 s, at 5 R/s they keep up (farthest ship 7.0–7.2 R); `swept` catches a 120 R/s pass at 30 fps (a point test
   misses it), a pass 1 R off is clear.
-- **Rival ships away** (`flight.test.ts`, a hand copy of rivals.ts's loop, `rivalTop`, 30/120 fps and dt 0.1): every
+- **Rival ships away** (`flight.test.ts`, the real `away.ts`, `rivalTop`, 30/120 fps and dt 0.1): every
   ship every sub-step ≤ max(top, its last speed), |Δv| ≤ 1.000 × GEE × thrust. You still or drifting 3 R/s: wave ships
   ≤ 9.2 R/s; charging the nearest at 7 R/s² to 12: 10.00 R/s, 3 of 6 rammed (2 at dt 0.1); fleeing at 12: the wave
   turns home after 17 s; a probe ≤ 7.5 R/s (also while a wave masses, you at 9), 9 s within 8 R of you drifting 5 R/s,

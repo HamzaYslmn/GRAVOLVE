@@ -2,16 +2,15 @@
 // die to one round, stop on bodies and burst on enemy ships; `pick` and `nearest` choose targets; lances hit drifting
 // rocks; bolts stay visible at every zoom.
 import assert from 'node:assert/strict';
-import { fighterGun, q, R, seeded, SR } from './fakes.ts';
-import { BURST, F_PATROL_V, F_TURN, GAP, GUN, GUN_ARC, leadAt, RATE, SHOT_S, SHOT_V, SPREAD, wrap, type Craft } from '../../src/evolution/civilization/flight.ts';
-import { BOLT, createMissiles, createShots, DOT_GLOW, DOT_LIT, least, MAX_GLOW, pick, nearest, pull, seeker, SHOTS, trigger, type Gun, type Hull, type Launch } from '../../src/evolution/civilization/guns.ts';
-import { type Disc } from '../../src/evolution/civilization/nav.ts';
+import { craft, disc, fighterGun, q, R, seeded, silo, SR } from './fakes.ts';
+import { BURST, F_PATROL_V, F_TURN, GAP, GUN, GUN_ARC, leadAt, RATE, SHOT_S, SHOT_V, SPREAD, wrap } from '../../src/evolution/civilization/flight.ts';
+import { BOLT, createMissiles, createShots, DOT_GLOW, DOT_LIT, least, MAX_GLOW, pick, nearest, pull, SHOTS, trigger, type Gun, type Hull, type Launch } from '../../src/evolution/civilization/guns.ts';
 import { ARMS, FLEET, FRAG, PREY } from '../../src/evolution/civilization/rules.ts';
 
 // Rounds (flight.ts createShots): the pool holds SHOTS at most; a SHOT_V (22 R/s) round cannot tunnel through a 0.09 R ship at 30
 // fps; nothing fires at a lead point outside the arc; bursts at a ship crossing at 4 R/s from 5 R kill some of the time.
 {
-  const shots = createShots(), g = trigger(), gun = fighterGun(), far = { m: 1, r: R, motion: { x: 1e6, y: 0, vx: 0, vy: 0 } };
+  const shots = createShots(), g = trigger(), gun = fighterGun(), far = disc(1e6, 0, R);
   let ok = 0;
   for (let i = 0; i < 200; i++) if (shots.fire(gun, g, i === 0, 0, 0, 0, 0, 0, 10 * R, 0, 0, 0)) ok++;
   assert.ok(ok === SHOTS && shots.n === SHOTS, `the pool holds ${SHOTS} rounds at most: ${ok}`);
@@ -27,7 +26,7 @@ import { ARMS, FLEET, FRAG, PREY } from '../../src/evolution/civilization/rules.
   let kills = 0;
   const N = 400, rnd = seeded(11);
   for (let i = 0; i < N; i++) {
-    const pool = createShots(SHOTS, rnd), c: Craft = { x: 0, y: 0, vx: 0, vy: 0, heading: 0, burn: 0 }, tg = trigger();
+    const pool = createShots(SHOTS, rnd), c = craft(0, 0), tg = trigger();
     let dead = false;
     const foe: Hull = { x: 5 * R, y: -0.5 * R, vx: 0, vy: 4 * R, r: 0.09 * R, team: 'pirate', kill: () => void (dead = true) };
     for (let f = 0, dt = 1 / 60; f < 60 && !dead; f++) {
@@ -78,7 +77,7 @@ import { ARMS, FLEET, FRAG, PREY } from '../../src/evolution/civilization/rules.
   // A body in the way stops it (and is told); enemy ships within its blast die, its own side's do not. A rocket (`hit` set)
   // gives its effect to its own target only.
   {
-    const pool = createMissiles(9), rock: Disc = { m: 1, r: 0.5 * R, motion: { x: 5 * R, y: 0, vx: 0, vy: 0 } }, kills: string[] = [];
+    const pool = createMissiles(9), rock = disc(5 * R, 0, 0.5 * R), kills: string[] = [];
     pool.launch(shot({}));
     const hulls: Hull[] = [
       { x: 4.4 * R, y: 0.3 * R, r: SR, team: 'rival', kill: () => kills.push('rival near') },
@@ -89,7 +88,7 @@ import { ARMS, FLEET, FRAG, PREY } from '../../src/evolution/civilization/rules.
     for (let t = 0; pool.live.length && t < life; t += 1 / 60) pool.step(1 / 60, [rock], hulls, 0, (_, b) => (hit = b), () => (at = t));
     assert.ok(hit === rock && at > 0 && at < 1, `a body stops it (${at.toFixed(2)} s)`);
     assert.deepEqual(kills, ['rival near'], 'its burst kills the enemy ship inside its blast only');
-    const other: Disc = { m: 1, r: 0.5 * R, motion: { x: 20 * R, y: 0, vx: 0, vy: 0 } }, got: unknown[] = [];
+    const other = disc(20 * R, 0, 0.5 * R), got: unknown[] = [];
     pool.launch(shot({ target: other, hit: (b) => got.push(b) }));
     for (let t = 0; pool.live.length && t < life; t += 1 / 60) pool.step(1 / 60, [rock, other], [], 0, () => got.push('combat'), () => {});
     assert.deepEqual(got, [], 'a rocket stopped by a body that is not its target does nothing to it');
@@ -99,15 +98,15 @@ import { ARMS, FLEET, FRAG, PREY } from '../../src/evolution/civilization/rules.
   // on the lead point) while the missile is within GUN R. To rounds a missile is ARMS.missile.size × a ship's hit radius:
   // about a third to a half are stopped. 400 seeded tries.
   {
-    const rnd = seeded(77), M = ARMS.missile, world: Disc = { m: 1, r: R, motion: { x: 0, y: 0, vx: 0, vy: 0 } };
+    const rnd = seeded(77), M = ARMS.missile, world = disc(0, 0, R);
     let killed = 0;
     for (let i = 0; i < 400; i++) {
       const a = rnd() * 2 * Math.PI, L = 7 + 4 * rnd(), pool = createMissiles(9, seeded(500 + i)), shots = createShots(SHOTS, seeded(i)), g = trigger();
-      const m = pool.launch({ team: 'rival', x: Math.cos(a) * L * R, y: Math.sin(a) * L * R, vx: 0, vy: 0, tx: 0, ty: 0, tvx: 0, tvy: 0, u: M.u * R, life: M.life, k: M.k, blast: M.blast * R, seek: () => ({ x: 0, y: 0, vx: 0, vy: 0, r: R }), seeker: seeker(M, R) })!;
+      const m = pool.launch(silo(M, R, { team: 'rival', x: Math.cos(a) * L * R, y: Math.sin(a) * L * R, seek: () => ({ x: 0, y: 0, vx: 0, vy: 0, r: R }) }))!;
       const b = a + (rnd() - 0.5) * 1.5, d = (2 + 2 * rnd()) * R, sx = Math.cos(b) * d, sy = Math.sin(b) * d;
       const gun: Gun = { team: 'you', u: SHOT_V * R, life: SHOT_S, arc: GUN_ARC, spread: SPREAD, tint: 0 };
       for (let f = 0; f < (M.life + 0.5) * 60 && !m.dead && pool.live.length; f++) {
-        const h = 1 / 60, c: Craft = { x: sx, y: sy, vx: 0, vy: 0, heading: 0, burn: 0 };
+        const h = 1 / 60, c = craft(sx, sy);
         c.heading = leadAt(c, m.x, m.y, m.vx, m.vy, gun.u);
         const p = pull(g, h, Math.hypot(m.x - sx, m.y - sy) < GUN * R, BURST, RATE, GAP);
         if (p) shots.fire(gun, g, p === 1, sx, sy, 0, 0, c.heading, m.x, m.y, m.vx, m.vy);
@@ -122,12 +121,12 @@ import { ARMS, FLEET, FRAG, PREY } from '../../src/evolution/civilization/rules.
   // The launch kick (ARMS.missile.arc): into an empty pool the first side is random (rnd < 0.5: +), then each launch flips it.
   // From nearer than half a second of cruise (5.5 R) the kick shrinks in proportion: from 2.75 R it is half.
   {
-    const M = ARMS.missile, m = createMissiles(9, () => 0).launch({ team: 'you', x: 0, y: 0, vx: 0, vy: 0, tx: 2.75 * R, ty: 0, tvx: 0, tvy: 0, u: M.u * R, life: M.life, k: M.k, blast: M.blast * R, seek: () => ({ x: 2.75 * R, y: 0, vx: 0, vy: 0, r: R }), seeker: seeker(M, R) })!;
+    const M = ARMS.missile, m = createMissiles(9, () => 0).launch(silo(M, R, { tx: 2.75 * R, seek: () => ({ x: 2.75 * R, y: 0, vx: 0, vy: 0, r: R }) }))!;
     assert.ok(Math.abs(Math.atan2(m.vy, m.vx) - M.arc / 2) < 1e-9, `a launch 2.75 R out leaves at half the arc (${(Math.atan2(m.vy, m.vx) / M.arc).toFixed(3)} × arc)`);
   }
   for (const [r, first] of [[0, 1], [0.9, -1]] as const) {
     const pool = createMissiles(9, () => r), M = ARMS.missile, sides = [0, 1, 2].map(() => {
-      const m = pool.launch({ team: 'you', x: 0, y: 0, vx: 0, vy: 0, tx: 10 * R, ty: 0, tvx: 0, tvy: 0, u: M.u * R, life: M.life, k: M.k, blast: M.blast * R, seek: () => ({ x: 10 * R, y: 0, vx: 0, vy: 0, r: R }), seeker: seeker(M, R) })!;
+      const m = pool.launch(silo(M, R, { tx: 10 * R, seek: () => ({ x: 10 * R, y: 0, vx: 0, vy: 0, r: R }) }))!;
       return Math.atan2(m.vy, m.vx) / M.arc;
     });
     assert.ok(sides.every((x, i) => Math.abs(x - first * (i % 2 ? -1 : 1)) < 1e-9), `kicked ±arc, the first side ${first > 0 ? '+' : '−'}, then alternating (${sides.map((x) => x.toFixed(2)).join(' / ')} × arc)`);
@@ -152,8 +151,8 @@ import { ARMS, FLEET, FRAG, PREY } from '../../src/evolution/civilization/rules.
   const M = ARMS.missile, h = 1 / 60, sides = [1, -1];
   /** One flight; `dodge(t, unlockedAt)` gives the target's sideways acceleration (R/s²); `side` the launch kick's. Closest approach (R), whether it hit, when it unlocked and ended. */
   const fly = (dodge: (t: number, off: number) => number, side = 1, fan = 0, turnAt = Infinity, L = 16) => {
-    const pool = createMissiles(9, () => (side > 0 ? 0 : 0.9)), w: Disc = { m: 1, r: R, motion: { x: L * R, y: 0, vx: 0, vy: R } };
-    const m = pool.launch({ team: 'rival', x: 0, y: 0, vx: 0, vy: 0, tx: w.motion.x, ty: 0, tvx: 0, tvy: R, u: M.u * R, life: M.life, k: M.k, blast: M.blast * R, fan, target: w, seek: () => ({ ...w.motion, r: w.r }), seeker: seeker(M, R) })!;
+    const pool = createMissiles(9, () => (side > 0 ? 0 : 0.9)), w = disc(L * R, 0, R, 0, R);
+    const m = pool.launch(silo(M, R, { team: 'rival', tx: w.motion.x, tvy: R, fan, target: w, seek: () => ({ ...w.motion, r: w.r }) }))!;
     let hit = false, best = Infinity, off = Infinity, h0 = Math.atan2(m.vy, m.vx), was = true, t = 0;
     for (; pool.live.length && t < M.life + 0.5; t += h) {
       if (t >= turnAt) w.motion.vy = -R;
@@ -202,10 +201,10 @@ import { ARMS, FLEET, FRAG, PREY } from '../../src/evolution/civilization/rules.
   const flights: number[] = [];
   for (let i = 0; i < N; i++) {
     const a = rnd() * 2 * Math.PI, D = (5 + 20 * rnd()) * R, r = R * Math.cbrt(FRAG + (FLEET.frigate.breaks - FRAG) * rnd()), vin = (0.5 + 2.5 * rnd()) * R, vt = (2 * rnd() - 1) * 2 * R;
-    const rock: Disc = { m: 1, r, motion: { x: Math.cos(a) * D, y: Math.sin(a) * D, vx: -Math.cos(a) * vin - Math.sin(a) * vt, vy: -Math.sin(a) * vin + Math.cos(a) * vt } };
+    const rock = disc(Math.cos(a) * D, Math.sin(a) * D, r, -Math.cos(a) * vin - Math.sin(a) * vt, -Math.sin(a) * vin + Math.cos(a) * vt);
     const shots = createShots(SHOTS, seeded(100 + i)), g = trigger(), w = F_PATROL_V / 3, gun: Gun = { team: 'you', u: L.u * R, life: L.life, arc: L.arc, spread: L.spread, tint: 0 };
     let th = rnd() * 2 * Math.PI, out = 0, t = 0, t0 = 0;
-    const c: Craft = { x: 0, y: 0, vx: 0, vy: 0, heading: th + Math.PI / 2, burn: 0 };
+    const c = craft(0, 0, 0, 0, th + Math.PI / 2);
     for (; t < 8 && (out < L.salvo || shots.n); t += h) {
       th += w * h;
       [c.x, c.y, c.vx, c.vy] = [Math.cos(th) * 3 * R, Math.sin(th) * 3 * R, -Math.sin(th) * F_PATROL_V * R, Math.cos(th) * F_PATROL_V * R];

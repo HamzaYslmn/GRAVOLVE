@@ -95,7 +95,7 @@ type D = Disc;
       rec('second body', fly([disc(8 * R, off, r), disc(12 * R, (off > 0 ? -1 : 1) * (r + 1.2 * R + rnd() * R), (0.3 + rnd() * 0.7) * R)], { x: 25 * R, y: 0 }, cruise, turn, fps, 10));
       const belt: D[] = [];
       for (let k = 0; k < 36; k++) {
-        const x = 4 * R + rnd() * 36 * R, y = (rnd() - 0.5) * 16 * R, br = R * Math.cbrt(Math.min(0.05, 0.001 * (1 - rnd()) ** (-1 / 0.6)));
+        const x = 4 * R + rnd() * 36 * R, y = (rnd() - 0.5) * 16 * R, br = beltR(rnd);
         if (!belt.some((b) => Math.hypot(b.motion.x - x, b.motion.y - y) < b.r + br + 0.5 * R) && Math.hypot(x, y) > 3 * R) belt.push(disc(x, y, br, (rnd() - 0.5) * 0.4 * R, (rnd() - 0.5) * 0.4 * R));
       }
       rec('belt', fly(belt, { x: 44 * R, y: (rnd() - 0.5) * 4 * R }, cruise, turn, fps, 16));
@@ -369,4 +369,29 @@ type D = Disc;
     assert.ok(a.x === b.x && a.y === b.y, `${what} leaves the course alone: ${a.x / R}, ${a.y / R} vs ${b.x / R}, ${b.y / R}`);
   }
   console.log('sidestep: a disc at 3 × top behind → top square to its track, on the craft\'s side; past or slower: untouched');
+}
+// A miner shuttle (view.ts): out to a moon on a 3.2 R slot, dig, home to the pad under it, each leg within LEG_S.
+{
+  const LEG_S = 15, PAD = 0.08, mr = 0.2 * R, w = 0.5; // view.ts LEG_S, PAD; moon radius, its angular speed (rad/s)
+  for (const fps of [30, 120]) {
+    const dt = 1 / fps, k = steps(dt), h = dt / k, a0 = 0.3, f = craft(Math.cos(a0) * R * (1 + PAD), Math.sin(a0) * R * (1 + PAD), 0, 0, a0);
+    let t = 0, out = 0, home = 0, low = Infinity, leg: 'out' | 'dig' | 'home' | 'dock' = 'out', a = 0;
+    const moon = (s: number) => ({ x: Math.cos(2 + w * s) * 3.2 * R, y: Math.sin(2 + w * s) * 3.2 * R, vx: -Math.sin(2 + w * s) * 3.2 * R * w, vy: Math.cos(2 + w * s) * 3.2 * R * w });
+    for (let lt = 0; leg !== 'dock' && t < 40; t += dt, lt += dt) {
+      for (let j = 0; j < k; j++) {
+        const m = moon(t + j * h);
+        if (leg === 'out') {
+          const dx = m.x - f.x, dy = m.y - f.y, d = Math.hypot(dx, dy) || 1, go = Math.max(0, d - mr - PAD * R) / d;
+          ferry(f, dx * go, dy * go, m.vx, m.vy, SPEED * R, R, h, true);
+        } else if (leg === 'home') ferry(f, Math.cos(a) * R * (1 + PAD) - f.x, Math.sin(a) * R * (1 + PAD) - f.y, 0, 0, SPEED * R, R, h, false);
+        low = Math.min(low, Math.hypot(f.x, f.y) / R);
+      }
+      const m = moon(t);
+      if (leg === 'out' && Math.hypot(m.x - f.x, m.y - f.y) < mr + 0.25 * R) [leg, out, lt] = ['dig', lt, 0];
+      else if (leg === 'dig' && lt >= DIG) [leg, lt, a] = ['home', 0, Math.atan2(m.y, m.x)];
+      else if (leg === 'home' && Math.hypot(Math.cos(a) * R * (1 + PAD) - f.x, Math.sin(a) * R * (1 + PAD) - f.y) < 0.25 * R) [leg, home] = ['dock', lt];
+    }
+    console.log(`shuttle ${fps} fps: out to a 3.2 R moon in ${out.toFixed(2)} s, home in ${home.toFixed(2)} s, never under ${low.toFixed(3)} R`);
+    assert.ok(leg === 'dock' && out > 0 && out < LEG_S && home < LEG_S && low >= 1 - 1e-9, `a shuttle reaches its moon and comes home: ${leg}, ${out}, ${home}`);
+  }
 }

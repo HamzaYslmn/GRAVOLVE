@@ -6,10 +6,12 @@ import assert from 'node:assert/strict';
 import { A_ENG, alarmStep, BAND, DODGE, evade, GATHER_U, MASS_S, newWave, next, ODDS, REST_S, restStep, roster, sidestep, stance, stationStep, STOCK_RATE, tick, volley, want, WAVE_COST, WAVE_S, waveStep, WORLD_FLAGS, type Mood, type Temper, type Wave } from '../../src/evolution/rivals/ledger.ts';
 import {
   ARMS, BEATEN, CALM_S, DRIVER_COOL, FLEET, raid, RESERVE, RIVAL_AIM, RIVAL_FIRE, RIVAL_LEAD, rivalFrigates, rivalLevel, rivalSalvo, SALVO_LEAD, salvo, SHIELD_K, shieldMax, shieldRegen,
-  shieldShot, SIEGE, siegeWing, SLUG_ORE, SLUG_SHARE, SLUG_SPEED, START_ORE, START_SHIPS, strength, waveFighters, weaponHit, type Shield,
+  shieldShot, SIEGE, siegeWing, SLUG_ORE, START_ORE, START_SHIPS, strength, waveFighters, weaponHit, type Shield,
 } from '../../src/evolution/civilization/rules.ts';
-import { COMP, G_WORLD, gravitates, impactHeat, pairPull, pullMass, radiusOf, youPull } from '../../src/evolution/asteroid/rules.ts';
-import { createMissiles, seeker } from '../../src/evolution/civilization/guns.ts';
+import { COMP, G_WORLD, gravitates, pairPull, pullMass, radiusOf, youPull } from '../../src/evolution/asteroid/rules.ts';
+import { createMissiles } from '../../src/evolution/civilization/guns.ts';
+import { silo } from '../civilization/fakes.ts';
+import { lcg, slugK } from '../helpers.ts';
 import { LIFE_S } from '../../src/evolution/planet/rules.ts';
 
 const comp = { rock: 0.8, metal: 0.1, ice: 0.08, gas: 0.02 };
@@ -117,9 +119,7 @@ console.log(`rival worlds ok: ${[...marks].map(([e, k]) => `${e.name} melts at $
   // after it falls): every SIEGE.pass s a pair of the siege wing strafes (rounds chip their shield and burn their stock, never
   // people), each frigate's lance salvo every reload (90% land), your silo's salvo(T) every reload while RESERVE ore is left
   // (half land). Win = their people at BEATEN; lose = yours.
-  let seed = 11;
-  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  const R = radiusOf(1e5, COMP.stony), slugK = 430 * impactHeat(SLUG_SHARE / (1 + SLUG_SHARE), SLUG_SPEED, 8, R), F = ARMS.round, Lc = ARMS.lance, M = ARMS.missile;
+  const rnd = lcg(11), shotK = slugK(1e5), F = ARMS.round, Lc = ARMS.lance, M = ARMS.missile;
   type You = { T: number; level: number; fighters: number; frigates: number; ore: number };
   const duel = (you: You, L: number, temper: Temper) => {
     const a: Shield = { level: you.level, s: SHIELD_K * you.level }, b: Shield = { level: L, s: SHIELD_K * L }, wa = { k: 0 }, wb = { k: 0 }, capb = { floor: 0, burnt: 0 };
@@ -139,12 +139,12 @@ console.log(`rival worlds ok: ${[...marks].map(([e, k]) => `${e.name} melts at $
       if ((ca -= 0.1) <= 0 && ore >= SLUG_ORE) {
         [ca, ore] = [DRIVER_COOL, ore - SLUG_ORE];
         if (gone && wave!.frig > 0) { if (rnd() < 0.6 && ++fhp >= Lc.rivalHull) [wave!.frig, frig, fhp] = [wave!.frig - 1, frig - 1, 0]; } // snipe the frigate
-        else if (rnd() < 0.6 && b.s > 0) shieldShot(b, slugK);
+        else if (rnd() < 0.6 && b.s > 0) shieldShot(b, shotK);
       }
       rest = restStep(rest, a.s <= 0, 0.1);
       if (volley(!!wave, rest) && (cb -= 0.1) <= 0) {
         cb = RIVAL_FIRE[0] + rnd() * (RIVAL_FIRE[1] - RIVAL_FIRE[0]);
-        if (rnd() < RIVAL_AIM && a.s > 0) shieldShot(a, slugK);
+        if (rnd() < RIVAL_AIM && a.s > 0) shieldShot(a, shotK);
       }
       // Your sortie (rules.ts sortieStep: off with your shield down, then CALM_S).
       calm = Math.max(0, calm - 0.1);
@@ -279,10 +279,7 @@ console.log(`rival worlds ok: ${[...marks].map(([e, k]) => `${e.name} melts at $
     assert.ok(Math.abs(go(0.001, { x: 0, y: 7 }) - 0.001 / dt) < 1e-9, 'cutting is instant');
     assert.ok(Math.abs(go(50) - 7) < 1e-12, 'without `was`, full thrust at once (as before)');
   }
-  let seed = 11;
-  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647), M = ARMS.missile;
-  let sideSeed = 23; // the launch kick's own stream: it never shifts the dodge's draws
-  const sideRnd = () => ((sideSeed = (sideSeed * 16807) % 2147483647) / 2147483647);
+  const rnd = lcg(11), M = ARMS.missile, sideRnd = lcg(23); // sideRnd: the launch kick's own stream, it never shifts the dodge's draws
   /** `n` salvos of 1–3 at a rival keeping `keepOf()` R off, dodging at `burn` R/s² (or on A_ENG alone). Land share, the fewest landed of a salvo of 2–3, slowest station speed after, steepest thrust rise. */
   const salvos = (n: number, keepOf: () => number, dodge = true, burn = DODGE.a) => {
     let fired = 0, landed = 0, slow = 0, rise = 0, floor = Infinity;
@@ -291,7 +288,7 @@ console.log(`rival worlds ok: ${[...marks].map(([e, k]) => `${e.name} melts at $
       const c = Math.sqrt((pull(keep * R) / R) * keep) * turn * R, w = { x: Math.cos(b) * keep * R, y: Math.sin(b) * keep * R, vx: -Math.sin(b) * c, vy: Math.cos(b) * c };
       const world = { m: mR, r, motion: w }, pool = createMissiles(9, sideRnd), salvo = 1 + Math.floor(rnd() * 3), dt = 1 / 60;
       const lx = Math.cos(b) * 1.05 * R, ly = Math.sin(b) * 1.05 * R, seek = () => ({ ...w, r });
-      for (let j = 0; j < salvo; j++) pool.launch({ team: 'you', x: lx, y: ly, vx: 0, vy: 0, tx: w.x, ty: w.y, tvx: w.vx, tvy: w.vy, u: M.u * R, life: M.life, k: M.k, blast: M.blast * R, fan: salvo > 1 ? M.fan * ((2 * j) / (salvo - 1) - 1) : 0, target: world, seek, seeker: seeker(M, R) });
+      for (let j = 0; j < salvo; j++) pool.launch(silo(M, R, { x: lx, y: ly, tx: w.x, ty: w.y, tvx: w.vx, tvy: w.vy, fan: salvo > 1 ? M.fan * ((2 * j) / (salvo - 1) - 1) : 0, target: world, seek }));
       fired += salvo;
       let alarm = -DODGE.react[1] * rnd(), gone = Infinity, worst = 0, was = { x: 0, y: 0 }, got = 0;
       const end = () => gone + DODGE.brake + 1;
@@ -334,9 +331,7 @@ console.log(`rival worlds ok: ${[...marks].map(([e, k]) => `${e.name} melts at $
   assert.equal(rest, REST_S, 'the rest holds while your shield is down');
   rest = restStep(rest, false, REST_S - 0.05);
   assert.ok(!volley(false, rest) && volley(false, restStep(rest, false, 0.1)), 'and runs out REST_S after it is back up');
-  let seed = 5;
-  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  const slugK = 430 * impactHeat(SLUG_SHARE / (1 + SLUG_SHARE), SLUG_SPEED, 8, radiusOf(1e5, COMP.stony));
+  const rnd = lcg(5), shotK = slugK(1e5);
   const run = (volleys: boolean) => {
     const sh: Shield = { level: 1, s: SHIELD_K };
     let cb = 3, rest = 0, down = 0, broke = false, top = 0;
@@ -345,7 +340,7 @@ console.log(`rival worlds ok: ${[...marks].map(([e, k]) => `${e.name} melts at $
       rest = restStep(rest, sh.s <= 0, 0.1);
       if ((!volleys || volley(false, rest)) && (cb -= 0.1) <= 0) {
         cb = RIVAL_FIRE[0] + rnd() * (RIVAL_FIRE[1] - RIVAL_FIRE[0]);
-        if (rnd() < RIVAL_AIM) shieldShot(sh, slugK); // weapon fire (rules.ts shieldShot), as rivals.ts fires it
+        if (rnd() < RIVAL_AIM) shieldShot(sh, shotK); // weapon fire (rules.ts shieldShot), as rivals.ts fires it
       }
       if (sh.s <= 0) [down, broke] = [down + 0.1, true];
       else if (broke && t > 120) top = Math.max(top, sh.s / shieldMax(sh)); // after the first volleys
