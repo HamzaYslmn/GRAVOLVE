@@ -1,0 +1,18 @@
+/* Touch joystick (input.ts). */
+#joystick {
+  position: fixed;
+  width: 112px;
+  height: 112px;
+  margin: -56px 0 0 -56px; /* centred on the touch point */
+  border-radius: 50%;
+  background: rgb(120 150 255 / 0.08);
+  border: 2px solid rgb(150 175 255 / 0.3);
+  pointer-events: none;
+}
+
+#joystick-knob {
+  position: absolute;
+  inset: 32px;
+  border-radius: 50%;
+  background: rgb(170 190 255 / 0.35);
+}

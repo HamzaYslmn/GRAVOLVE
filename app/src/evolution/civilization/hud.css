@@ -1,0 +1,17 @@
+/* The civilization's rows in your card (hud.ts); asteroid/hud.css provides .cells, .cell, .scale. */
+#game-hud .civ .cell { color: #ffd27a; }
+/* Stock in words: Fuel 42 · Ore 984 · Vol 735. */
+#game-hud .civ .stock { display: flex; flex-wrap: wrap; align-items: baseline; font-size: 12px; color: var(--ui-muted); }
+#game-hud .civ .stock span + span::before { content: '·'; margin: 0 6px; }
+#game-hud .civ .stock b { font-size: 13px; font-weight: 600; color: var(--ui-text); }
+/* One slot per fleet class (hud.ts, slots.ts): art, caption + count, reload bar; on = takes the priority, off = cannot, none = nothing yet. */
+#game-hud .civ .slots { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 4px 0; }
+#game-hud .civ .slot { display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: 1px 4px; padding: 3px 4px; color: #ffd27a; background: rgb(255 255 255 / 0.03); }
+#game-hud .civ .slot .art { grid-column: 1 / -1; height: 16px; width: 100%; color: #7fe8ff; }
+#game-hud .civ .slot em { font-style: normal; font-size: 9px; color: var(--ui-muted); }
+#game-hud .civ .slot .v { font-size: 12px; font-weight: 600; text-align: right; color: var(--ui-text); }
+#game-hud .civ .slot .bar { grid-column: 1 / -1; height: 3px; }
+#game-hud .civ .slot .bar > i { background: currentColor; }
+#game-hud .civ .slot.on { box-shadow: inset 0 0 0 1px #7fe8ff; }
+#game-hud .civ .slot.off { opacity: 0.45; }
+#game-hud .civ .slot.none { opacity: 0.35; }

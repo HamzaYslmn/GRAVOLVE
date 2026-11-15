@@ -1,0 +1,1369 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GRAVOLVE Tasarım Haritası</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #05060d;
+    --panel: #0c1020;
+    --panel2: #121833;
+    --line: #232c52;
+    --text: #d9e0ff;
+    --muted: #8590b8;
+    --accent: #7fd4ff;
+    --tier: #5cc8ff;
+    --tag: #ffc35c;
+    --state: #b48cff;
+    --event: #ff6b6b;
+    --collect: #5cffa1;
+    --secret: #8a93a8;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: radial-gradient(1200px 600px at 70% -10%, #142050 0%, transparent 60%), var(--bg);
+    color: var(--text);
+    font: 15px/1.55 system-ui, "Segoe UI", Roboto, sans-serif;
+  }
+  a { color: var(--accent); }
+  header {
+    position: sticky; top: 0; z-index: 20;
+    background: rgba(5, 6, 13, 0.92);
+    backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--line);
+  }
+  .head-in { max-width: 1400px; margin: 0 auto; padding: 10px 16px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  .logo { font-weight: 800; letter-spacing: 0.18em; font-size: 18px; }
+  .logo small { font-weight: 400; letter-spacing: 0; color: var(--muted); margin-left: 8px; font-size: 13px; }
+  nav { display: flex; gap: 4px; flex-wrap: wrap; }
+  nav button {
+    background: none; border: 1px solid transparent; color: var(--muted);
+    padding: 6px 12px; border-radius: 999px; cursor: pointer; font: inherit; font-size: 14px;
+  }
+  nav button:hover { color: var(--text); }
+  nav button.on { color: var(--text); border-color: var(--line); background: var(--panel2); }
+  main { max-width: 1400px; margin: 0 auto; padding: 20px 16px 80px; }
+  .tab { display: none; }
+  .tab.on { display: block; }
+  h2 { font-size: 26px; margin: 8px 0 4px; }
+  h3 { font-size: 19px; margin: 28px 0 10px; }
+  h4 { margin: 0 0 6px; font-size: 15px; }
+  p.lead { color: var(--muted); margin-top: 0; max-width: 860px; }
+  .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .card ul { margin: 6px 0 0; padding-left: 18px; }
+  .card li { margin: 2px 0; }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--line); color: var(--muted); }
+  .tbl-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+  table { border-collapse: collapse; width: 100%; min-width: 720px; background: var(--panel); }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; font-size: 14px; }
+  th { background: var(--panel2); color: var(--muted); font-weight: 600; position: sticky; top: 0; }
+  tr:last-child td { border-bottom: 0; }
+  .el { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: 0; }
+  .loop { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0 4px; }
+  .loop span { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
+  .loop b { color: var(--muted); font-weight: 400; }
+
+  /* Tree */
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 12px 0 8px; }
+  .toolbar input {
+    background: var(--panel); border: 1px solid var(--line); color: var(--text);
+    border-radius: 8px; padding: 7px 10px; font: inherit; min-width: 220px; flex: 1 1 220px; max-width: 360px;
+  }
+  .kind-btn, .era-btn {
+    background: var(--panel); border: 1px solid var(--line); color: var(--text);
+    border-radius: 999px; padding: 4px 10px; cursor: pointer; font: inherit; font-size: 13px;
+  }
+  .kind-btn.off { opacity: 0.35; }
+  .kind-btn i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
+  .tree-wrap { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  @media (min-width: 1100px) { .tree-wrap.has-panel { grid-template-columns: minmax(0, 1fr) 360px; } }
+  .era { border: 1px solid var(--line); border-radius: 14px; margin: 14px 0; background: rgba(12, 16, 32, 0.6); scroll-margin-top: 80px; }
+  .era-h { padding: 10px 14px; border-bottom: 1px solid var(--line); display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+  .era-h strong { font-size: 16px; }
+  .era-h span { color: var(--muted); font-size: 13px; }
+  .lane { display: grid; grid-template-columns: 170px minmax(0, 1fr); border-bottom: 1px solid rgba(35, 44, 82, 0.5); }
+  .lane:last-child { border-bottom: 0; }
+  .lane-t { padding: 10px 14px; color: var(--muted); font-size: 13px; }
+  .chips { display: flex; align-items: center; gap: 4px; padding: 8px 10px; overflow-x: auto; }
+  @media (max-width: 700px) { .lane { grid-template-columns: 1fr; } .lane-t { padding-bottom: 0; } }
+  .chip {
+    flex: none; display: inline-flex; align-items: center; gap: 6px;
+    background: var(--panel); color: var(--text); font: inherit; font-size: 13px;
+    border: 1px solid var(--c); border-radius: 9px; padding: 5px 9px; cursor: pointer;
+    box-shadow: inset 3px 0 0 var(--c); transition: opacity .15s, transform .15s;
+  }
+  .chip:hover { transform: translateY(-1px); }
+  .chip.k-secret { border-style: dashed; }
+  .chip .x { color: var(--muted); font-size: 11px; }
+  .arrow { color: var(--muted); flex: none; font-size: 13px; }
+  .gap { width: 10px; flex: none; }
+  .chip.hidden { display: none; }
+  .chip.nomatch { opacity: 0.18; }
+  .has-sel .chip:not(.sel):not(.rel) { opacity: 0.25; }
+  .chip.sel { background: var(--panel2); outline: 2px solid var(--c); }
+  .chip.rel { outline: 1px dashed var(--c); }
+  #panel {
+    display: none; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px;
+    position: sticky; top: 76px; align-self: start; max-height: calc(100vh - 96px); overflow: auto;
+  }
+  .has-panel #panel { display: block; }
+  @media (max-width: 1099px) {
+    #panel { position: fixed; left: 8px; right: 8px; bottom: 8px; top: auto; max-height: 55vh; z-index: 30; box-shadow: 0 -10px 40px #000; }
+  }
+  #panel .close { float: right; background: none; border: 0; color: var(--muted); font-size: 20px; cursor: pointer; }
+  #panel h3 { margin: 0 0 4px; }
+  #panel .meta { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  #panel h5 { margin: 14px 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+  #panel ul { margin: 0; padding-left: 18px; }
+  #panel .links { display: flex; flex-wrap: wrap; gap: 6px; }
+  #panel .links button { font-size: 12px; }
+  .lab { max-width: 760px; }
+  .duel { display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: center; }
+  .vs { font-size: 26px; color: var(--muted); }
+  .who { display: grid; gap: 8px; }
+  .who h4 { margin: 0; }
+  .lab label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+  .lab input, .lab select {
+    background: var(--panel2); border: 1px solid var(--line); color: var(--text); border-radius: 8px; padding: 6px 8px; font: inherit;
+  }
+  .lab input[type=range] { padding: 0; accent-color: var(--accent); margin-top: 6px; }
+  .speed { margin: 16px 0; }
+  .speed b { color: var(--text); font-size: 15px; }
+  .zones { display: flex; font-size: 12px; text-align: center; }
+  .zones span:nth-child(1) { color: var(--collect); }
+  .zones span:nth-child(2) { color: var(--tag); }
+  .zones span:nth-child(3) { color: #ff9f43; }
+  .verdict { font-size: 18px; font-weight: 700; margin: 0 0 2px; }
+  .why { color: var(--muted); margin: 0 0 12px; }
+  .res { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
+  .res .card { background: var(--panel2); }
+  .res .big { font-size: 22px; font-weight: 700; }
+  .res .tier { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+  .res p { margin: 4px 0; font-size: 14px; }
+  .bar { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; margin: 4px 0 8px; }
+  .bar i { display: block; height: 100%; }
+  .bar.prog { position: relative; height: 10px; }
+  .bar.prog i { background: linear-gradient(90deg, var(--tier), var(--accent)); }
+  .bar .mark { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--text); opacity: .7; }
+  .prog-t { margin-top: 12px !important; padding-top: 10px; border-top: 1px solid var(--line); }
+  .screen {
+    position: relative; aspect-ratio: 16 / 9; min-height: 460px; border-radius: 14px; overflow: hidden;
+    border: 1px solid var(--line); background: radial-gradient(900px 500px at 30% 60%, #0d1640 0%, #03040b 70%);
+  }
+  .scene { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .hud {
+    position: absolute; width: 200px; background: rgba(8, 12, 28, 0.72); border: 1px solid rgba(127, 212, 255, 0.18);
+    border-radius: 10px; padding: 8px 10px; font-size: 12px; line-height: 1.4; backdrop-filter: blur(3px);
+  }
+  .hud .h-title { font-size: 14px; font-weight: 700; }
+  .hud .muted { color: var(--muted); }
+  .hud .bar { margin: 4px 0; height: 6px; }
+  .hud .bar.prog { height: 8px; }
+  .tl { top: 10px; left: 10px; } .tr { top: 10px; right: 10px; }
+  .bl { bottom: 10px; left: 10px; } .br { bottom: 10px; right: 10px; }
+  .bc { bottom: 10px; left: 50%; transform: translateX(-50%); width: 150px; text-align: center; }
+  .tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px; }
+  .tags span { font-size: 11px; border: 1px solid var(--tag); color: var(--tag); border-radius: 999px; padding: 0 6px; }
+  .crow { display: grid; grid-template-columns: 10px 58px 1fr 34px; gap: 6px; align-items: center; }
+  .crow .el { width: 8px; height: 8px; margin: 0; }
+  .crow b { text-align: right; font-weight: 600; }
+  .crow .bar { margin: 0; }
+  .ticks { position: relative; height: 0; }
+  .ticks i { position: absolute; top: -10px; width: 1px; height: 8px; background: var(--text); opacity: .5; }
+  .pips { display: inline-flex; gap: 3px; vertical-align: middle; }
+  .pips i { width: 8px; height: 8px; border-radius: 2px; border: 1px solid var(--event); }
+  .pips i.on { background: var(--event); }
+  .hud-ctl { margin-top: 12px; max-width: none; }
+  .ctl-grid { display: grid; gap: 10px 14px; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+  @media (max-width: 640px) {
+    .screen { aspect-ratio: auto; min-height: 760px; }
+    .hud { width: calc(50% - 15px); font-size: 11px; padding: 6px 8px; }
+    .bc { bottom: auto; top: 26%; width: 140px; }
+    .crow { grid-template-columns: 8px 1fr 30px; }
+    .crow .bar { display: none; }
+  }
+  @media (max-width: 560px) { .duel, .res { grid-template-columns: 1fr; } .vs { display: none; } }
+  #err { display: none; background: #4a1020; border: 1px solid var(--event); padding: 10px 14px; border-radius: 10px; margin: 10px 0; white-space: pre-wrap; }
+  .note { color: var(--muted); font-size: 13px; }
+  .faction { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--fc); border-radius: 12px; padding: 12px 16px; margin: 12px 0; }
+  .faction h4 { margin: 0 0 2px; color: var(--fc); }
+  .faction p { margin: 0 0 10px; color: var(--muted); font-size: 14px; }
+  .ships { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+  .ships figure { margin: 0; background: radial-gradient(circle at 50% 50%, #141a36 0%, #070914 75%); border: 1px solid var(--line); border-radius: 10px; padding: 6px 6px 4px; text-align: center; }
+  .ships svg { width: 100%; height: auto; display: block; }
+  .ships figcaption { font-size: 13px; color: var(--text); padding-top: 2px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="head-in">
+    <div class="logo">GRAVOLVE<small>Tasarım Haritası</small></div>
+    <nav id="nav">
+      <button data-tab="hikaye">Hikaye</button>
+      <button data-tab="agac">Gelişim Ağacı</button>
+      <button data-tab="kaynak">Kaynaklar</button>
+      <button data-tab="carpisma">Çarpışma ve Dönüşüm</button>
+      <button data-tab="hud">HUD</button>
+      <button data-tab="yasam">Yaşam ve Uygarlık</button>
+      <button data-tab="gemi">Gemiler</button>
+      <button data-tab="oyun">Oynanış</button>
+    </nav>
+  </div>
+</header>
+
+<main>
+<div id="err"></div>
+
+<!-- ============ HİKAYE ============ -->
+<section class="tab" id="hikaye">
+  <h2>Hikaye</h2>
+  <p class="lead">Big Bang’in ardından evren sıcak, biçimsiz bir sis. Bu sisin içinde bir zerre diğerlerinden farklı: <b>çekiyor</b>. Sen o zerresin, <b>Çekirdek</b>. Evren soğuyup dağılmadan önce her şeyi kendine çekip tek bir yapıya, <b>Kozmik Ağ</b>’a dönüştürmek zorundasın.</p>
+
+  <h3>Oyunun direkleri</h3>
+  <div class="grid">
+    <div class="card"><h4>Ne yersen o olursun</h4>Yuttuğun her cismin bileşimi seni değiştirir. Metal seni sertleştirir, su yaşamı mümkün kılar, gaz yıldız yakıtın olur.</div>
+    <div class="card"><h4>Ölüm bir başlangıç</h4>Her yıldız ölür. Patlaman yeni bir bulutsu bırakır; ondan, öncekinin külünü taşıyarak yeniden doğarsın.</div>
+    <div class="card"><h4>Tozdan sonsuza ölçek</h4>Bir toz tanesiyle başlar, bir galaksi kümesiyle bitirirsin. Her çağda kamera uzaklaşır, alt ölçek tek bir cisme dönüşür.</div>
+    <div class="card"><h4>Yaşamı korumak</h4>Gezegenlerinde yaşam doğar ve uygarlığa dönüşür. Seni “Ana” olarak görürler, gemileriyle sana hizmet ederler. Onları korumak senin işin.</div>
+  </div>
+
+  <h3>Karşı güçler</h3>
+  <div class="grid">
+    <div class="card"><h4>Entropi</h4>Evrenin saati. Zaman geçtikçe yeni gaz azalır, yıldız doğumu yavaşlar. Isıl Ölüm’den önce Kozmik Ağ’ı tamamlamalısın. Oyunun küresel zamanlayıcısıdır ama nazik çalışır: baskı kurar, cezalandırmaz.</div>
+    <div class="card"><h4>Rakip Çekirdekler</h4>Senin gibi çeken başka iradeli kütleler. Aynı ağaçta evrimleşirler, kendi uygarlıkları ve filoları olur. Onları yutabilir, ittifakla yanına çekebilir ya da kaçabilirsin.</div>
+    <div class="card"><h4>Doğa</h4>Çarpışmalar, süpernova şok dalgaları, pulsar ışınları, radyasyon fırtınaları. Kimsenin tarafını tutmaz.</div>
+  </div>
+
+  <h3>Perdeler</h3>
+  <div class="tbl-wrap"><table>
+    <tr><th>Perde</th><th>Hikaye anı</th><th>Oyuncu hedefi</th><th>Perde sonu</th></tr>
+    <tr><td><b>0 · İlk Işık</b></td><td>Sis ve tek çeken zerre.</td><td>Gaz topla, ilk yıldız ol. (Öğretici)</td><td>İlk süpernova: ilk ölümün. Tozun içinde uyanırsın.</td></tr>
+    <tr><td><b>I · Toz ve Kaya</b></td><td>Yıldız külünden uyanış; tozun hafızası.</td><td>Bileşim yolunu seç (metal, su, kayaç, gaz), dev asteroide ulaş.</td><td>Gezegenimsi cisim olursun.</td></tr>
+    <tr><td><b>II · Dünyalar</b></td><td>Bir dünya olmak. İlk okyanus, ilk hücre.</td><td>Gezegen türünü kur, uydu topla, yaşamı başlat.</td><td>Akıllı tür doğar ya da gaz yolunda kahverengi cüceye ulaşırsın.</td></tr>
+    <tr><td><b>III · Ateş</b></td><td>Tutuşma: artık kendi ışığın var.</td><td>Yıldız ol, gezegen sistemini kur, uygarlığını Tip I–II’ye taşı. Rakip filolar ilk kez gelir.</td><td>Yakıtın biter.</td></tr>
+    <tr><td><b>IV · Ölüm ve Yeniden Doğuş</b></td><td>Ölmek, dağılmak, yeniden toplanmak.</td><td>Ölüm yolunu seç: yeniden doğ (kalıcı metalisite) ya da kara delik ol.</td><td>Süper kütleli kara delik ya da yıldız kümesi.</td></tr>
+    <tr><td><b>V · Ağ</b></td><td>Her şeyi bağlamak.</td><td>Galaksiden kozmik ağa büyü, rakip çekirdekleri yut ya da bağla.</td><td>Kozmik Ağ tamamlanır: Yeni Evren+.</td></tr>
+  </table></div>
+
+  <h3>Son ve Yeni Evren+</h3>
+  <p>Kozmik Ağ tamamlandığında evren “hatırlar” ve yeni bir Big Bang başlar. Önceki evrende kazandığın <b>Sabit puanlarıyla</b> fizik sabitlerini değiştirirsin: çekim gücü, yıldız ömrü, yaşam ihtimali, başlangıç bileşimi. Her yeni evren farklı oynanır.</p>
+
+  <h3>Anlatım tonu</h3>
+  <p>Sessiz, kozmik, merak dolu. Az metin; hikayeyi olaylar anlatır. Tek doğrudan ses, uygarlıklarından gelen kısa radyo sinyalleridir: önce anlamsız darbeler, sonra sana adanmış şiirler, en sonunda senden yardım çağrıları.</p>
+</section>
+
+<!-- ============ GELİŞİM AĞACI ============ -->
+<section class="tab" id="agac">
+  <h2>Gelişim Ağacı</h2>
+  <p class="lead">Kademe kütleden, dal bileşim ve ortamdan, yıldız ölümü kütle ve yakıttan gelir. Bir düğüme tıkla: gereksinimleri, kazanımları, yetenekleri, önceki ve sonraki adımları görürsün. Kütle değerleri oyun birimidir (log ölçek) ve ayarlanabilir.</p>
+  <div class="toolbar">
+    <input id="q" type="search" placeholder="Ara: metal, okyanus, pulsar…" />
+    <span id="kinds"></span>
+  </div>
+  <div class="toolbar" id="eras"></div>
+  <div class="tree-wrap" id="treeWrap">
+    <div id="tree"></div>
+    <aside id="panel"></aside>
+  </div>
+</section>
+
+<!-- ============ KAYNAKLAR ============ -->
+<section class="tab" id="kaynak">
+  <h2>Kaynaklar ve Bileşim</h2>
+  <p class="lead">Her cismin 4 elementlik bir bileşim vektörü var: metal, kayaç, su ve gaz. Yuttuğun cisim bu oranları değiştirir; oranlar da hangi dala gidebileceğini ve istatistiklerini belirler.</p>
+
+  <h3>Dört element</h3>
+  <div class="grid">
+    <div class="card"><h4><i class="el" style="background:#9fb0c8"></i>Metal</h4>
+      <ul><li><b>Cisim:</b> Sertlik ve Dayanıklılık. Ağırlık hızı düşürür.</li><li><b>Gezegen:</b> Metal çekirdek manyetik alan üretir; yaşamı radyasyondan korur.</li><li><b>Uygarlık:</b> Gemi gövdesi, zırh.</li><li><b>Kaynak:</b> metalik asteroid, demir gezegen, kilonova.</li></ul></div>
+    <div class="card"><h4><i class="el" style="background:#c9a27a"></i>Kayaç</h4>
+      <ul><li><b>Cisim:</b> Verimli büyüme (+%20 kütle kazanımı).</li><li><b>Gezegen:</b> Kıta ve kara: kara yaşamı.</li><li><b>Uygarlık:</b> Yapı malzemesi, istasyonlar.</li><li><b>Kaynak:</b> kayaç asteroitleri (taş, bazalt, olivin, enstatit, koyu kaya; hepsi karışık), kayalık gezegenler.</li></ul></div>
+    <div class="card"><h4><i class="el" style="background:#6fd3ff"></i>Su / Buz</h4>
+      <ul><li><b>Cisim:</b> Gaz püskürtme (dash) yakıtı, soğutma.</li><li><b>Gezegen:</b> Okyanus. <b>Yaşamın ana şartı</b>; su ne kadar çoksa yaşam o kadar hızlı başlar.</li><li><b>Uygarlık:</b> Nüfus, mürettebat, koloni gemileri.</li><li><b>Kaynak:</b> mavi buzlu asteroitler, su bazlı asteroitler, kuyruklu yıldızlar.</li></ul></div>
+    <div class="card"><h4><i class="el" style="background:#ffd27a"></i>Gaz (H/He)</h4>
+      <ul><li><b>Cisim:</b> Hafif: hız +, dayanıklılık −. Gaz devi büyümesi.</li><li><b>Yıldız:</b> <b>Yakıt.</b> Gaz yemek yıldız ömrünü uzatır.</li><li><b>Uygarlık:</b> Gemi yakıtı (hız).</li><li><b>Kaynak:</b> gaz zengini asteroitler (kırağılı, parıltılı), bulutlar, gaz devleri, bulutsular.</li></ul></div>
+  </div>
+
+  <h3>Asteroid türleri</h3>
+  <div class="tbl-wrap"><table>
+    <tr><th>Tür</th><th>Bileşim</th><th>Nadirlik</th><th>Yutunca</th><th>Bedel / risk</th><th>Nerede</th></tr>
+    <tr><td><b>Kayaç</b></td><td>Kayaç %85 (taş, bazalt, olivin, enstatit, koyu kaya)</td><td>Çok yaygın (%50)</td><td>+%20 kütle, gezegende kıta</td><td>Özel bir bonusu yok</td><td>İç sistem</td></tr>
+    <tr><td><b>Metalik</b></td><td>Metal %70, parlak çelik ya da demir-nikel</td><td>Yaygın (%20)</td><td>Sertlik ++, Dayanıklılık ++, ileride manyetik alan</td><td>Ağır: hız ve dönüş −</td><td>Asteroid kuşağı, iç sistem</td></tr>
+    <tr><td><b>Su bazlı (hidratlı)</b></td><td>Su %45, kayaç %50</td><td>Orta (%10)</td><td>Okyanus, yaşamı hızlandırır, soğutma</td><td>Kar çizgisinin içinde su kaybeder</td><td>Kar çizgisi yakını</td></tr>
+    <tr><td><b>Buzlu kaya</b></td><td>Su (buz) %70, mavi</td><td>Orta (%10), dış sistemde yaygın</td><td>Büyük su deposu, dash yakıtı</td><td>Yıldıza yaklaşınca erir</td><td>Kar çizgisinin ötesi</td></tr>
+    <tr><td><b>Gaz zengini</b></td><td>Gaz %45, buz %35</td><td>Az (%10)</td><td>Hafiflik: hız +, gaz devi yolu</td><td>Çok kırılgan</td><td>Dış sistem, kuyruklu yıldız bölgesi</td></tr>
+    <tr><td><b>Radyoaktif</b></td><td>Ağır element %10+</td><td>Nadir (%3)</td><td>İç ısı: volkanizma, manyetik alanı canlı tutar</td><td>Fazlası (%8+) yaşamı öldürür</td><td>Süpernova kalıntıları yakını</td></tr>
+    <tr><td><b>Nadir metal (platin)</b></td><td>Nadir metal</td><td>Çok nadir (%1)</td><td>Gemi teknolojisi, uygarlık bilimi +</td><td>Genellikle tehlikeli bölgede</td><td>Kilonova / süpernova sonrası</td></tr>
+    <tr><td><b>Moloz yığını</b></td><td>Karışık</td><td>Yaygın</td><td>Kolay kütle</td><td>Sertlik −− (kolay parçalanır)</td><td>Her yer</td></tr>
+  </table></div>
+
+  <h3>Türetilmiş kaynaklar</h3>
+  <div class="grid">
+    <div class="card"><h4>Enerji</h4>Yıldız ışıması, iç ısı ve Dyson sürüsünden gelir. Yetenekleri ve kalkanları besler.</div>
+    <div class="card"><h4>Metalisite (Yıldız Külü)</h4>Her ölüm ve patlamada kazanılan kalıcı puan. Yeniden doğuşta başlangıç bileşimini ve bonusları belirler. Prestij birimi.</div>
+    <div class="card"><h4>Biyokütle</h4>Gezegendeki yaşamın büyüklüğü. Uygarlık eşiklerini açar.</div>
+    <div class="card"><h4>Teknoloji</h4>Uygarlığın ürettiği bilim. Gemileri ve yapıları açar.</div>
+    <div class="card"><h4>Sabit puanları</h4>Kozmik Ağ’da kazanılır; Yeni Evren+’da fizik sabitlerini değiştirmek için harcanır.</div>
+  </div>
+
+  <h3>İstatistikler</h3>
+  <div class="tbl-wrap"><table>
+    <tr><th>İstatistik</th><th>Ne yapar</th><th>Neyden gelir</th></tr>
+    <tr><td><b>Kütle</b></td><td>Kademe, çekim gücü, yutabileceğin en büyük cisim</td><td>Yutmak</td></tr>
+    <tr><td><b>Sertlik</b></td><td>Saldırı ve zırh: sert cisim yumuşağa çarpınca darbenin daha fazlası karşı tarafa gider. Ayrıntı: Çarpışma ve Dönüşüm sekmesi.</td><td>Metal</td></tr>
+    <tr><td><b>Dayanıklılık</b></td><td>Parçalanma eşiği: birim kütle başına dayanılabilen darbe enerjisi. Çatlaklar onu geçici olarak düşürür.</td><td>Metal, kütle</td></tr>
+    <tr><td><b>Isı</b></td><td>Çarpışmalar ve yıldıza yakınlık ısıtır. Isınınca önce buz buharlaşır, sonra kaya ve metal erir. Küçük cisim hızlı soğur.</td><td>Darbe, yıldız, radyoaktif iç ısı</td></tr>
+    <tr><td><b>Hız / atalet</b></td><td>Hareket ve dönüş çevikliği</td><td>Hafif bileşim, gaz püskürtme</td></tr>
+    <tr><td><b>Çekim menzili</b></td><td>Cisimleri kendine çektiğin yarıçap</td><td>Kütle</td></tr>
+    <tr><td><b>Sıcaklık</b></td><td>Buz kaybı, lav, yaşanabilir bölge</td><td>Yıldıza uzaklık, iç ısı</td></tr>
+    <tr><td><b>Manyetik alan</b></td><td>Radyasyon ve parlamalardan yaşamı korur</td><td>Metal çekirdek + iç ısı</td></tr>
+    <tr><td><b>Atmosfer</b></td><td>Yaşam şartı, küçük çarpışmaları yakar</td><td>Gezegen kütlesi, gaz</td></tr>
+    <tr><td><b>Yakıt</b> (yıldız)</td><td>Ömür. Bitince ölüm dalı başlar.</td><td>Gaz; büyük yıldız hızlı yakar</td></tr>
+  </table></div>
+</section>
+
+<!-- ============ ÇARPIŞMA ============ -->
+<section class="tab" id="carpisma">
+  <h2>Çarpışma ve Dönüşüm</h2>
+  <p class="lead">Ne kadar hızlı ve neye çarptığın, ne kadarını kazanıp ne kadarını kaybettiğini belirler. Yavaş yemek verimlidir; hızlı çarpmak büyük cisimleri kırar ama kütlenin çoğunu geri gelmeyen toza çevirir. Bu sayfadaki tüm sayılar aşağıdaki formüllerden canlı hesaplanır; sabitler ayarlanabilir.</p>
+
+  <h3>Malzemeler</h3>
+  <div class="tbl-wrap"><table id="matTable"></table></div>
+  <p class="note">Bir cismin değerleri, bileşimindeki elementlerin ağırlıklı ortalamasıdır. Örneğin %50 metal, %50 kayaç bir cismin sertliği (0,8 + 0,5) / 2 = 0,65. Dayanıklılık bunun dışındadır: ağırlıklı <b>geometrik</b> ortalama alınır, bu yüzden biraz buz ya da gaz bütün cismi payından fazla zayıflatır. Radyoaktif element nadirdir (tek kayaların %3’ü); cismi içten ısıtır ve 120 saniyede kayaca dönüşerek söner.</p>
+
+  <h3>Çekim</h3>
+  <p>Her cisim çeker. Küçük bir taş büyük bir cisme fazla yaklaşırsa içine düşer. Düşerken hızlanır: uzaktan hiç hız vermeden düşsen bile <b>en az kaçış hızıyla</b> çarparsın. Çok büyük cisme düşmek, küçük taşı yalnızca çekimle öldürür.</p>
+  <div class="grid">
+    <div class="card"><h4>Çekim kuvveti</h4><b>a = G·M<sub>ç</sub> / r²</b>, G = 0,12. Birimler ölçeğe göredir (oyuncunun çapı = 1), bu yüzden aynı kütle oranı her kademede aynı hissettirir. Oyun çekimi: senin olduğun çiftlerde cisim <b>çekim kütlesiyle</b> çeker, <b>M<sub>ç</sub> = 2·M·(M / sen)<sup>0,5</sup></b> (güçlenme en fazla 10 kat). Senden ağır cisimler gerçek fizikten sert, hafifler yumuşak çeker: 10 kat ağır bir cisim temasta itkinin ≈ %20’si, 40 kat ağır ≈ %85’i kadar çeker. Taş–taş çiftlerinde düz fizik geçerlidir. Senin çekimin boyunla da büyür: × (r / başlangıç r)<sup>0,5</sup>.</div>
+    <div class="card"><h4>Çarpma hızı</h4><b>v<sub>çarpma</sub> = √(v<sub>yaklaşma</sub>² + v<sub>kaçış</sub>²)</b>. Kaçış hızı çekim kütlesiyle hesaplanır: 10 kat ağır cisimde ≈ 3,2, 1000 kat ağırda ≈ 30 çap/sn.</div>
+    <div class="card"><h4>Dönüşü olmayan nokta</h4>Oyuncunun itkisi başlangıçta <b>15,6</b> çap/sn² (500 birim/sn², çap 32); büyüdükçe kendi çapın cinsinden düşer (boyut<sup>−0,6</sup>), yani ağırlaşırsın. Çekim, temas anında itkiyi ≈ 50 kat ağır cisimlerde aşar. Hedefin çekiminin itkiyi aştığı yarıçap haritada kırmızı halkayla gösterilir. İçindeysen ve kaçış hızından yavaşsan, düşüyorsun.</div>
+    <div class="card"><h4>Yutulma</h4>Senden en az <b>1,15 kat</b> ağır bir cisme <b>v<sub>y</sub>’den yavaş</b> (onun çapı cinsinden) değersen seni yutar: parçaların şekilleriyle onun gövdesine yapışır ve <b>oyun biter</b>. 1–1,15 kat arası ağır bir cisim seni yalnızca hafifçe sektirir. Çekimi itkinden güçlü bir cismin dönüşü olmayan noktasına girdiysen sonun budur.</div>
+    <div class="card"><h4>Ölüm</h4>İki yolu var: <b>yutulmak</b> ya da hasar oranı <b>d ≥ 5</b> ile <b>paramparça olmak</b> (geriye kütlenin %10’undan azı kalır, kalanı parça ve toza dağılır). İkisinde de <b>Game Over</b> ekranı çıkar: ölüm nedeni, en yüksek kütle, yenen kaya sayısı ve süre. “Tekrar oyna” ile baştan başlarsın.</div>
+    <div class="card"><h4>Yörünge ve sapan</h4>Yanından doğru teğet hızla geçersen (≈ √(G·M / r)) yörüngeye girersin; hızlı geçersen çekim seni fırlatır (sapan manevrası). Çekim yalnızca tehlike değil, ulaşım aracıdır.</div>
+  </div>
+
+  <h3>Düşüş tablosu</h3>
+  <p class="note">Oyuncu 150 kütle başlangıç tozu, hedef kayaç cisim. Yaklaşma hızı 0: oyuncu hiç itki vermeden, yalnızca çekimle düşüyor.</p>
+  <div class="tbl-wrap"><table id="fallTable"></table></div>
+
+  <h3>Çarpışma adım adım</h3>
+  <div class="grid">
+    <div class="card"><h4>1 · Darbe</h4>Çarpma hızı <b>v</b> (yaklaşma hızı + çekim; teğet kayma %40 sayılır). Her cisim, kütle merkezi çerçevesinde kendi payını alır: birim kütle başına darbe <b>Q = ½·v²·(karşı kütle / toplam kütle)²</b>, v <b>her cismin kendi çapı/sn</b> cinsinden. Küçük olan çok daha sert darbe alır: gezegene çarpan bir kırıntı kendi ölçeğinde çok hızlıdır ve sıçrayıp dağılır.</div>
+    <div class="card"><h4>2 · Sertlik</h4>Darbe, sertlik oranıyla çarpılır: <b>Q × (0,5 + karşı sertlik) / (0,5 + kendi sertliğin)</b>. Metal, kayaca çarpınca daha az hasar alır ve daha çok verir.</div>
+    <div class="card"><h4>3 · Dayanıklılık</h4>Parçalanma eşiği <b>Q* = 40 × D × m<sup>0,2</sup> × (1 − 0,1 × çatlak) × (1 − 0,3 × gevşeklik)</b>. D bileşimin geometrik ortalamasıdır; gevşeklik oturmamış bir yığında 1’e yakındır, katı cisimde 0. Hasar oranı <b>d = Q / Q*</b>.</div>
+    <div class="card"><h4>4 · Kayıp</h4>d &lt; 0,1: kayıp yok. 0,1–1: kütlenin <b>%0–50</b>’si kopar. d ≥ 1: <b>parçalanma</b>, en büyük parça kütlenin 0,5 / d’si kadar kalır ve 2–8 parça saçılır. d ≥ 5: <b>yok olma</b>. İkisi de <b>her iki tarafa</b> olabilir; oyuncu parçalanırsa en büyük parçasıyla devam eder.</div>
+    <div class="card"><h4>5 · Kayıp nereye gider</h4>Buz ve gaz kısmı <b>buharlaşır</b>. Katı kısmın <b>%10</b>’u (metal oranı × %15 eklenir) toplanabilir parçalara, kalanı <b>geri toplanamayan toza</b> dönüşür.</div>
+    <div class="card"><h4>6 · Isı</h4>Isı hıza bağlıdır: <b>ΔT = 1,5·e + 2·s²·√(r / 16)</b>, <b>e = s·(v / v<sub>y</sub>)²</b>. s karşı cismin kütle payı, v kendi çapın/sn cinsinden, r yarıçapın (birim). İlk terim hızdır: yavaş yemek neredeyse hiç ısıtmaz, hızlı çarpmak hızla ısıtır. İkinci terim büyük bir birleşmenin düşüş ısısıdır: dev birleşmeler bir dünyayı yine eritir. 1 ısı birimi = 430 K; ısı 10’da durur. Buz 1’de buharlaşır, kayaç 3’te, metal 5’te erir.</div>
+  </div>
+
+  <h3>Hız ve sonuç: çarpışma rejimleri</h3>
+  <p>A = ağır cisim, K = hafif cisim. <b>V</b> tam çarpma hızı, <b>v<sub>y</sub></b> = 8 yapışma hızı (<b>ağır cismin çapı/sn</b>; erimişse × 1,5). <b>b</b> = kayma hızı / V (çarpma açısının sinüsü), <b>b<sub>kritik</sub></b> = R<sub>A</sub> / (R<sub>A</sub> + R<sub>K</sub>): bunun üstünde cisimler yalnızca kenardan sürtünür.</p>
+  <div class="tbl-wrap"><table>
+    <tr><th>Rejim</th><th>Koşul</th><th>Sonuç</th><th>Halka</th></tr>
+    <tr><td><b>Tam birleşme</b></td><td>V &lt; v<sub>y</sub></td><td>A, K’nin hepsini alır; sıçrayan geri düşer, kayıp yok.</td><td style="color:var(--collect)">yeşil</td></tr>
+    <tr><td><b>Kısmi birikim</b></td><td>v<sub>y</sub> ≤ V &lt; 3v<sub>y</sub>, A kırılmıyor</td><td>A, K’den kalanın <b>ξ = (3v<sub>y</sub> − V) / (2v<sub>y</sub>)</b> kadarını tutar ve bir krater alır; K’nin kaybı ve geri kalanı parça olarak saçılır.</td><td style="color:var(--tag)">sarı</td></tr>
+    <tr><td><b>Sıyırıp geçme</b></td><td>b &gt; b<sub>kritik</sub>, V ≥ v<sub>y</sub></td><td>Kütle el değiştirmez; ikisi de sürtünme hasarı alır ve yoluna devam eder.</td><td style="color:#ff9f43">turuncu</td></tr>
+    <tr><td><b>Sekme / aşınma</b></td><td>V ≥ 3v<sub>y</sub>, ikisi de d &lt; 1</td><td>İkisi de yontulur.</td><td style="color:#ff9f43">turuncu</td></tr>
+    <tr><td><b>Parçalanma</b></td><td>bir tarafta d ≥ 1</td><td>O taraf kütlesinin 0,5 / d’sini tutar, 2–8 parça saçılır; d ≥ 5 yok olur. <b>Her iki taraf</b> için.</td><td style="color:#ff4fa8">pembe</td></tr>
+    <tr><td><b>Yutuldun</b></td><td>sen ≥ 1,15 kat hafif, V &lt; v<sub>y</sub></td><td>Oyun biter. Oyuncu hiçbir zaman kısmen biriktirilmez: orta hızda seker.</td><td style="color:#ff3355">kırmızı</td></tr>
+  </table></div>
+  <p class="note">795k kütlelik bir oyuncu için (oyuncunun çapı/sn): %2,2’lik bir cisim ≈ 6,1’de, %10’luk ≈ 12,6’da sıçrar (d = 1); denk bir cisimle sen 36’da çatlarsın, 66’da parçalanırsın, 148’de yok olursun; denk cisim 30’da sana %6, ona %7, 60’ta %40 / %46 kaybettirir; b = 0,9 ile 30’da sıyırıp geçersin. Başlangıçta %10’luk bir yem 5’te tam birleşir. Taş–taş çarpışmalarında yapışma hızı karşılıklı kaçış hızının yarısıdır (en çok v<sub>y</sub>) ve kayma tam sayılır. Hızlı uçarken hiçbir şey içinden geçip gitmez: her kare yol boyunca ilk temas aranır.</p>
+
+  <h3>Isı durumları</h3>
+  <div class="tbl-wrap"><table>
+    <tr><th>Isı</th><th>Durum</th><th>Etki</th></tr>
+    <tr><td>&gt; 1</td><td>Buz kaynıyor</td><td>Buz kütlesinin %5’i/sn buharlaşır. Kuyruk ve ufak itki oluşur.</td></tr>
+    <tr><td>&gt; 3</td><td>Erimiş yüzey</td><td>Yapışma hızı ×1,5, sertlik −0,2. Tüm çatlaklar kapanır (sinterleşme).</td></tr>
+    <tr><td>&gt; 5</td><td>Erimiş metal</td><td>Sertlik −0,4. Gezegen olunca metal çekirdeğe çöker.</td></tr>
+    <tr><td>&gt; 8</td><td>Buharlaşma</td><td>Fazla darbe enerjisi yalnızca buhar yapar; ısı 10’da durur.</td></tr>
+  </table></div>
+  <p class="note">Soğuma: ısı başlangıç boyutunda saniyede ≈ %8 azalır, oran yarıçapla ters orantılıdır; küçük cisim hızlı, büyük cisim yavaş soğur. Yıldıza yakınlık sürekli ısı ekler.</p>
+
+  <h3>Çatlaklar</h3>
+  <p>d ≥ 0,3 olan her darbe 1 çatlak ekler (en fazla 5). Her çatlak dayanıklılığı %10 düşürür. 30 saniyede 1 çatlak kendiliğinden kapanır, erimiş durumda hepsi kapanır. Arka arkaya darbe almak tehlikelidir.</p>
+
+  <h3>Çarpışma laboratuvarı</h3>
+  <p class="note">Oyuncuyu ve hedef cismi seç, hızı ayarla. Oyunda aynı tahmin, yaklaşırken hedefin çevresinde renkli bir halka olarak görünür: yeşil tam birleşme, sarı kısmi birikim, turuncu sıyırma ya da sekme, pembe parçalanma, kırmızı ölüm (yutulma ya da yok olma).</p>
+  <div class="card lab">
+    <div class="duel">
+      <div class="who">
+        <h4>Oyuncu</h4>
+        <label>Kütle <input id="labMA" type="number" min="1" value="150" /></label>
+        <label>Tür <select id="labCA"></select></label>
+      </div>
+      <div class="vs">→</div>
+      <div class="who">
+        <h4>Hedef cisim</h4>
+        <label>Kütle <input id="labMB" type="number" min="1" value="400" /></label>
+        <label>Tür <select id="labCB"></select></label>
+      </div>
+    </div>
+    <label class="speed">Yaklaşma hızı: <b id="labVv">15</b>
+      <input id="labV" type="range" min="0" max="40" step="1" value="15" />
+    </label>
+    <div id="labOut"></div>
+  </div>
+
+  <h3>Örnek: büyük metal asteroide çarpmak</h3>
+  <p class="note">Oyuncu 150 kütle (Orta asteroid), hedef cisim 400 kütle metalik asteroid (%70 metal).</p>
+  <div class="tbl-wrap"><table id="exTable"></table></div>
+
+  <h3>Dönüşüm tarifleri: kademe</h3>
+  <p>Kademe kütleden gelir. Her kademe √10 ≈ 3,16 kat kütle ister. Ölçek kuralı gereği yemin hep senin yaklaşık %10’un kadardır, bu yüzden her kademe yaklaşık aynı sayıda yem ister.</p>
+  <div class="tbl-wrap"><table id="tierTable"></table></div>
+  <p class="note">Kaba yersen (v<sub>y</sub>–3v<sub>y</sub> arası, kısmi birikim) yemin bir kısmı saçılır ve sayı artar. Kendi boyundaki bir cisimle birleşmek iki kat hızlıdır ama o hızda hata pahalıdır: denk kütlede her iki taraf da darbenin çeyreğini alır.</p>
+
+  <h3>Dönüşüm tarifleri: bileşim</h3>
+  <p>Bileşim, yediğinin ağırlıklı ortalamasıdır. Başlangıç tozu: <b>Kayaç %80, Metal %10, Su %8, Gaz %2</b>. Bir dala girmek için seçici beslenmelisin; karışık yemek seni ortada tutar.</p>
+  <div class="tbl-wrap"><table id="recipeTable"></table></div>
+  <p class="note">Formül: art arda yem sayısı = ⌈ ln((y − b) / (y − h)) / ln 1,1 ⌉. y: yemin oranı, b: başlangıç oranın, h: hedef oran. Her yem %10 kütle ekler.</p>
+
+  <h3>Örnek yollar</h3>
+  <div class="grid">
+    <div class="card"><h4>Demir yolu</h4>Toz → 8 metalik yemle <b>Metalik</b> etiketi → kaya hattında büyü, metal yemeye devam et (toplam 12) → <b>Demir gezegen</b>. Sağlam, sert, ağır. İleride sanayi uygarlığı.</div>
+    <div class="card"><h4>Su yolu</h4>Toz → kar çizgisine git → 5 buzlu kaya yemiyle <b>Su %25</b> → içeri dön, kayaçla büyü (buzu ısıdan koru) → yaşanabilir bölgede <b>Okyanus gezegeni</b>.</div>
+    <div class="card"><h4>Gaz yolu</h4>Toz → dış sistemde gaz zengini yemlerle <b>Gaz zengini</b> etiketi → hafifler, hızlanırsın. Çok kırılgan olduğun için yavaş ye. İleride gaz devi dalı açılır.</div>
+  </div>
+</section>
+
+<!-- ============ HUD ============ -->
+<section class="tab" id="hud">
+  <h2>HUD</h2>
+  <p class="lead">Oyuncunun ekranda her an gördükleri. Aşağıdaki ekran canlı bir maket: altındaki ayarlarla oyuncuyu, hızı ve hedef cismi değiştir. Sayılar Çarpışma ve Dönüşüm sekmesindeki modelden gelir.</p>
+
+  <div class="screen" id="scr">
+    <svg class="scene" id="scene" preserveAspectRatio="none"></svg>
+    <div class="hud tl" id="hTier"></div>
+    <div class="hud tr" id="hTarget"></div>
+    <div class="hud bl" id="hComp"></div>
+    <div class="hud bc" id="hSpeed"></div>
+    <div class="hud br" id="hState"></div>
+  </div>
+
+  <div class="card lab hud-ctl">
+    <div class="ctl-grid">
+      <label>Oyuncu türü <select id="hCA"></select></label>
+      <label>Oyuncu kütlesi <input id="hMA" type="number" min="1" value="150" /></label>
+      <label>Hız: <b id="hVv">12</b> <input id="hV" type="range" min="0" max="40" value="12" /></label>
+      <label>Hedef türü <select id="hCB"></select></label>
+      <label>Hedef kütlesi <input id="hMB" type="number" min="1" value="90" /></label>
+      <label>Isı: <b id="hTv">0,4</b> <input id="hT" type="range" min="0" max="10" step="0.1" value="0.4" /></label>
+      <label>Çatlak <input id="hCr" type="number" min="0" max="5" value="1" /></label>
+    </div>
+  </div>
+
+  <h3>Öğeler</h3>
+  <div class="grid">
+    <div class="card"><h4>① Kademe ve ilerleme (sol üst)</h4>Kademe adı, <b>kütle / sıradaki eşik</b>, ilerleme çubuğu ve <b>“X kaldı · ~N yem”</b>. Altında kazanılmış etiketler (Metalik, Su bazlı…). Kademe atlanınca çubuk dolup patlar, kamera uzaklaşır.</div>
+    <div class="card"><h4>② Bileşim (sol alt)</h4>Beş elementin oranı, kendi renkleriyle. En altta en yakın etiket için ipucu: “Metalik etiketine ~6 metalik yem”. Yediğin cismin rengi çubuğa akarak eklenir.</div>
+    <div class="card"><h4>③ Hız (alt orta)</h4>Gösterge, çarpışma bölgeleriyle boyalı: <b style="color:var(--collect)">yapışır</b>, <b style="color:var(--tag)">kısmi</b>, <b style="color:#ff9f43">seker</b>. Birim kendi çapın/sn. Büyük sayı oyuncunun hızı; ibre ise hedefe <b>çekimle birlikte varacağı çarpma hızını</b> gösterir. Büyük cisme yaklaşırken ibre kendiliğinden yükselir: yavaşlamak yetmez, uzak durmak gerekir.</div>
+    <div class="card"><h4>④ Durum (sağ alt)</h4>Dayanıklılık (çatlaklar düşürür), sertlik, ısı (1 / 3 / 5 / 8 eşik çizgileriyle) ve çatlak noktaları. Isı eşik geçince çubuk renk değiştirir ve durum yazısı çıkar.</div>
+    <div class="card"><h4>⑤ Hedef cisim (sağ üst + sahnede halka)</h4>En yakın ya da imleçle seçilen cisim. Türü, kütlesi, bileşimi, “yutulabilir / çok büyük”, kaçış hızı, çekiminin itkine oranı ve <b>çarpışma tahmini</b>. Sahnede hedefin çevresinde tahmin renginde halka döner; büyük cisimlerde soluk <b>çekim alanı</b> ve kırmızı <b>dönüşü olmayan nokta</b> halkası çizilir.</div>
+    <div class="card"><h4>Kurallar</h4>Az metin, çok renk; renkler her yerde aynı anlamı taşır. Paneller yarı saydamdır, sahneyi kapatmaz. Telefonda paneller daralır; hedef paneli yalnızca hedef varken açılır.</div>
+  </div>
+</section>
+
+<!-- ============ YAŞAM ============ -->
+<section class="tab" id="yasam">
+  <h2>Yaşam ve Uygarlık</h2>
+  <p class="lead">Yaşam, gezegenin üzerinde paralel ilerleyen ikinci bir ağaçtır. Oyuncu yaşamı doğrudan yönetmez: koşulları hazırlar, onu korur ve bileşimiyle karakterini belirler. Ayrıntılı düğümler Gelişim Ağacı’nın “Yaşam ve Uygarlık” bölümünde.</p>
+
+  <h3>Yaşam uygunluğu</h3>
+  <p>Dört koşulun her biri 0–1 arası puan alır; yaşam hızı bu puanların <b>çarpımıdır</b>. Biri sıfırsa yaşam yoktur.</p>
+  <div class="grid">
+    <div class="card"><h4>💧 Su</h4>%10’dan başlar, %30–60 ideal. <b>Su yaşamı hızlandırır:</b> yaşam hızı su oranıyla artar. Buzlu ve su bazlı asteroitler, buzlu uydular getirir.</div>
+    <div class="card"><h4>🌡️ Sıcaklık</h4>Yaşanabilir bölgede olmak (0–100 °C). Yıldızın sınıfı bölgenin yerini belirler.</div>
+    <div class="card"><h4>🌫️ Atmosfer</h4>Yeterli kütle ve gaz. Küçük çarpışmaları da yakar.</div>
+    <div class="card"><h4>🧲 Manyetik alan</h4>Metal çekirdek ve iç ısı. Yoksa yıldız parlamaları yaşamı söker.</div>
+  </div>
+
+  <h3>Evreler</h3>
+  <div class="loop">
+    <span>Prebiyotik çorba</span><b>→</b><span>Mikrobiyal</span><b>→</b><span>Çok hücreli</span><b>→</b><span>Okyanus / Kara yaşamı</span><b>→</b><span>Karmaşık yaşam</span><b>→</b><span>Akıllı tür</span><b>→</b><span>Tip 0 → I → II → III</span>
+  </div>
+
+  <h3>Uygarlık eğilimi: gezegenin bileşimi karakteri belirler</h3>
+  <div class="tbl-wrap"><table>
+    <tr><th>Eğilim</th><th>Koşul</th><th>Gemi tarzı</th><th>Güçlü / zayıf</th></tr>
+    <tr><td><b>Sanayi</b></td><td>Metal ≥ %35</td><td>Ağır zırhlı, yavaş gemiler</td><td>Dayanıklı / pahalı ve yavaş</td></tr>
+    <tr><td><b>Deniz</b></td><td>Okyanus gezegeni</td><td>Kalkan ve onarım gemileri</td><td>Hayatta kalma / düşük hasar</td></tr>
+    <tr><td><b>Sürü</b></td><td>Hafif gezegen (gaz + su ≥ %40)</td><td>Ucuz, çok sayıda hafif gemi</td><td>Sayı / tek tek kırılgan</td></tr>
+    <tr><td><b>Enerji</b></td><td>Yüksek iç ısı (radyoaktif, volkanik)</td><td>Işın silahları, güçlü kalkanlar</td><td>Menzil / enerji tüketimi yüksek</td></tr>
+  </table></div>
+
+  <h3>Tehditler</h3>
+  <div class="grid">
+    <div class="card"><h4>Kitlesel yok oluş</h4>Büyük çarpışma ya da manyetik alansız gezegende güçlü parlama. Yaşam 1–3 evre geri düşer.</div>
+    <div class="card"><h4>Buzul çağı</h4>Yıldızdan uzaklaşınca yaşam büyümesi yarıya iner.</div>
+    <div class="card"><h4>Kaçak sera etkisi</h4>Yıldıza çok yakın ve kalın atmosfer: okyanuslar buharlaşır.</div>
+    <div class="card"><h4>Radyasyon fırtınası</h4>Pulsar, magnetar ve süpernova yakınında, ya da radyoaktif oranı %8’i aşınca.</div>
+    <div class="card"><h4>Kırmızı dev evresi</h4>Yıldızın genişleyince iç gezegenlerini yutar. Uygarlığın Tip II değilse yaşamı taşımalısın.</div>
+  </div>
+
+  <h3>Uygarlıkla ilişki</h3>
+  <p>Uygarlık yarı otonomdur. Ona dört <b>tutum</b> verirsin: <b>Savun</b>, <b>Topla</b>, <b>Keşfet</b>, <b>Saldır</b>. Gemiler bu tutuma göre kendi başlarına hareket eder. Sen ise gezegeni hazırlayıp korursun ve bileşimiyle karakterini belirlersin.</p>
+</section>
+
+<!-- ============ GEMİLER ============ -->
+<section class="tab" id="gemi">
+  <h2>Gemiler</h2>
+  <p class="lead">Gemiler gezegenlerindeki uygarlığın ürünüdür. Malzemeleri bileşimden gelir; tarzlarını uygarlık eğilimi belirler.</p>
+
+  <h3>Malzemeden istatistiğe</h3>
+  <div class="grid">
+    <div class="card"><h4>Gövde ← Metal</h4>Dayanıklılık. Sanayi eğilimi +%40.</div>
+    <div class="card"><h4>Kalkan ← Enerji</h4>Yıldız ışıması ya da Dyson sürüsünden. Deniz ve Enerji eğilimleri +.</div>
+    <div class="card"><h4>Hız ← Gaz</h4>Yakıt. Gaz devi olan sistemler hızlı filolar kurar.</div>
+    <div class="card"><h4>Bakım ← Su</h4>Mürettebat. Su azsa gemiler zamanla yıpranır.</div>
+  </div>
+
+  <h3>Gemi sınıfları</h3>
+  <div class="tbl-wrap"><table>
+    <tr><th>Gemi</th><th>Açılır</th><th>Rol</th><th>Maliyet</th><th>Not</th></tr>
+    <tr><td><b>Sonda</b></td><td>Tip 0</td><td>Keşif: sisi açar, nadir asteroitleri işaretler</td><td>Metal 5</td><td>Silahsız, çok hızlı</td></tr>
+    <tr><td><b>Madenci</b></td><td>Tip 0</td><td>Asteroitten seçtiğin elementi sana taşır</td><td>Metal 10, Kayaç 5</td><td>Cismi bütünüyle yutmadan bileşim seçebilmeni sağlar</td></tr>
+    <tr><td><b>Avcı</b></td><td>Tip I</td><td>Gelen asteroitleri ve düşman gemilerini engeller</td><td>Metal 15, Enerji 5</td><td>Yaşam gezegeninin ana savunması</td></tr>
+    <tr><td><b>Fırkateyn</b></td><td>Tip I</td><td>Ağır zırhlı filo tankı</td><td>Metal 40</td><td>Sanayi eğiliminde en güçlü</td></tr>
+    <tr><td><b>Kolonici</b></td><td>Tip I</td><td>Yaşamı başka bir gezegen ya da uyduya taşır</td><td>Su 30, Gaz 10</td><td>Kırmızı dev evresinden kaçışın yolu</td></tr>
+    <tr><td><b>Taşıyıcı</b></td><td>Tip II</td><td>Avcı üssü, filo merkezi</td><td>Metal 120, Enerji 40</td><td>Avcıları sistem dışına taşır</td></tr>
+    <tr><td><b>Dyson inşaatçısı</b></td><td>Tip II</td><td>Yıldızına panel kurar: Enerji</td><td>Kayaç 60, Metal 30</td><td>Dyson %50 → Tip II tamamlanır</td></tr>
+    <tr><td><b>Yıldız motoru</b> (yapı)</td><td>Tip II</td><td>Tüm sistemini hareket ettirir</td><td>Metal 300, Enerji 200</td><td>Yıldızın hız kazanır, gezegenler peşinden gelir</td></tr>
+    <tr><td><b>Dünya gemisi</b></td><td>Tip III</td><td>Galaksiler arası koloni</td><td>Çok yüksek</td><td>Bir uygarlığı başka galaksiye taşır</td></tr>
+    <tr><td><b>Kütle kapısı</b> (yapı)</td><td>Tip III</td><td>Galaksi içinde ışınlanma</td><td>Çok yüksek</td><td>Filolar ve sen için hızlı yolculuk</td></tr>
+  </table></div>
+
+  <h3>Gemi tasarımları</h3>
+  <p>Üç taraf, aynı sınıflar, farklı karakter. Hepsi burnu sağa bakan, iki yanı simetrik 2B çizimdir; sınıflar birbirine göre ölçeklidir (bir avcı ≈ 80 birim, taşıyıcı ≈ 150). Oyunda bir gemi hücresi gezegen yarıçapının 0,4’ü kadardır, yakınlaştırmayla gezegenle birlikte büyüyüp küçülür. Kaynak: <code>app/src/render/shipArt.ts</code>.</p>
+  <div class="faction" style="--fc:#7fe8ff">
+    <h4>Sen</h4><p>Yuvarlak köşeli, mühendislik ürünü kapsül ve haç biçimleri; uzun beyaz kokpit, camgöbeği ışıklı şeritler, kırmızı/yeşil seyir ışıkları. T biçimli sonda, üç cevher kuyulu altıgen madenci, haç kanatlı avcı, üç zırh bantlı kalkan fırkateyn, bahçeli sera gemisi kolonici, yan fırlatma ağızlı uzun taşıyıcı.</p>
+    <div class="ships"><figure><svg viewBox="0 0 160 100" role="img"><g stroke-linejoin="round" stroke-linecap="round"><defs><linearGradient id="yHull" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5fb4cc"/><stop offset="0.5" stop-color="#1f4a5a"/><stop offset="1" stop-color="#5fb4cc"/></linearGradient><radialGradient id="yGarden" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#6cf0a0"/><stop offset="1" stop-color="#1f4a35"/></radialGradient></defs><ellipse cx="60" cy="50" rx="6.5" ry="4.5" fill="#7fe8ff" fill-opacity="0.3"/><ellipse cx="60" cy="50" rx="4.75" ry="2.5" fill="#7fe8ff"/><ellipse cx="61" cy="50" rx="2.5" ry="1.63" fill="#e8fbff"/><path d="M67 33Q62 33 62 38L62 44L65 44L65 56L62 56L62 62Q62 67 67 67L71 67Q75 67 75 62L75 59Q75 56 81 56L103 56Q108 56 108 50Q108 44 103 44L81 44Q75 44 75 41L75 38Q75 33 71 33Z" fill="url(#yHull)" stroke="#7fe8ff" stroke-width="1.2"/><path d="M64 38Q64 35 69 35L72 35L72 43Q72 47 78 47L104 47L104 50L72 50L72 39Z" fill="#5fb4cc"/><rect x="61" y="45" width="4" height="10" rx="1.5" fill="#1f4a5a"/><rect x="87" y="46.5" width="19" height="7" rx="3.5" fill="#1f4a5a"/><rect x="88.5" y="48" width="15.5" height="4" rx="2" fill="#e8fbff"/><ellipse cx="68" cy="36.5" rx="2.3" ry="2.3" fill="#ff6b6b" fill-opacity="0.3"/><ellipse cx="68" cy="36.5" rx="1.1" ry="1.1" fill="#ff6b6b"/><ellipse cx="68" cy="63.5" rx="2.3" ry="2.3" fill="#6cf0a0" fill-opacity="0.3"/><ellipse cx="68" cy="63.5" rx="1.1" ry="1.1" fill="#6cf0a0"/></g></svg><figcaption>Sonda</figcaption></figure><figure><svg viewBox="0 0 160 100" role="img"><g stroke-linejoin="round" stroke-linecap="round"><defs><linearGradient id="yHull" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5fb4cc"/><stop offset="0.5" stop-color="#1f4a5a"/><stop offset="1" stop-color="#5fb4cc"/></linearGradient><radialGradient id="yGarden" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#6cf0a0"/><stop offset="1" stop-color="#1f4a35"/></radialGradient></defs><ellipse cx="49" cy="50" rx="7.8" ry="5.4" fill="#7fe8ff" fill-opacity="0.3"/><ellipse cx="49" cy="50" rx="5.7" ry="3" fill="#7fe8ff"/><ellipse cx="50" cy="50" rx="3" ry="1.95" fill="#e8fbff"/><path d="M51 43L61 32Q63 30 67 30L75 30Q77 34 80 34L86 34Q89 34 91 30L101 30Q104 30 107 33L117 42L117 58L107 67Q104 70 101 70L91 70Q89 66 86 66L80 66Q77 66 75 70L67 70Q63 70 61 68L51 57L54 57L54 43Z" fill="url(#yHull)" stroke="#7fe8ff" stroke-width="1.2"/><path d="M53 42L64 33L74 33L77 38L101 38Q106 38 112 43L106 46L63 46Q59 41 53 44ZM53 58L64 67L74 67L77 62L101 62Q106 62 112 57L106 54L63 54Q59 59 53 56Z" fill="#5fb4cc"/><path d="M58 45Q62 40 68 40L98 40Q106 40 110 45L110 55Q106 60 98 60L68 60Q62 60 58 55Z" fill="#2f7088"/><ellipse cx="68" cy="50" rx="6.5" ry="6.5" fill="#1f4a5a"/><path d="M64.5 48Q65 45 69 45" fill="none" stroke="#7fe8ff" stroke-width="1.1"/><ellipse cx="83" cy="50" rx="6.5" ry="6.5" fill="#1f4a5a"/><path d="M79.5 48Q80 45 84 45" fill="none" stroke="#7fe8ff" stroke-width="1.1"/><ellipse cx="98" cy="50" rx="6.5" ry="6.5" fill="#1f4a5a"/><path d="M94.5 48Q95 45 99 45" fill="none" stroke="#7fe8ff" stroke-width="1.1"/><rect x="110" y="42" width="6" height="16" rx="2.5" fill="#1f4a5a"/><rect x="112" y="45" width="3" height="2" rx="0.8" fill="#e8fbff"/><rect x="112" y="49" width="3" height="2" rx="0.8" fill="#e8fbff"/><rect x="112" y="53" width="3" height="2" rx="0.8" fill="#e8fbff"/><rect x="51" y="45" width="3" height="10" rx="1" fill="#1f4a5a"/><ellipse cx="64" cy="34" rx="2.3" ry="2.3" fill="#ff6b6b" fill-opacity="0.3"/><ellipse cx="64" cy="34" rx="1.1" ry="1.1" fill="#ff6b6b"/><ellipse cx="64" cy="66" rx="2.3" ry="2.3" fill="#6cf0a0" fill-opacity="0.3"/><ellipse cx="64" cy="66" rx="1.1" ry="1.1" fill="#6cf0a0"/></g></svg><figcaption>Madenci</figcaption></figure><figure><svg viewBox="0 0 160 100" role="img"><g stroke-linejoin="round" stroke-linecap="round"><defs><linearGradient id="yHull" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5fb4cc"/><stop offset="0.5" stop-color="#1f4a5a"/><stop offset="1" stop-color="#5fb4cc"/></linearGradient><radialGradient id="yGarden" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#6cf0a0"/><stop offset="1" stop-color="#1f4a35"/></radialGradient></defs><ellipse cx="44" cy="50" rx="7.8" ry="5.4" fill="#7fe8ff" fill-opacity="0.3"/><ellipse cx="44" cy="50" rx="5.7" ry="3" fill="#7fe8ff"/><ellipse cx="45" cy="50" rx="3" ry="1.95" fill="#e8fbff"/><path d="M47 40Q47 39 50 39L59 39Q67 41 67 35L67 23Q67 20 71 20L77 20Q81 20 81 24L81 39Q81 43 88 43C102 42 114 44 122 48Q125 50 122 52C114 56 102 58 88 57Q81 57 81 61L81 76Q81 80 77 80L71 80Q67 80 67 77L67 65Q67 59 59 61L50 61Q47 61 47 60L52 57L54 57L54 43L52 43Z" fill="url(#yHull)" stroke="#7fe8ff" stroke-width="1.2"/><path d="M69 23L74 23L74 38Q74 45 64 45L51 44L54 41L61 42Q69 43 69 35ZM69 77L74 77L74 62Q74 55 64 55L51 56L54 59L61 58Q69 57 69 65Z" fill="#5fb4cc"/><path d="M54 46L77 46Q82 45 88 45C104 44 117 47 122 50C117 53 104 56 88 55Q82 55 77 54L54 54Z" fill="#2f7088"/><ellipse cx="101" cy="50" rx="16" ry="4.8" fill="#1f4a5a"/><ellipse cx="102" cy="50" rx="14" ry="3.4" fill="#e8fbff"/><rect x="48" y="43" width="6" height="14" rx="2.5" fill="#1f4a5a"/><ellipse cx="74" cy="23" rx="2.3" ry="2.3" fill="#ff6b6b" fill-opacity="0.3"/><ellipse cx="74" cy="23" rx="1.1" ry="1.1" fill="#ff6b6b"/><ellipse cx="74" cy="77" rx="2.3" ry="2.3" fill="#6cf0a0" fill-opacity="0.3"/><ellipse cx="74" cy="77" rx="1.1" ry="1.1" fill="#6cf0a0"/></g></svg><figcaption>Avcı</figcaption></figure><figure><svg viewBox="0 0 160 100" role="img"><g stroke-linejoin="round" stroke-linecap="round"><defs><linearGradient id="yHull" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5fb4cc"/><stop offset="0.5" stop-color="#1f4a5a"/><stop offset="1" stop-color="#5fb4cc"/></linearGradient><radialGradient id="yGarden" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#6cf0a0"/><stop offset="1" stop-color="#1f4a35"/></radialGradient></defs><ellipse cx="24" cy="43" rx="7.28" ry="5.04" fill="#7fe8ff" fill-opacity="0.3"/><ellipse cx="24" cy="43" rx="5.32" ry="2.8" fill="#7fe8ff"/><ellipse cx="25" cy="43" rx="2.8" ry="1.82" fill="#e8fbff"/><ellipse cx="24" cy="57" rx="7.28" ry="5.04" fill="#7fe8ff" fill-opacity="0.3"/><ellipse cx="24" cy="57" rx="5.32" ry="2.8" fill="#7fe8ff"/><ellipse cx="25" cy="57" rx="2.8" ry="1.82" fill="#e8fbff"/><path d="M26 36L36 28L54 28Q59 28 62 25L107 25Q115 25 122 30L139 40Q143 43 143 50Q143 57 139 60L122 70Q115 75 107 75L62 75Q59 72 54 72L36 72L26 64L26 61L33 61Q37 61 37 57Q37 53 33 53L27 53L27 47L33 47Q37 47 37 43Q37 39 33 39L26 39Z" fill="url(#yHull)" stroke="#7fe8ff" stroke-width="1.2"/><path d="M37 39L50 31L63 31Q86 36 91 50Q86 64 63 69L50 69L37 61L41 57L41 43Z" fill="#2f7088"/><path d="M62 26L75 26Q104 37 104 50Q104 63 75 74L62 74Q91 65 91 50Q91 35 62 26Z" fill="#5fb4cc" stroke="#7fe8ff" stroke-width="0.65"/><path d="M82 26L95 26Q124 37 124 50Q124 63 95 74L82 74Q111 65 111 50Q111 35 82 26Z" fill="#5fb4cc" stroke="#7fe8ff" stroke-width="0.65"/><path d="M102 26L115 26Q144 37 144 50Q144 63 115 74L102 74Q131 65 131 50Q131 35 102 26Z" fill="#5fb4cc" stroke="#7fe8ff" stroke-width="0.65"/><rect x="40" y="46" width="59" height="8" rx="4" fill="#1f4a5a"/><rect x="50" y="48" width="46" height="4" rx="2" fill="#7fe8ff"/><ellipse cx="37" cy="31" rx="2.3" ry="2.3" fill="#ff6b6b" fill-opacity="0.3"/><ellipse cx="37" cy="31" rx="1.1" ry="1.1" fill="#ff6b6b"/><ellipse cx="37" cy="69" rx="2.3" ry="2.3" fill="#6cf0a0" fill-opacity="0.3"/><ellipse cx="37" cy="69" rx="1.1" ry="1.1" fill="#6cf0a0"/></g></svg><figcaption>Fırkateyn</figcaption></figure><figure><svg viewBox="0 0 160 100" role="img"><g stroke-linejoin="round" stroke-linecap="round"><defs><linearGradient id="yHull" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5fb4cc"/><stop offset="0.5" stop-color="#1f4a5a"/><stop offset="1" stop-color="#5fb4cc"/></linearGradient><radialGradient id="yGarden" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#6cf0a0"/><stop offset="1" stop-color="#1f4a35"/></radialGradient></defs><ellipse cx="40" cy="50" rx="7.8" ry="5.4" fill="#7fe8ff" fill-opacity="0.3"/><ellipse cx="40" cy="50" rx="5.7" ry="3" fill="#7fe8ff"/><ellipse cx="41" cy="50" rx="3" ry="1.95" fill="#e8fbff"/><path d="M43 43Q46 30 63 30L70 30L70 27Q70 23 80 23L89 23Q99 23 99 27L99 30L106 30Q126 30 128 50Q126 70 106 70L99 70L99 73Q99 77 89 77L80 77Q70 77 70 73L70 70L63 70Q46 70 43 57L46 57L46 43Z" fill="url(#yHull)" stroke="#7fe8ff" stroke-width="1.2"/><path d="M48 42Q54 33 65 33L105 33Q117 34 122 43L121 57Q117 66 105 67L65 67Q54 67 48 58Z" fill="#2f7088"/><ellipse cx="85" cy="50" rx="32" ry="15.5" fill="#1f4a5a"/><ellipse cx="85" cy="50" rx="30" ry="13.8" fill="url(#yGarden)"/><ellipse cx="67" cy="50" rx="7.5" ry="7.5" fill="#6cf0a0"/><ellipse cx="69" cy="50" rx="4.5" ry="6" fill="#5fbf77"/><ellipse cx="84" cy="50" rx="7.5" ry="7.5" fill="#6cf0a0"/><ellipse cx="86" cy="50" rx="4.5" ry="6" fill="#5fbf77"/><ellipse cx="102" cy="50" rx="7.5" ry="7.5" fill="#6cf0a0"/><ellipse cx="104" cy="50" rx="4.5" ry="6" fill="#5fbf77"/><path d="M57 46Q68 37 85 38Q102 37 113 46" fill="none" stroke="#6cf0a0" stroke-width="1.6"/><path d="M75 33C67 43 67 57 75 67M96 33C104 43 104 57 96 67" fill="none" stroke="#1f4a5a" stroke-width="4"/><path d="M75 33C67 43 67 57 75 67M96 33C104 43 104 57 96 67" fill="none" stroke="#7fe8ff" stroke-width="2.4"/><rect x="71" y="24" width="27" height="7" rx="3.5" fill="#2f7088"/><rect x="71" y="69" width="27" height="7" rx="3.5" fill="#2f7088"/><rect x="42" y="43" width="4" height="14" rx="1.5" fill="#1f4a5a"/><ellipse cx="84" cy="26.5" rx="2.3" ry="2.3" fill="#ff6b6b" fill-opacity="0.3"/><ellipse cx="84" cy="26.5" rx="1.1" ry="1.1" fill="#ff6b6b"/><ellipse cx="84" cy="73.5" rx="2.3" ry="2.3" fill="#6cf0a0" fill-opacity="0.3"/><ellipse cx="84" cy="73.5" rx="1.1" ry="1.1" fill="#6cf0a0"/></g></svg><figcaption>Kolonici</figcaption></figure><figure><svg viewBox="0 0 160 100" role="img"><g stroke-linejoin="round" stroke-linecap="round"><defs><linearGradient id="yHull" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5fb4cc"/><stop offset="0.5" stop-color="#1f4a5a"/><stop offset="1" stop-color="#5fb4cc"/></linearGradient><radialGradient id="yGarden" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#6cf0a0"/><stop offset="1" stop-color="#1f4a35"/></radialGradient></defs><ellipse cx="12" cy="50" rx="8.58" ry="5.94" fill="#7fe8ff" fill-opacity="0.3"/><ellipse cx="12" cy="50" rx="6.27" ry="3.3" fill="#7fe8ff"/><ellipse cx="13" cy="50" rx="3.3" ry="2.15" fill="#e8fbff"/><path d="M14 35Q14 30 20 27L29 21L65 21Q69 21 72 25Q75 28 80 28L106 28Q111 28 114 24Q117 21 121 21L128 21C144 21 153 34 153 50C153 66 144 79 128 79L121 79Q117 79 114 76Q111 72 106 72L80 72Q75 72 72 75Q69 79 65 79L29 79L20 73Q14 70 14 65L17 65L17 35Z" fill="url(#yHull)" stroke="#7fe8ff" stroke-width="1.4"/><path d="M16 40Q29 31 48 31Q61 31 65 39L130 39Q140 39 145 46L151 46Q150 28 129 24L123 24Q119 36 110 39L79 39Q68 39 66 24L47 24Q39 29 36 30Q23 30 16 36ZM16 60Q29 69 48 69Q61 69 65 61L130 61Q140 61 145 54L151 54Q150 72 129 76L123 76Q119 64 110 61L79 61Q68 61 66 76L47 76Q39 71 36 70Q23 70 16 64Z" fill="#5fb4cc"/><path d="M69 23Q74 33 81 33L106 33Q114 32 119 23L113 35Q111 38 105 38L80 38Q73 38 69 23ZM69 77Q74 67 81 67L106 67Q114 68 119 77L113 65Q111 62 105 62L80 62Q73 62 69 77Z" fill="#1f4a5a"/><rect x="78" y="29" width="30" height="6" rx="3" fill="#2f7088"/><rect x="78" y="65" width="30" height="6" rx="3" fill="#2f7088"/><rect x="81" y="30.5" width="24" height="3" rx="1.5" fill="#e8fbff"/><rect x="81" y="66.5" width="24" height="3" rx="1.5" fill="#e8fbff"/><rect x="45" y="46" width="98" height="8" rx="2.5" fill="#5fb4cc"/><ellipse cx="44" cy="50" rx="21" ry="14" fill="#1f4a5a"/><ellipse cx="44" cy="50" rx="17" ry="11" fill="#5fb4cc"/><ellipse cx="44" cy="50" rx="13" ry="8" fill="#2f7088"/><ellipse cx="44" cy="50" rx="10" ry="6" fill="#7fe8ff"/><ellipse cx="44" cy="50" rx="6.5" ry="3.5" fill="#e8fbff"/><rect x="14" y="40" width="3" height="20" rx="1.5" fill="#1f4a5a"/><ellipse cx="29" cy="25" rx="2.3" ry="2.3" fill="#ff6b6b" fill-opacity="0.3"/><ellipse cx="29" cy="25" rx="1.1" ry="1.1" fill="#ff6b6b"/><ellipse cx="29" cy="75" rx="2.3" ry="2.3" fill="#6cf0a0" fill-opacity="0.3"/><ellipse cx="29" cy="75" rx="1.1" ry="1.1" fill="#6cf0a0"/></g></svg><figcaption>Taşıyıcı</figcaption></figure></div>
+  </div>
+  <div class="faction" style="--fc:#b48cff">
+    <h4>Rakip uygarlık</h4><p>Keskin, köşeli bıçak ve taç yapraklar; uzun değil geniş siluetler. Tek parlak elmas çekirdek hep ağırlık merkezinde, arkada sivrilen mor iyon izi. Dantelkanat sonda, kehribar cevheri kavrayan pençe madenci, hilal kanatlı (güve) avcı, altı köşeli kalkan fırkateyn, yeşil bahçeli çiçek halesi kolonici, iki açık hangarlı bıçak taçlı taşıyıcı.</p>
+    <div class="ships"><figure><svg viewBox="0 0 160 100" role="img"><g stroke-linejoin="round" stroke-linecap="round"><defs><linearGradient id="rShell" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8a63d6"/><stop offset="0.5" stop-color="#3b2763"/><stop offset="1" stop-color="#8a63d6"/></linearGradient></defs><path d="M56 50L68 46.6L68 53.4Z" fill="#8a63d6" fill-opacity="0.14"/><path d="M56 50L68 48.3L68 51.7Z" fill="#8a63d6" fill-opacity="0.65"/><path d="M59.6 50L68 48.98L68 51.02Z" fill="#b48cff" fill-opacity="0.85"/><path d="M64.4 50L68 49.06L68 50.94Z" fill="#f1e6ff" fill-opacity="0.6"/><path d="M68 48.2L80 46.76L84 50L80 53.24L68 51.8Z" fill="#3b2763" stroke="#b48cff" stroke-width="0.7" stroke-linejoin="bevel"/><rect x="68" y="48.2" width="1" height="3.6" fill="#b48cff"/><path d="M72 26L85 33L82 36L88 49L78 45L66 46Q76 34 72 26ZM106 26L99 44L89 49L94 38Q96 35 93 34ZM72 74L85 67L82 64L88 51L78 55L66 54Q76 66 72 74ZM106 74L99 56L89 51L94 62Q96 65 93 66Z" fill="url(#rShell)" stroke="#b48cff" stroke-width="1.1" stroke-linejoin="bevel"/><path d="M72 26L82 36L78 45L66 46Q76 34 72 26ZM72 74L82 64L78 55L66 54Q76 66 72 74Z" fill="#55398a"/><path d="M72 26L85 33L82 36ZM106 26L98 38L89 49L99 44ZM72 74L85 67L82 64ZM106 74L98 62L89 51L99 56Z" fill="#8a63d6"/><path d="M78 50L88 44L98 50L88 56Z" fill="#55398a" stroke="#b48cff" stroke-width="0.8" stroke-linejoin="bevel"/><ellipse cx="88" cy="50" rx="7.2" ry="4.8" fill="#b48cff" fill-opacity="0.16"/><ellipse cx="88" cy="50" rx="5.2" ry="3.8" fill="#b48cff" fill-opacity="0.24"/><path d="M83.8 50L88 47.2L92.2 50L88 52.8Z" fill="#f1e6ff" stroke="#b48cff" stroke-width="0.8"/></g></svg><figcaption>Sonda</figcaption></figure><figure><svg viewBox="0 0 160 100" role="img"><g stroke-linejoin="round" stroke-linecap="round"><defs><linearGradient id="rShell" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8a63d6"/><stop offset="0.5" stop-color="#3b2763"/><stop offset="1" stop-color="#8a63d6"/></linearGradient></defs><path d="M42 50L58 45.6L58 54.4Z" fill="#8a63d6" fill-opacity="0.14"/><path d="M42 50L58 47.8L58 52.2Z" fill="#8a63d6" fill-opacity="0.65"/><path d="M46.8 50L58 48.68L58 51.32Z" fill="#b48cff" fill-opacity="0.85"/><path d="M53.2 50L58 48.79L58 51.21Z" fill="#f1e6ff" fill-opacity="0.6"/><path d="M58 47.5L72 45.5L76 50L72 54.5L58 52.5Z" fill="#3b2763" stroke="#b48cff" stroke-width="0.7" stroke-linejoin="bevel"/><rect x="58" y="47.5" width="1" height="5" fill="#b48cff"/><path d="M76 21L99 28L117 45L99 37L86 37L74 50L65 47L57 46L78 27ZM76 79L99 72L117 55L99 63L86 63L74 50L65 53L57 54L78 73Z" fill="url(#rShell)" stroke="#b48cff" stroke-width="1.1" stroke-linejoin="bevel"/><path d="M76 21L99 28L117 45L99 37L84 32ZM76 79L99 72L117 55L99 63L84 68Z" fill="#8a63d6"/><path d="M78 27L84 32L68 46L57 46ZM78 73L84 68L68 54L57 54Z" fill="#55398a"/><path d="M68 50L83 35L86 37L75 50L86 63L83 65Z" fill="#3b2763" stroke="#b48cff" stroke-width="0.8" stroke-linejoin="bevel"/><path d="M72 50L79 44L86 50L79 56Z" fill="#55398a" stroke="#b48cff" stroke-width="0.8" stroke-linejoin="bevel"/><ellipse cx="79" cy="50" rx="7" ry="5.2" fill="#b48cff" fill-opacity="0.16"/><ellipse cx="79" cy="50" rx="5" ry="4.2" fill="#b48cff" fill-opacity="0.24"/><path d="M75 50L79 46.8L83 50L79 53.2Z" fill="#f1e6ff" stroke="#b48cff" stroke-width="0.8"/><path d="M88 50L99 42L110 50L99 58Z" fill="#e8b04a" stroke="#ffd27a" stroke-width="1"/><path d="M88 50L99 42L96 50ZM99 42L110 50L103 50ZM88 50L99 58L96 50ZM99 58L110 50L103 50Z" fill="#ffd27a"/><path d="M96 50L99 42L103 50L99 58Z" fill="#e8b04a"/></g></svg><figcaption>Madenci</figcaption></figure><figure><svg viewBox="0 0 160 100" role="img"><g stroke-linejoin="round" stroke-linecap="round"><defs><linearGradient id="rShell" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8a63d6"/><stop offset="0.5" stop-color="#3b2763"/><stop offset="1" stop-color="#8a63d6"/></linearGradient></defs><path d="M35 50L57 45.6L57 54.4Z" fill="#8a63d6" fill-opacity="0.14"/><path d="M35 50L57 47.8L57 52.2Z" fill="#8a63d6" fill-opacity="0.65"/><path d="M41.6 50L57 48.68L57 51.32Z" fill="#b48cff" fill-opacity="0.85"/><path d="M50.4 50L57 48.79L57 51.21Z" fill="#f1e6ff" fill-opacity="0.6"/><path d="M57 47.5L73 45.5L77 50L73 54.5L57 52.5Z" fill="#3b2763" stroke="#b48cff" stroke-width="0.7" stroke-linejoin="bevel"/><rect x="57" y="47.5" width="1" height="5" fill="#b48cff"/><path d="M53 10C77 10 105 25 115 39Q97 29 91 40L88 43L74 45L56 46L69 30L75 34Q71 19 53 10ZM53 90C77 90 105 75 115 61Q97 71 91 60L88 57L74 55L56 54L69 70L75 66Q71 81 53 90Z" fill="url(#rShell)" stroke="#b48cff" stroke-width="1.1" stroke-linejoin="bevel"/><path d="M53 10L85 24L77 43L56 46L69 30L75 34Q71 19 53 10ZM53 90L85 76L77 57L56 54L69 70L75 66Q71 81 53 90Z" fill="#55398a"/><path d="M53 10C77 10 105 25 115 39L98 31L85 24ZM53 90C77 90 105 75 115 61L98 69L85 76Z" fill="url(#rShell)"/><path d="M85 24L98 31L91 40L88 43L77 43ZM85 76L98 69L91 60L88 57L77 57Z" fill="#8a63d6"/><path d="M67 50L84 42L102 50L84 58Z" fill="#55398a" stroke="#b48cff" stroke-width="0.9" stroke-linejoin="bevel"/><path d="M67 50L84 42L102 50L84 46ZM67 50L84 58L102 50L84 54Z" fill="#8a63d6"/><path d="M99 50L106 44L120 50L106 56Z" fill="url(#rShell)" stroke="#b48cff" stroke-width="0.9" stroke-linejoin="bevel"/><ellipse cx="84" cy="50" rx="10" ry="4.8" fill="#b48cff" fill-opacity="0.16"/><ellipse cx="84" cy="50" rx="8" ry="3.8" fill="#b48cff" fill-opacity="0.24"/><path d="M77 50L84 47.2L91 50L84 52.8Z" fill="#f1e6ff" stroke="#b48cff" stroke-width="0.8"/></g></svg><figcaption>Avcı</figcaption></figure><figure><svg viewBox="0 0 160 100" role="img"><g stroke-linejoin="round" stroke-linecap="round"><defs><linearGradient id="rShell" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8a63d6"/><stop offset="0.5" stop-color="#3b2763"/><stop offset="1" stop-color="#8a63d6"/></linearGradient></defs><path d="M17 50L47 44.8L47 55.2Z" fill="#8a63d6" fill-opacity="0.14"/><path d="M17 50L47 47.4L47 52.6Z" fill="#8a63d6" fill-opacity="0.65"/><path d="M26 50L47 48.44L47 51.56Z" fill="#b48cff" fill-opacity="0.85"/><path d="M38 50L47 48.57L47 51.43Z" fill="#f1e6ff" fill-opacity="0.6"/><path d="M47 47L65 44.6L69 50L65 55.4L47 53Z" fill="#3b2763" stroke="#b48cff" stroke-width="0.7" stroke-linejoin="bevel"/><rect x="47" y="47" width="1" height="6" fill="#b48cff"/><path d="M46 45L61 26L96 23L121 36L140 46L124 47L115 50L124 53L140 54L121 64L96 77L61 74L46 55L58 50Z" fill="url(#rShell)" stroke="#b48cff" stroke-width="1.1" stroke-linejoin="bevel"/><path d="M77 9L112 16L128 34L109 26L93 23ZM77 91L112 84L128 66L109 74L93 77Z" fill="url(#rShell)" stroke="#b48cff" stroke-width="1.1" stroke-linejoin="bevel"/><path d="M77 9L112 16L93 23ZM77 91L112 84L93 77Z" fill="#8a63d6"/><path d="M109 26L142 46L125 47L127 43L98 44L96 41ZM109 74L142 54L125 53L127 57L98 56L96 59Z" fill="#55398a" stroke="#b48cff" stroke-width="1.1" stroke-linejoin="bevel"/><path d="M109 26L142 46L127 43ZM109 74L142 54L127 57Z" fill="#8a63d6"/><path d="M43 46L53 34L59 44L88 49L61 49ZM43 54L53 66L59 56L88 51L61 51Z" fill="#55398a" stroke="#b48cff" stroke-width="0.8" stroke-linejoin="bevel"/><path d="M41 15L110 26L89 40L59 44ZM41 85L110 74L89 60L59 56Z" fill="url(#rShell)" stroke="#b48cff" stroke-width="1.1" stroke-linejoin="bevel"/><path d="M41 15L110 26L89 40ZM41 85L110 74L89 60Z" fill="#8a63d6"/><path d="M72 50L88 40L105 50L88 60Z" fill="#55398a" stroke="#b48cff" stroke-width="0.8" stroke-linejoin="bevel"/><ellipse cx="88" cy="50" rx="10" ry="5.4" fill="#b48cff" fill-opacity="0.16"/><ellipse cx="88" cy="50" rx="8" ry="4.4" fill="#b48cff" fill-opacity="0.24"/><path d="M81 50L88 46.6L95 50L88 53.4Z" fill="#f1e6ff" stroke="#b48cff" stroke-width="0.8"/></g></svg><figcaption>Fırkateyn</figcaption></figure><figure><svg viewBox="0 0 160 100" role="img"><g stroke-linejoin="round" stroke-linecap="round"><defs><linearGradient id="rShell" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8a63d6"/><stop offset="0.5" stop-color="#3b2763"/><stop offset="1" stop-color="#8a63d6"/></linearGradient><radialGradient id="rGarden" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#6cf0a0"/><stop offset="1" stop-color="#1f4a35"/></radialGradient></defs><path d="M30 50L53 45L53 55Z" fill="#8a63d6" fill-opacity="0.14"/><path d="M30 50L53 47.5L53 52.5Z" fill="#8a63d6" fill-opacity="0.65"/><path d="M36.9 50L53 48.5L53 51.5Z" fill="#b48cff" fill-opacity="0.85"/><path d="M46.1 50L53 48.63L53 51.38Z" fill="#f1e6ff" fill-opacity="0.6"/><path d="M53 47.5L60 45.5L64 50L60 54.5L53 52.5Z" fill="#3b2763" stroke="#b48cff" stroke-width="0.7" stroke-linejoin="bevel"/><rect x="53" y="47.5" width="1" height="5" fill="#b48cff"/><path d="M57 50L83 29L109 50L83 71Z" fill="#3b2763" stroke="#b48cff" stroke-width="1.1" stroke-linejoin="bevel"/><path d="M55 23L60 38L49 47L62 44L73 41L66 30ZM83 12L77 29L73 41L65 31L75 25ZM83 12L91 30L94 41L102 31L92 25ZM109 24L104 39L94 41L107 45L116 44L111 36ZM55 77L60 62L49 53L62 56L73 59L66 70ZM83 88L77 71L73 59L65 69L75 75ZM83 88L91 70L94 59L102 69L92 75ZM109 76L104 61L94 59L107 55L116 56L111 64Z" fill="url(#rShell)" stroke="#b48cff" stroke-width="1.1" stroke-linejoin="bevel"/><path d="M55 23L66 30L73 41L60 38ZM83 12L77 29L73 41L75 25ZM109 24L104 39L94 41L102 31ZM55 77L66 70L73 59L60 62ZM83 88L77 71L73 59L75 75ZM109 76L104 61L94 59L102 69Z" fill="#8a63d6"/><path d="M83 12L92 25L102 31L94 41L91 30ZM55 23L60 38L49 47ZM83 88L92 75L102 69L94 59L91 70ZM55 77L60 62L49 53Z" fill="#55398a"/><path d="M109 44L125 50L109 56L113 50Z" fill="#55398a" stroke="#b48cff" stroke-width="0.9" stroke-linejoin="bevel"/><path d="M109 44L125 50L113 50ZM109 56L125 50L113 50Z" fill="#8a63d6"/><path d="M61 50L83 33L105 50L83 67Z" fill="url(#rGarden)" stroke="#6cf0a0" stroke-width="1.2"/><path d="M63 50L83 35L76 45ZM87 43L103 50L94 48ZM63 50L83 65L76 55ZM87 57L103 50L94 52Z" fill="#6cf0a0"/><path d="M67 48L72 44L77 48L73 48L73 50L71 50L71 48ZM89 47L93 44L98 48L94 48L94 50L92 50L92 48ZM67 52L72 56L77 52L73 52L73 50L71 50L71 52ZM89 53L93 56L98 52L94 52L94 50L92 50L92 52Z" fill="#1f4a35"/><ellipse cx="83" cy="50" rx="5" ry="4.5" fill="#b48cff" fill-opacity="0.16"/><ellipse cx="83" cy="50" rx="3" ry="3.5" fill="#b48cff" fill-opacity="0.24"/><path d="M81 50L83 47.5L85 50L83 52.5Z" fill="#f1e6ff" stroke="#b48cff" stroke-width="0.8"/></g></svg><figcaption>Kolonici</figcaption></figure><figure><svg viewBox="0 0 160 100" role="img"><g stroke-linejoin="round" stroke-linecap="round"><defs><linearGradient id="rShell" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8a63d6"/><stop offset="0.5" stop-color="#3b2763"/><stop offset="1" stop-color="#8a63d6"/></linearGradient></defs><path d="M5 50L48 44L48 56Z" fill="#8a63d6" fill-opacity="0.14"/><path d="M5 50L48 47L48 53Z" fill="#8a63d6" fill-opacity="0.65"/><path d="M17.9 50L48 48.2L48 51.8Z" fill="#b48cff" fill-opacity="0.85"/><path d="M35.1 50L48 48.35L48 51.65Z" fill="#f1e6ff" fill-opacity="0.6"/><path d="M48 47L67 44.6L71 50L67 55.4L48 53Z" fill="#3b2763" stroke="#b48cff" stroke-width="0.7" stroke-linejoin="bevel"/><rect x="48" y="47" width="1" height="6" fill="#b48cff"/><path d="M56 50L75 42L88 43L112 48L125 48L132 50L125 52L112 52L88 57L75 58Z" fill="#55398a" stroke="#b48cff" stroke-width="1.1" stroke-linejoin="bevel"/><path d="M24 19L66 17L71 23L46 22L64 39L75 42L65 44L43 45L50 36L42 26ZM24 81L66 83L71 77L46 78L64 61L75 58L65 56L43 55L50 64L42 74Z" fill="url(#rShell)" stroke="#b48cff" stroke-width="1.1" stroke-linejoin="bevel"/><path d="M24 19L46 22L64 39L65 44L50 36L42 26ZM24 81L46 78L64 61L65 56L50 64L42 74Z" fill="#8a63d6"/><path d="M43 45L65 38L75 40L101 35L116 39L94 45L83 43L68 47ZM43 55L65 62L75 60L101 65L116 61L94 55L83 57L68 53Z" fill="#55398a" stroke="#b48cff" stroke-width="0.8" stroke-linejoin="bevel"/><path d="M54 7L82 13L107 22L116 39L100 35L92 28L71 23ZM54 93L82 87L107 78L116 61L100 65L92 72L71 77Z" fill="url(#rShell)" stroke="#b48cff" stroke-width="1.1" stroke-linejoin="bevel"/><path d="M54 7L82 13L107 22L92 28L71 23ZM54 93L82 87L107 78L92 72L71 77Z" fill="#8a63d6"/><path d="M107 22L116 39L100 35L92 28ZM107 78L116 61L100 65L92 72Z" fill="#55398a"/><path d="M114 40L126 34L151 41L135 41L128 47L117 47L131 39ZM114 60L126 66L151 59L135 59L128 53L117 53L131 61Z" fill="#55398a" stroke="#b48cff" stroke-width="0.9" stroke-linejoin="bevel"/><path d="M126 34L151 41L135 41ZM126 66L151 59L135 59Z" fill="#8a63d6"/><path d="M124 50L134 45L155 50L134 55Z" fill="url(#rShell)" stroke="#b48cff" stroke-width="0.9" stroke-linejoin="bevel"/><path d="M73 28L78 30L73 32L74.5 30ZM73 72L78 70L73 68L74.5 70Z" fill="#b48cff"/><path d="M83 28L88 30L83 32L84.5 30ZM83 72L88 70L83 68L84.5 70Z" fill="#b48cff"/><path d="M93 28L98 30L93 32L94.5 30ZM93 72L98 70L93 68L94.5 70Z" fill="#b48cff"/><path d="M74 50L87 39L100 50L87 61Z" fill="#55398a" stroke="#b48cff" stroke-width="1" stroke-linejoin="bevel"/><path d="M78 50L87 44L96 50L87 56Z" fill="#3b2763" stroke="#b48cff" stroke-width="0.7" stroke-linejoin="bevel"/><ellipse cx="87" cy="50" rx="9" ry="5" fill="#b48cff" fill-opacity="0.16"/><ellipse cx="87" cy="50" rx="7" ry="4" fill="#b48cff" fill-opacity="0.24"/><path d="M81 50L87 47L93 50L87 53Z" fill="#f1e6ff" stroke="#b48cff" stroke-width="0.8"/></g></svg><figcaption>Taşıyıcı</figcaption></figure></div>
+  </div>
+  <div class="faction" style="--fc:#e8b04a">
+    <h4>Korsan</h4><p>Kaynakla tutturulmuş kutu gövdeler: yama plakalar, perçinler, kehribar uyarı şeritleri, dengesiz turuncu motor alevleri. Çift toplu basamaklı akıncı, üç kapaklı kasa yük gemisi, altı taretli kale gövdeli yağmacı.</p>
+    <div class="ships"><figure><svg viewBox="0 0 160 100" role="img"><g stroke-linejoin="round" stroke-linecap="round"><defs><linearGradient id="pPlate" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8a7a60"/><stop offset="0.5" stop-color="#3a3229"/><stop offset="1" stop-color="#8a7a60"/></linearGradient></defs><ellipse cx="38.98" cy="44.25" rx="8.85" ry="4.83" fill="#ff7a50" fill-opacity="0.3"/><path d="M43.2 41.03L36.24 42L37.51 43.28L30.55 44.25L36.24 45.86L43.2 47.47Z" fill="#ff7a50"/><path d="M43.2 42.64L34.34 44.25L43.2 45.86Z" fill="#ffd9a0"/><ellipse cx="40.13" cy="55.75" rx="6.44" ry="3.79" fill="#ff7a50" fill-opacity="0.3"/><path d="M43.2 53.22L38.14 53.98L39.06 54.99L34 55.75L38.14 57.02L43.2 58.28Z" fill="#ff7a50"/><path d="M43.2 54.48L36.76 55.75L43.2 57.02Z" fill="#ffd9a0"/><path d="M43.2 38.5L46.65 35.05L73.1 35.05L73.1 28.15L77.7 25.85L85.75 25.85L90.35 30.45L90.35 38.5L101.85 38.5L114.5 45.4L114.5 54.6L101.85 61.5L90.35 61.5L90.35 69.55L85.75 74.15L77.7 74.15L73.1 71.85L73.1 64.95L46.65 64.95L43.2 61.5L43.2 56.9L50.1 56.9L50.1 43.1L43.2 43.1Z" fill="url(#pPlate)" stroke="#d9cfbf" stroke-width="1.38"/><path d="M55.85 36.2L76.55 36.2L82.3 41.95L77.7 48.85L59.3 48.85L55.85 45.4Z" fill="#c4683c"/><path d="M61.6 56.9L74.25 56.9L74.25 63.8L61.6 63.8Z" fill="#8a7a60"/><path d="M98.4 44.25L111.05 45.4L112.2 52.3L104.15 52.3L99.55 48.85Z" fill="#ffd9a0" stroke="#d9cfbf" stroke-width="0.8"/><path d="M86.9 53.45L89.43 53.45L86.9 56.99L84.37 56.99ZM91.2 53.45L93.73 53.45L91.2 56.99L88.67 56.99ZM95.5 53.45L98.03 53.45L95.5 56.99L92.97 56.99Z" fill="#e8b04a"/><path d="M75.4 27.58L81.44 27.58L82.64 29.18L82.64 34.02L81.44 35.63L75.4 35.63Z" fill="#5a4c3a" stroke="#d9cfbf" stroke-width="0.8"/><rect x="79.42" y="30.57" width="28.17" height="2.07" rx="0.34" fill="#d9cfbf"/><path d="M75.4 64.38L81.44 64.38L82.64 65.98L82.64 70.81L81.44 72.42L75.4 72.42Z" fill="#5a4c3a" stroke="#d9cfbf" stroke-width="0.8"/><rect x="79.42" y="67.36" width="28.17" height="2.07" rx="0.34" fill="#d9cfbf"/><rect x="43.2" y="40.8" width="4.6" height="6.9" rx="1.15" fill="#3a3229"/><rect x="43.2" y="52.3" width="4.6" height="6.9" rx="1.15" fill="#3a3229"/></g></svg><figcaption>Akıncı</figcaption></figure><figure><svg viewBox="0 0 160 100" role="img"><g stroke-linejoin="round" stroke-linecap="round"><defs><linearGradient id="pPlate" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8a7a60"/><stop offset="0.5" stop-color="#3a3229"/><stop offset="1" stop-color="#8a7a60"/></linearGradient></defs><ellipse cx="28.63" cy="43.1" rx="8.85" ry="5.17" fill="#ff7a50" fill-opacity="0.3"/><path d="M32.85 39.65L25.89 40.69L27.16 42.07L20.2 43.1L25.89 44.83L32.85 46.55Z" fill="#ff7a50"/><path d="M32.85 41.38L24 43.1L32.85 44.83Z" fill="#ffd9a0"/><ellipse cx="29.4" cy="56.9" rx="7.24" ry="5.52" fill="#ff7a50" fill-opacity="0.3"/><path d="M32.85 53.22L27.16 54.32L28.19 55.8L22.5 56.9L27.16 58.74L32.85 60.58Z" fill="#ff7a50"/><path d="M32.85 55.06L25.61 56.9L32.85 58.74Z" fill="#ffd9a0"/><path d="M34 36.2L40.9 30.45L47.8 30.45L52.4 21.25L88.05 21.25L93.8 25.85L96.1 32.75L105.3 37.35L113.35 37.35L124.85 44.25L124.85 55.75L113.35 62.65L105.3 62.65L96.1 67.25L93.8 74.15L88.05 78.75L52.4 78.75L47.8 69.55L40.9 69.55L34 63.8Z" fill="url(#pPlate)" stroke="#d9cfbf" stroke-width="1.38"/><path d="M43.2 35.05L53.55 24.7L62.75 24.7L58.15 32.75L93.8 32.75L101.85 39.65L101.85 60.35L93.8 67.25L58.15 67.25L62.75 75.3L53.55 75.3L43.2 64.95Z" fill="#5a4c3a"/><path d="M74.25 22.4L86.9 22.4L92.65 31.6L77.7 31.6ZM60.45 66.1L80 66.1L76.55 77.6L63.9 77.6Z" fill="#c4683c"/><rect x="44.35" y="39.65" width="55.2" height="20.7" rx="2.3" fill="#3a3229"/><path d="M45.5 41.95L59.3 41.95L59.3 58.05L45.5 58.05Z" fill="#8a7a60" stroke="#d9cfbf" stroke-width="0.69"/><path d="M62.75 41.95L76.55 41.95L76.55 58.05L62.75 58.05Z" fill="#8a7a60" stroke="#d9cfbf" stroke-width="0.69"/><path d="M80 41.95L93.8 41.95L93.8 58.05L80 58.05Z" fill="#8a7a60" stroke="#d9cfbf" stroke-width="0.69"/><rect x="90.35" y="32.75" width="4.6" height="34.5" rx="0.92" fill="#d9cfbf"/><rect x="92.08" y="35.05" width="1.15" height="29.9" fill="#8a7a60"/><rect x="112.2" y="46.55" width="11.5" height="6.9" rx="1.15" fill="#3a3229"/><rect x="113.35" y="48.27" width="9.2" height="3.45" rx="0.57" fill="#ffd9a0"/><path d="M63.9 30.45L66.43 30.45L63.9 33.99L61.37 33.99ZM68.2 30.45L70.73 30.45L68.2 33.99L65.67 33.99ZM72.5 30.45L75.03 30.45L72.5 33.99L69.97 33.99Z" fill="#e8b04a"/><path d="M85.75 70.7L87.7 70.7L85.75 73.44L83.8 73.44ZM89.07 70.7L91.03 70.7L89.07 73.44L87.12 73.44ZM92.4 70.7L94.35 70.7L92.4 73.44L90.44 73.44Z" fill="#e8b04a"/><rect x="32.85" y="38.5" width="3.45" height="9.2" rx="1.15" fill="#3a3229"/><rect x="32.85" y="52.3" width="3.45" height="9.2" rx="1.15" fill="#3a3229"/></g></svg><figcaption>Yük gemisi</figcaption></figure><figure><svg viewBox="0 0 160 100" role="img"><g stroke-linejoin="round" stroke-linecap="round"><defs><linearGradient id="pPlate" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8a7a60"/><stop offset="0.5" stop-color="#3a3229"/><stop offset="1" stop-color="#8a7a60"/></linearGradient></defs><ellipse cx="15.67" cy="35" rx="9.1" ry="5.1" fill="#ff7a50" fill-opacity="0.3"/><path d="M20 31.6L12.85 32.62L14.15 33.98L7 35L12.85 36.7L20 38.4Z" fill="#ff7a50"/><path d="M20 33.3L10.9 35L20 36.7Z" fill="#ffd9a0"/><ellipse cx="16.33" cy="50" rx="7.7" ry="4.5" fill="#ff7a50" fill-opacity="0.3"/><path d="M20 47L13.95 47.9L15.05 49.1L9 50L13.95 51.5L20 53Z" fill="#ff7a50"/><path d="M20 48.5L12.3 50L20 51.5Z" fill="#ffd9a0"/><ellipse cx="16" cy="65" rx="8.4" ry="4.05" fill="#ff7a50" fill-opacity="0.3"/><path d="M20 62.3L13.4 63.11L14.6 64.19L8 65L13.4 66.35L20 67.7Z" fill="#ff7a50"/><path d="M20 63.65L11.6 65L20 66.35Z" fill="#ffd9a0"/><path d="M22 28L25 25L29 25L29 28L41 28L41 19L45 15L59 15L63 19L63 31L73 31L73 18L77 14L96 14L100 18L100 31L112 31L112 19L116 15L130 15L134 19L134 35L146 35L150 39L150 61L146 65L134 65L134 81L130 85L116 85L112 81L112 69L100 69L100 82L96 86L77 86L73 82L73 69L63 69L63 81L59 85L45 85L41 81L41 72L29 72L29 75L25 75L22 72Z" fill="url(#pPlate)" stroke="#d9cfbf" stroke-width="1.3"/><path d="M31 38L65 38L69 34L106 34L110 39L139 39L139 61L111 61L107 66L69 66L65 62L31 62Z" fill="#5a4c3a"/><path d="M33 35L44 35L47 43L58 43L58 49L34 49ZM62 45L75 45L75 57L55 57L55 51L62 51ZM114 40L126 40L126 51L119 51L119 59L109 59L109 49ZM101 60L111 60L111 68L101 68ZM44 16L51 16L51 23L42 23ZM119 77L132 77L129 83L116 83Z" fill="#c4683c"/><path d="M34 60L40 56L53 56L53 64L46 64L46 70L34 70ZM76 59L83 59L87 64L96 64L96 68L81 68ZM105 33L111 33L111 39L101 39Z" fill="#8a7a60"/><path d="M46 20L56 20L56 30L46 30ZM77 17L97 17L97 33L77 33ZM116 20L126 20L126 30L116 30ZM46 80L56 80L56 70L46 70ZM77 83L97 83L97 67L77 67ZM116 80L126 80L126 70L116 70Z" fill="#3a3229" stroke="#8a7a60" stroke-width="1"/><ellipse cx="87" cy="25" rx="6.5" ry="5.7" fill="#8a7a60"/><ellipse cx="87" cy="75" rx="6.5" ry="5.7" fill="#8a7a60"/><path d="M51 23L62 23L62 25L51 25ZM89 23L103 23L103 25L89 25ZM89 27L103 27L103 29L89 29ZM121 23L132 23L132 25L121 25ZM51 77L62 77L62 75L51 75ZM89 77L103 77L103 75L89 75ZM89 73L103 73L103 71L89 71ZM121 77L132 77L132 75L121 75Z" fill="#d9cfbf"/><path d="M94 46L97.4 46L94 50.76L90.6 50.76ZM99.78 46L103.18 46L99.78 50.76L96.38 50.76ZM105.56 46L108.96 46L105.56 50.76L102.16 50.76Z" fill="#e8b04a"/><rect x="137" y="42" width="12" height="4" rx="0.8" fill="#3a3229"/><rect x="137" y="54" width="12" height="4" rx="0.8" fill="#3a3229"/><rect x="139" y="43" width="9" height="2" rx="0.5" fill="#ffd9a0"/><rect x="139" y="55" width="9" height="2" rx="0.5" fill="#ffd9a0"/><rect x="20" y="31" width="3" height="8" rx="0.7" fill="#3a3229"/><rect x="20" y="46" width="3" height="8" rx="0.7" fill="#3a3229"/><rect x="20" y="61" width="3" height="8" rx="0.7" fill="#3a3229"/></g></svg><figcaption>Yağmacı</figcaption></figure></div>
+  </div>
+
+  <h3>Düşman filolar</h3>
+  <p>Rakip Çekirdeklerin uygarlıkları aynı gemi sınıflarını kendi eğilimleriyle kurar. İlk filolar Çağ III’te gelir: madenciler kaynaklarını çalar, avcılar uydularını hedefler. Çağ IV’ten itibaren ağır filolar yaşam gezegenlerine saldırır. Kozmik boşluklar pusu bölgeleridir.</p>
+
+  <h3>Performans kuralı</h3>
+  <p class="note">Gemiler simülasyonda gerçek cisimdir ama sayıları sınırlıdır (sistem başına ~50–200). Mermiler, motor izleri ve patlamalar yalnızca görsel parçacıktır; çekim hesabına girmez.</p>
+</section>
+
+<!-- ============ OYNANIŞ ============ -->
+<section class="tab" id="oyun">
+  <h2>Oynanış</h2>
+
+  <h3>Çekirdek döngü</h3>
+  <div class="loop">
+    <span>Hareket et</span><b>→</b><span>Seçerek yut (bileşim)</span><b>→</b><span>Büyü (kütle)</span><b>→</b><span>Evrim düğümü aç</span><b>→</b><span>Yeni yetenek ve ölçek</span><b>↺</b>
+  </div>
+  <p>Koşulları sağlanan birden fazla dal varsa <b>oyuncu seçer</b>; evrim otomatik değil, bilinçli bir karardır. Seçilmeyen dal kapanmaz, sonradan geri dönülebilir.</p>
+
+  <h3>Kontroller</h3>
+  <div class="grid">
+    <div class="card"><h4>Klavye / dokunmatik</h4>WASD ya da ok tuşlarıyla itki; telefonda dokunduğun yerde açılan sanal joystick. Tekerlekle yakınlaştır.</div>
+    <div class="card"><h4>Hız senin elinde</h4>Sürtünme düşük: bir yöne bastıkça hızlanırsın (en fazla ≈62 çap/sn), bırakınca süzülürsün, fren için ters yöne basarsın. Yüksek hızda çarpmak parçalar ya da öldürür. Hızlandıkça kamera uzaklaşır (en fazla 1,6×), büyüdükçe görüş boyut<sup>0,8</sup> oranında genişler.</div>
+    <div class="card"><h4>Yetenekler</h4>1–4 tuşları ya da ekrandaki yetenek halkası. Her kademede en fazla 4 aktif yetenek.</div>  </div>
+
+  <h3>Kademeye göre yetenekler</h3>
+  <div class="tbl-wrap"><table>
+    <tr><th>Form</th><th>Yetenekler</th></tr>
+    <tr><td>Toz / kaya / asteroid</td><td>Hücum (kısa hız), Delici çarpma (metalik), Yörünge yakalama</td></tr>
+    <tr><td>Buzlu cisim / kuyruklu yıldız</td><td>Gaz püskürtme (buz harcayan dash), Kuyruk izi</td></tr>
+    <tr><td>Gezegen</td><td>Uydu yakala, Atmosfer kalkanı, Roche parçalama (halka oluştur), Çekim kalkanı (gaz devi)</td></tr>
+    <tr><td>Yıldız</td><td>Işınım itmesi, Parlama saldırısı, Gezegen yerleştirme, Yakıt yönetimi</td></tr>
+    <tr><td>Nötron yıldızı / pulsar / magnetar</td><td>Dönen ışın, Manyetik şok (gemileri devre dışı bırakır)</td></tr>
+    <tr><td>Kara delik</td><td>Olay ufku, Gelgit parçalama, Blazar jeti (nişan alınabilir)</td></tr>
+    <tr><td>Galaksi ve üstü</td><td>Kol oluştur, Galaksi birleşmesi, Filament bağla</td></tr>
+  </table></div>
+
+  <h3>Risk ve geri düşme</h3>
+  <ul>
+    <li>Kendinden ağır cisme yavaş değmek seni yutturur ve oyunu bitirir. Çekim nazik ama birikir: her cisim çeker, büyük kayalar küçükleri zamanla toplar. Yalnızca çekimle düşerek parçalanmak ≈9.000 kat, ölmek ≈100.000 kat büyük cisimde olur; çekimin itkini aşması ≈400.000 katta (yıldızlar).</li>
+    <li>Ölüm (yutulma ya da paramparça olma) <b>Game Over</b> demektir: koşu biter, baştan başlarsın.</li>
+    <li>Hızlı çarpışma kütle kaybettirir; kaybın çoğu geri toplanamayan toza dönüşür. Parçalanırsan en büyük parçan olarak devam edersin; kütlen kademe eşiğinin altına inerse geri düşersin.</li>
+    <li>Kuyruklu yıldız durumunda buz sürekli azalır; biterse sönmüş kuyruklu yıldıza, yani asteroide dönersin.</li>
+    <li>Sıcak Jüpiter atmosferini kaybederse Chthonian çekirdeğe düşer.</li>
+    <li>Beyaz cüce fazla yerse Tip Ia süpernova ile kalıntısız yok olur. Bu, oyunun bilinçli tuzağıdır.</li>
+    <li>Yıldız ölümü bir oyun sonu değildir: bulutsudan yeniden doğuş, kalıcı metalisiteyle döner.</li>
+  </ul>
+
+  <h3>Modlar</h3>
+  <div class="grid">
+    <div class="card"><h4>Hikaye</h4>Perde 0–V, rakip çekirdekler, Entropi zamanlayıcısı. Hedef süre: perde başına 20–40 dakika.</div>
+    <div class="card"><h4>Sandbox</h4>Zamanlayıcı yok. Sabitleri serbestçe değiştir, istediğin çağdan başla.</div>
+    <div class="card"><h4>Meydan okuma</h4>Kısa senaryolar: “manyetik alansız gezegende yaşam kur”, “pulsar yakınında uygarlık”, “kara deliğe yem olmadan galaksi geç”.</div>
+  </div>
+
+  <h3>Kütle eşikleri (oyun birimi)</h3>
+  <div class="tbl-wrap"><table>
+    <tr><th>Çağ</th><th>Aralık</th><th>Örnek eşikler</th></tr>
+    <tr><td>I · Toz ve Kaya</td><td>10<sup>0</sup> – 10<sup>3</sup></td><td>Kaya parçası 10<sup>0.5</sup>, meteoroid 10<sup>1</sup>, dev asteroid 10<sup>3</sup></td></tr>
+    <tr><td>II · Dünyalar</td><td>10<sup>3.5</sup> – 10<sup>6.5</sup></td><td>Gezegen 10<sup>4.5</sup>, Süper Dünya 10<sup>5</sup>, gaz devi 10<sup>6</sup></td></tr>
+    <tr><td>III · Ateş</td><td>10<sup>7</sup> – 10<sup>9.6</sup></td><td>Kahverengi cüce 10<sup>7</sup>, M 10<sup>7.6</sup>, G 10<sup>8.1</sup>, O 10<sup>9.6</sup></td></tr>
+    <tr><td>IV · Kalıntı ve KD</td><td>10<sup>9</sup> +</td><td>Nötron yıldızı 10<sup>9</sup>–10<sup>9.4</sup>, kara delik ≥ 10<sup>9.4</sup>, süper kütleli 10<sup>13</sup></td></tr>
+    <tr><td>V · Yapılar</td><td>sayıya bağlı</td><td>Açık küme ≥ 10 yıldız, galaksi grubu ≥ 3 galaksi</td></tr>
+  </table></div>
+
+  <h3>Ölçek: dünya senin boyutuna göre dolar</h3>
+  <p>Zamanı hızlandırmayız; <b>çevreyi ölçeğine göre değiştiririz</b>. Asteroidken etrafında asteroitler, yıldızken gezegenler ve yıldızlar, galaksiyken galaksiler vardır. Hız ve mesafeler de senin boyutuna göre ölçülür (birim: kendi çapın), bu yüzden her ölçekte oyun aynı tempoda hissettirir.</p>
+  <div class="tbl-wrap"><table>
+    <tr><th>Sen</th><th>Yem (≈10× küçük)</th><th>Denk (rakip, risk)</th><th>Tehdit / hedef (≈10× büyük)</th><th>Parçacık ve arka plan</th></tr>
+    <tr><td><b>Toz / asteroid</b></td><td>Toz, kaya parçaları</td><td>Asteroitler, kuyruklu yıldızlar</td><td>Cüce gezegen, gezegen</td><td>Uzaktaki yıldızın ışığı</td></tr>
+    <tr><td><b>Gezegen</b></td><td>Asteroitler, uydular</td><td>Gezegenler</td><td>Gaz devleri, kahverengi cüceler</td><td>Toz ve küçük kayalar parçacık olur</td></tr>
+    <tr><td><b>Yıldız</b></td><td>Gezegenler</td><td>Yıldızlar</td><td>Dev yıldızlar, kara delikler</td><td>Asteroid kuşakları parçacık olur, bulutsular arka plan</td></tr>
+    <tr><td><b>Kalıntı / kara delik</b></td><td>Yıldızlar</td><td>Nötron yıldızları, kara delikler</td><td>Süper kütleli kara delik</td><td>Gezegen sistemleri tek nokta olur</td></tr>
+    <tr><td><b>Galaksi</b></td><td>Yıldız kümeleri, cüce galaksiler</td><td>Galaksiler</td><td>Galaksi kümeleri</td><td>Yıldızlar parçacık olur, kozmik ağ arka plan</td></tr>
+  </table></div>
+  <ul>
+    <li><b>Doğma ve silinme:</b> ekranın hemen dışında ölçeğine uygun cisimler doğar, geride kalanlar silinir. Dünya sonsuz hissettirir, cisim sayısı sabit kalır.</li>
+    <li><b>Kademe geçişi:</b> kamera uzaklaşır. Eski ölçeğin cisimleri parçacığa dönüşür (görsel olarak “tozlaşır”), yeni ölçeğin cisimleri belirir. Geçiş oyunun en tatmin edici anlarından biri olmalı.</li>
+    <li><b>Bileşim dağılımı:</b> doğan cisimlerin türü konuma bağlıdır. Kar çizgisinin ötesinde buzlu cisimler, iç sistemde metalik ve kayaç asteroitler, dış sistemde buzlu ve gaz zengini cisimler, süpernova kalıntısı yakınında nadir metaller.</li>
+    <li><b>Performans:</b> simülasyonda her ölçekte yalnızca birkaç yüz ile birkaç bin arası gerçek cisim olur; alt ölçek GPU parçacığıdır. Düşük donanım hedefinin dayanağı budur.</li>
+  </ul>
+</section>
+</main>
+
+<script>
+const KIND = {
+  tier:    ['Kademe', 'var(--tier)'],
+  tag:     ['Etiket', 'var(--tag)'],
+  state:   ['Durum', 'var(--state)'],
+  event:   ['Olay', 'var(--event)'],
+  collect: ['Koleksiyon', 'var(--collect)'],
+  secret:  ['Gizli', 'var(--secret)'],
+};
+
+const ERAS = [
+  ['Çağ 0 · İlk Işık', 'Big Bang → ilk yıldız (öğretici)'],
+  ['Çağ I · Toz ve Kaya', 'Küçük ve buzlu cisimler, asteroid türleri'],
+  ['Çağ II · Dünyalar', 'Gezegenler, uydular, halkalar'],
+  ['Çağ III · Ateş', 'Yıldız doğumu, ana kol, ilk sistemler'],
+  ['Çağ IV · Ölüm ve Yeniden Doğuş', 'Devler, kalıntılar, kara delikler'],
+  ['Çağ V · Ağ', 'Kümeler, galaksiler, kozmik ağ'],
+  ['Yaşam ve Uygarlık', 'Gezegen üzerinde paralel ilerleyen ikinci ağaç'],
+];
+
+const N = {};
+// n(id, ad, tür, açıklama, gereksinimler, kazanımlar, yetenekler, sonraki)
+function n(id, name, kind, desc, req = [], gives = [], abil = [], next = []) {
+  N[id] = { id, name, kind, desc, req, gives, abil, next };
+}
+
+// ---- Çağ 0
+n('plazma', 'Big Bang plazması', 'tier', 'Evrenin ilk anı. Her şey sıcak bir sis; sen içinde çeken tek zerresin.', ['Oyun başlangıcı'], ['Temel çekim'], ['Sürüklen: imleç yönüne yavaş itki'], ['hhe']);
+n('hhe', 'H/He gaz bulutu', 'tier', 'Evren soğudu, ilk atomlar oluştu. Hidrojen ve helyumdan başka bir şey yok.', ['Soğuma (~60 sn)', 'Kütle ≥ 10^1 (gaz)'], ['Gaz toplama'], ['Çek: yakındaki gazı topla'], ['pop3', 'ilkelkd']);
+n('pop3', 'Pop III yıldızı', 'tier', 'Hiç metal içermeyen dev ilk yıldız. Kısa ve çok parlak yaşar.', ['Kütle ≥ 10^2 gaz', 'Çöküş eşiği'], ['Işınım', 'İlk ağır elementler'], ['Işıma: çevredeki gazı it'], ['ilksn']);
+n('ilksn', 'İlk süpernova', 'event', 'İlk yıldızın ölümü. Patlama ilk metalleri ve tozu evrene saçar; sen bir toz zerresi olarak uyanırsın.', ['Pop III yakıtı biter (senaryo)'], ['Metalisite +1 (kalıcı)', 'Çağ I açılır'], [], ['toz']);
+n('karanlik', 'Karanlık madde halesi', 'state', 'Görünmez kütle iskeleti. Haritada hafif bir çekim alanı olarak hissedilir; galaksiler buralarda doğar.', ['Her zaman var (ortam)'], ['Ek çekim alanı', 'Çağ V galaksi tohumları'], [], ['cuce_galaksi']);
+n('ilkelkd', 'İlkel kara delik', 'secret', 'Big Bang yoğunluk dalgalanmasından doğmuş kara delik. Teorik.', ['Sandbox ya da nadir başlangıç (%1)'], ['Kara delik dalına doğrudan erişim'], ['Olay ufku (küçük)'], ['kd_yildiz']);
+
+// ---- Çağ I
+n('toz', 'Kozmik toz', 'tier', 'Yıldızların bıraktığı kayaç, metal ve buz taneleri. En küçük ve en hızlı formun.', ['İlk süpernova ya da yeniden doğuş'], ['Yüksek hız'], ['Sürüklen', 'Yapış: toz kümelerine tutun'], ['kayaparca', 'buzlukaya']);
+n('kayaparca', 'Kaya parçası', 'tier', 'Tozlar kaynaştı, ilk katı form.', ['Kütle ≥ 10^0.5'], ['Sertlik +1'], ['Çarp: küçük cisimleri parçala'], ['meteoroid']);
+n('meteoroid', 'Meteoroid', 'tier', 'Uzayda hızla giden kaya.', ['Kütle ≥ 10^1'], ['Çarpma hasarı +'], ['Hücum: kısa hızlanma'], ['ast_s']);
+n('ast_s', 'Küçük asteroid', 'tier', 'Kendi çekimi fark edilmeye başlar.', ['Kütle ≥ 10^1.5'], ['Çekim menzili +'], ['Mini çekim: tozları kendine çek'], ['ast_m', 'temas_ikili']);
+n('ast_m', 'Orta asteroid', 'tier', '', ['Kütle ≥ 10^2'], ['Dayanıklılık +'], [], ['ast_l']);
+n('ast_l', 'Büyük asteroid', 'tier', '', ['Kütle ≥ 10^2.5'], ['Küçük cisimleri yörüngeye alabilir'], ['Yörünge yakalama (1 cisim)'], ['ast_xl']);
+n('ast_xl', 'Dev asteroid', 'tier', 'Neredeyse küresel. Sıradaki adım gezegenimsi cisim.', ['Kütle ≥ 10^3'], ['Küresel form'], [], ['gezegenimsi']);
+
+n('metalik', 'Metalik asteroid', 'tag', 'Demir-nikel çekirdek parçası. Ağır ve sert.', ['Metal ≥ %40'], ['Sertlik ++ (çarpışmada daha az kütle kaybı)', 'Dayanıklılık ++', 'Ağır: hız −, atalet +', 'Gezegende metal çekirdek → manyetik alan'], ['Delici çarpma: zırhlı hedeflere ek hasar'], ['demir_gez']);
+n('silikat', 'Kayaç asteroid', 'tag', 'En yaygın tür: taş, bazalt, olivin, enstatit. Dengeli büyüme malzemesi.', ['Kayaç ≥ %40'], ['Kütle kazanımı +%20', 'Gezegende kıta → kara yaşamı'], [], ['kayalik']);
+n('gazli', 'Gaz zengini asteroid', 'tag', 'Kırağılı, parıltılı, uçucu bileşik zengini.', ['Gaz ≥ %20'], ['Hafif: hız +', 'Çok kırılgan'], [], ['gaz_devi']);
+n('hidratli', 'Su bazlı (hidratlı) asteroid', 'tag', 'Kayasında su ve buz kilitli.', ['Su ≥ %25'], ['Su: okyanus ve yaşamın ana şartı', 'Soğutma: sıcak bölgede daha uzun dayanır'], [], ['okyanus', 'buzlukaya']);
+n('radyoaktif', 'Radyoaktif asteroid', 'tag', 'Uranyum ve toryum zengini; içten ısınır.', ['Nadir (%3)', 'Ağır element ≥ %5'], ['İç ısı: volkanizma ve tektonik, manyetik alanı canlı tutar', 'Fazlası (%8+) yaşamı öldürür'], [], ['lav', 'uydu_volkanik', 'e_enerji']);
+n('nadirmetal', 'Nadir metal (platin) asteroid', 'tag', 'Çok nadir, değerli metal yığını.', ['Nadir (%1)', 'Genellikle süpernova/kilonova sonrası'], ['Gemi teknolojisi: ileri gövde ve motor', 'Uygarlık bilimi +'], [], []);
+n('moloz', 'Moloz yığını', 'tag', 'Gevşek bağlı taş yığını.', ['Düşük hızlı çarpışmalarla oluşur'], ['Kolay kütle', 'Sertlik −− (kolay parçalanır)'], [], []);
+
+n('buzlukaya', 'Buzlu kaya', 'tier', 'Kar çizgisinin ötesinde donmuş su ve gaz.', ['Buz ≥ %40', 'Kar çizgisinin dışında'], ['Su deposu', 'Kar çizgisinin içinde buz kaybı'], ['Gaz püskürt: buz harcayarak ani hız'], ['kuiper', 'kuyruklu']);
+n('kuiper', 'Kuiper Kuşağı cismi', 'tier', '', ['Kütle ≥ 10^2', 'Buz ≥ %40', 'Dış sistem'], ['Soğuğa dayanıklılık', 'Büyük su deposu'], [], ['tno']);
+n('tno', 'Trans-Neptün cismi', 'tier', '', ['Kütle ≥ 10^3', 'Buz ≥ %40'], ['Buzlu cüce gezegene hazırlık'], [], ['gezegenimsi', 'cuce_gezegen']);
+
+n('kuyruklu', 'Kuyruklu yıldız', 'state', 'Yıldıza yaklaşınca buz buharlaşır, kuyruk oluşur.', ['Buzlu cisim', 'Kar çizgisinin içinde'], ['Gaz püskürtme 2× güçlü', 'Her saniye buz kaybı (risk)'], ['Kuyruk izi: arkanda yutulabilir toz bırakır'], ['sonmus_kuyruklu']);
+n('sonmus_kuyruklu', 'Sönmüş kuyruklu yıldız', 'tier', 'Buzunu tüketmiş kuyruklu yıldız; asteroide döner.', ['Buz < %5'], ['Geri düşme: asteroid hattına dön'], [], ['ast_m']);
+n('centaur', 'Centaur', 'state', 'Dev gezegenlerin arasında kararsız yörünge.', ['Buzlu cisim', 'İki dev gezegen arasında'], ['Sık yörünge değişimi', 'Fırlatılma riski'], [], ['kuyruklu', 'basibos']);
+n('oort', 'Oort Bulutu cismi', 'state', 'Sistemin en uzak kenarı; neredeyse bağımsız.', ['Yıldızdan çok uzak'], ['Güvenli ama çok yavaş büyüme'], [], ['yildizlararasi']);
+n('trojan', 'Truva (Trojan) asteroidi', 'state', 'Bir gezegenin L4/L5 noktasında kararlı yörünge.', ['Gezegenin 60° önünde ya da arkasında'], ['Çarpışma riski düşük (güvenli bölge)'], [], []);
+n('yildizlararasi', 'Yıldızlararası cisim', 'state', 'Hiperbolik yörünge: hiçbir sisteme bağlı değil.', ['Kaçış hızını aş'], ['Sistemler arası yolculuk', 'Yakalanmazsan uzaklaşırsın'], [], []);
+n('temas_ikili', 'Temas ikilisi', 'state', 'İki cisim yavaşça birbirine yaslanmış.', ['Düşük hızlı yakın geçiş'], ['Kayıpsız birleşme'], [], ['ast_m']);
+
+// ---- Çağ II
+n('gezegenimsi', 'Gezegenimsi cisim', 'tier', 'Gezegenlerin yapı taşı.', ['Kütle ≥ 10^3.5'], ['Kendi yörünge bölgen'], ['Bölge temizleme: yörüngendeki küçükleri çek'], ['protogezegen']);
+n('protogezegen', 'Proto-gezegen', 'tier', 'Erimiş, katmanlaşan genç dünya.', ['Kütle ≥ 10^4'], ['Katmanlaşma: metal çekirdeğe çöker', 'Bileşim artık gezegen türünü belirler'], [], ['gezegen', 'cuce_gezegen']);
+n('cuce_gezegen', 'Cüce gezegen', 'tier', 'Yuvarlak ama yörüngesini temizleyememiş.', ['Kütle 10^4 – 10^4.5', 'Yörünge temizlenmedi'], ['Buzlu cüce gezegen büyük su deposu'], [], ['gezegen']);
+n('gezegen', 'Gezegen', 'tier', 'Yörüngesinin hakimi. Tür seçimi burada yapılır.', ['Kütle ≥ 10^4.5', 'Yörünge temizlendi'], ['Uydu yakalama', 'Atmosfer'], ['Uydu yakala', 'Atmosfer kalkanı'], ['kayalik', 'mini_neptun']);
+
+n('kayalik', 'Kayalık gezegen', 'tier', '', ['Gezegen', 'Kayaç + Metal ≥ %60'], ['Kara yüzeyi', 'Yaşam için uygun taban'], [], ['super_dunya', 'lav', 'okyanus', 'demir_gez', 'col', 'kartopu', 'gelgit_kilitli']);
+n('super_dunya', 'Süper Dünya', 'tier', '', ['Kütle ≥ 10^5', 'Kayalık'], ['Güçlü çekim: daha büyük uydular', 'Kalın atmosfer'], [], ['mini_neptun']);
+n('lav', 'Lav gezegeni', 'tag', 'Erimiş yüzey.', ['Yıldıza çok yakın', 'ya da Radyoaktif ≥ %5'], ['Yaklaşan cisimleri eritir (savunma)', 'Yaşam imkânsız'], ['Lav püskürtme: yakındaki gemilere hasar'], []);
+n('okyanus', 'Okyanus gezegeni', 'tag', 'Yüzeyi tamamen su.', ['Su ≥ %30', 'Yaşanabilir bölge'], ['Yaşam uygunluğu ++', 'Deniz uygarlığı eğilimi'], [], ['prebiyotik', 'e_deniz']);
+n('demir_gez', 'Demir gezegen', 'tag', 'Neredeyse tamamen metal çekirdek.', ['Metal ≥ %50'], ['Sertlik +++, Dayanıklılık +++', 'Çok güçlü manyetik alan', 'Sanayi uygarlığı eğilimi'], [], ['e_sanayi']);
+n('col', 'Çöl gezegeni', 'tag', '', ['Yaşanabilir bölge', 'Su < %5'], ['Kara yaşamı mümkün ama yavaş'], [], ['prebiyotik']);
+n('kartopu', 'Kartopu gezegen', 'tag', 'Donmuş yüzey, altında gizli okyanus.', ['Kar çizgisinin dışında', 'Su ≥ %10'], ['Buz altında yavaş yaşam'], [], ['okyanus']);
+
+n('mini_neptun', 'Mini Neptün', 'tier', 'Gaz zarfı tutmaya başlayan gezegen.', ['Kütle ≥ 10^5', 'Gaz ≥ %20'], ['Gaz toplama ×2'], [], ['buz_devi']);
+n('buz_devi', 'Buz devi', 'tier', '', ['Kütle ≥ 10^5.5', 'Buz + Gaz ≥ %60'], ['Çok sayıda uydu yuvası'], [], ['gaz_devi']);
+n('gaz_devi', 'Gaz devi', 'tier', '', ['Kütle ≥ 10^6', 'Gaz ≥ %70'], ['Dev çekim: çevreyi temizler', 'Halka oluşturabilir'], ['Çekim kalkanı: yaklaşan asteroitleri yörüngeye saptır'], ['super_jupiter', 'sicak_jupiter', 'superpuf']);
+n('super_jupiter', 'Süper Jüpiter', 'tier', 'Neredeyse bir yıldız.', ['Kütle ≥ 10^6.5'], ['İç ısı'], [], ['bd_y']);
+n('sicak_jupiter', 'Sıcak Jüpiter', 'state', '', ['Gaz devi', 'Yıldıza çok yakın yörünge'], ['Yıldızdan enerji', 'Atmosfer yavaşça buharlaşır'], [], ['chthonian']);
+n('chthonian', 'Chthonian gezegen', 'tier', 'Gazını kaybetmiş devin çıplak çekirdeği.', ['Sıcak Jüpiter', 'Gaz < %10'], ['Geri düşme: kayalık hatta döner ama çekirdek çok serttir'], [], ['super_dunya']);
+n('superpuf', 'Süper-puf gezegen', 'tag', 'Pamuk şekeri yoğunluğunda gaz devi.', ['Gaz devi', 'Çok düşük yoğunluk'], ['Hız +', 'Dayanıklılık −'], [], []);
+
+n('basibos', 'Başıboş gezegen', 'state', '', ['Yıldızdan koptun ya da fırlatıldın'], ['Yıldız ısısı yok: yüzey donar', 'Serbest dolaşım'], [], []);
+n('gelgit_kilitli', 'Gelgit kilitli gezegen', 'state', 'Bir yüzü hep yıldıza dönük.', ['Yıldıza çok yakın kayalık gezegen'], ['Bir yüz sıcak, bir yüz soğuk', 'Sınır bölgede yaşam şansı'], [], []);
+n('pulsar_gezegeni', 'Pulsar gezegeni', 'state', '', ['Bir pulsarın etrafında yörünge'], ['Yoğun radyasyon: yaşam çok zor', 'Nadir metal zenginliği'], [], []);
+
+n('uydu_kucuk', 'Küçük uydu', 'collect', '', ['Gezegen', 'Küçük cisim yakala'], ['Çekim menzili +'], [], []);
+n('uydu_kaya', 'Kayalık uydu', 'collect', '', ['Kayaç baskın cisim yakala'], ['Dayanıklılık +'], [], []);
+n('uydu_buz', 'Buzlu uydu', 'collect', '', ['Buz baskın cisim yakala'], ['Su deposu: yaşam gezegenine su aktarımı'], [], ['uydu_okyanus']);
+n('uydu_okyanus', 'Okyanus uydusu', 'collect', '', ['Buzlu uydu + gelgit ısısı'], ['İkinci yaşam yuvası'], [], ['prebiyotik']);
+n('uydu_volkanik', 'Volkanik uydu', 'collect', '', ['Dev gezegen + yakın yörünge (gelgit ısısı)'], ['İç ısı: ana gezegene enerji'], [], []);
+n('uydu_atmosfer', 'Atmosferli uydu', 'collect', '', ['Uydu kütlesi ≥ 10^3.5'], ['Kolonileştirilebilir'], [], ['uydu_dev']);
+n('uydu_dev', 'Dev uydu', 'collect', '', ['Uydu kütlesi ≥ 10^4'], ['Güçlü gelgit: ana gezegende iç ısı ve manyetik alan desteği'], [], ['uydu_ikili']);
+n('uydu_ikili', 'İkili uydu sistemi', 'collect', '', ['İki dev uydu'], ['Kararlı yörünge: uydu kaybı yok'], [], []);
+n('halka', 'Halka sistemi', 'collect', 'Roche sınırını geçen cisim parçalanır ve halka olur.', ['Bir cisim Roche sınırının içine düşer'], ['Halka parçaları yavaşça yutulur (kütle akışı)', 'Görsel efekt'], ['Roche parçalama'], ['coban_uydu']);
+n('coban_uydu', 'Çoban uydu', 'collect', '', ['Halka + küçük uydu'], ['Halka kaybı yok, kütle akışı ×2'], [], []);
+n('yakalanmis_uydu', 'Yakalanmış (ters yörüngeli) uydu', 'collect', '', ['Hızlı geçen cismi yakala'], ['Nadir bileşim taşır'], [], []);
+
+// ---- Çağ III
+n('bd_y', 'Kahverengi cüce (Y)', 'tier', 'Başarısız yıldız: döteryum yakar.', ['Kütle ≥ 10^7'], ['Zayıf ışıma', 'Uydularını ısıtır'], [], ['bd_t']);
+n('bd_t', 'Kahverengi cüce (T)', 'tier', '', ['Kütle ≥ 10^7.2'], ['Işıma +'], [], ['bd_l']);
+n('bd_l', 'Kahverengi cüce (L)', 'tier', 'Füzyon eşiğinin kıyısında.', ['Kütle ≥ 10^7.4'], ['Işıma ++'], [], ['ms_m']);
+
+n('molekuler', 'Moleküler bulut', 'tier', 'Soğuk, yoğun gaz ve toz. Yeniden doğuş burada başlar.', ['Bulutsudan yeniden doğuş', 'ya da Gaz ≥ 10^6'], ['Metalisite bonusları uygulanır'], ['Geniş alan gaz toplama'], ['bok']);
+n('bok', 'Bok globülü', 'tier', 'Bulutun içindeki yoğun, karanlık çekirdek.', ['Kütle ≥ 10^6.5'], ['Çöküş başlar'], [], ['protoyildiz']);
+n('protoyildiz', 'Proto-yıldız', 'tier', '', ['Kütle ≥ 10^7'], ['İç ısınma'], ['Yığılma diski: çevreden kütle akışı'], ['ttauri', 'herbig', 'hh', 'ongezegen']);
+n('ttauri', 'T Tauri', 'tier', '', ['Proto-yıldız', 'Hedef kütle < 10^8.4'], ['Güçlü yıldız rüzgarı'], [], ['ms_m', 'ms_k', 'ms_g']);
+n('herbig', 'Herbig Ae/Be', 'tier', '', ['Proto-yıldız', 'Hedef kütle ≥ 10^8.4'], ['Hızlı büyüme'], [], ['ms_a', 'ms_b']);
+n('hh', 'Herbig-Haro jeti', 'state', '', ['Proto-yıldız'], ['Kutup jetleri önündekini iter'], ['Jet itmesi'], []);
+n('ongezegen', 'Öngezegen diski', 'state', 'Genç yıldızın etrafında gezegenlerin doğduğu disk.', ['Proto-yıldız ya da T Tauri'], ['Diskte gezegenimsiler doğar: kendi gezegenlerini yetiştirirsin'], ['Gezegen tohumla'], ['gezegen_sistemi']);
+
+n('ms_m', 'M · Kırmızı cüce', 'tier', '', ['Kütle ≥ 10^7.6 (hidrojen füzyonu)'], ['Yakıt çok uzun', 'Işıma zayıf'], [], ['ms_k', 'parlama', 'beyaz_cuce']);
+n('ms_k', 'K · Turuncu cüce', 'tier', '', ['Kütle ≥ 10^7.9'], ['Yaşam için en dengeli yıldız (uzun ömür, kararlı)'], [], ['ms_g', 'altdev']);
+n('ms_g', 'G · Sarı cüce', 'tier', '', ['Kütle ≥ 10^8.1'], ['Dengeli yakıt ve ışıma'], [], ['ms_f', 'altdev']);
+n('ms_f', 'F · Sarı-beyaz yıldız', 'tier', '', ['Kütle ≥ 10^8.3'], ['Işıma +, yakıt −'], [], ['ms_a', 'altdev']);
+n('ms_a', 'A · Beyaz yıldız', 'tier', '', ['Kütle ≥ 10^8.5'], ['Güçlü ışıma itmesi'], [], ['ms_b', 'altdev']);
+n('ms_b', 'B · Mavi-beyaz yıldız', 'tier', '', ['Kütle ≥ 10^9'], ['Çok güçlü, kısa yakıt'], [], ['ms_o', 'mavi_dev']);
+n('ms_o', 'O · Mavi yıldız', 'tier', '', ['Kütle ≥ 10^9.6'], ['En güçlü ışıma', 'Yakıt çok kısa'], ['Işınım fırtınası: geniş alan itme ve hasar'], ['lbv', 'mavi_superdev']);
+
+n('parlama', 'Parlama yıldızı', 'state', '', ['M cüce', 'Rastgele'], ['Periyodik patlama: kendi gezegenlerin dahil çevreye hasar'], [], []);
+n('karbon_yildizi', 'Karbon yıldızı', 'tag', 'Kabuğu karbonca zengin dev yıldız (oyunda element değil, yıldız türü).', ['Dev evresi', 'Orta kütle'], ['Toz üretir: yeniden doğuşta başlangıç tozu bonusu'], [], []);
+n('mavi_basibos', 'Mavi başıboş', 'tier', 'İki yıldızın birleşmesiyle gençleşmiş yıldız.', ['Başka bir yıldızla birleş'], ['Yakıt yenilenir', 'Sınıf atlar'], [], ['ms_a', 'ms_b']);
+n('degisen', 'Değişen yıldız (Sefeid / RR Lyrae / Mira)', 'state', '', ['Dev evresinde kararsızlık'], ['Ritmik güç: ışıma dalga dalga artar ve azalır'], [], []);
+
+n('gezegen_sistemi', 'Gezegen sistemi', 'tier', '', ['Yıldız + yörüngede ≥ 3 gezegen'], ['Sistem bonusu: tüm gezegenlere +', 'Uygarlıklar sistem içinde yayılabilir'], [], ['ikili_yildiz', 'acik_kume']);
+n('ikili_yildiz', 'İkili yıldız sistemi', 'tier', '', ['Başka bir yıldızı yörüngene yakala'], ['Kütle aktarımı (nova ve X-ışını ikilisi için şart)'], [], ['coklu_yildiz', 'nova', 'xray', 'mavi_basibos']);
+n('coklu_yildiz', 'Çoklu yıldız sistemi', 'tier', '', ['≥ 3 bağlı yıldız'], ['Karmaşık yörüngeler, büyük güç'], [], ['acik_kume']);
+
+// ---- Çağ IV
+n('altdev', 'Altdev', 'tier', '', ['Ana kol yakıtı %10’un altında (K–A)'], ['Genişleme başlar'], [], ['kirmizi_dev', 'turuncu_dev']);
+n('turuncu_dev', 'Turuncu dev', 'tier', '', ['K yıldızından'], ['Yumuşak genişleme'], [], ['yatay_kol']);
+n('kirmizi_dev', 'Kırmızı dev', 'tier', '', ['G–A yıldızından'], ['Yarıçap ×100: iç gezegenlerini yutar!'], ['Devasa yutma alanı'], ['yatay_kol']);
+n('yatay_kol', 'Yatay kol', 'tier', '', ['Helyum füzyonu başlar'], ['Kısa kararlı dönem'], [], ['agb']);
+n('agb', 'AGB yıldızı', 'tier', '', ['Helyum biter'], ['Ağır element üretimi zirvede', 'Kütle saçar'], [], ['gez_bulutsu', 'karbon_yildizi', 'degisen']);
+n('gez_bulutsu', 'Gezegenimsi bulutsu', 'tier', 'Dış katmanlar uzaya atılır.', ['AGB sonu'], ['Bulutsu: yeniden doğuş tohumu', 'Metalisite +'], [], ['beyaz_cuce', 'molekuler']);
+n('beyaz_cuce', 'Beyaz cüce', 'tier', '', ['Çekirdek kalıntısı Chandrasekhar sınırının altında'], ['Çok yoğun ve sıcak', 'Yakıt yok: yalnızca soğur'], [], ['siyah_cuce', 'nova', 'tip1a']);
+n('siyah_cuce', 'Siyah cüce', 'secret', 'Tamamen soğumuş beyaz cüce. Evrende henüz hiç yok.', ['Beyaz cüce olarak çok uzun bekle'], ['Gizli başarım'], [], []);
+n('nova', 'Nova', 'event', '', ['Beyaz cüce', 'İkili sistemde yoldaştan gaz çal'], ['Parlak patlama: çevreye hasar', 'Beyaz cüce hayatta kalır'], [], ['beyaz_cuce']);
+n('tip1a', 'Tip Ia süpernova', 'event', 'Oyunun bilinçli tuzağı.', ['Beyaz cüce kütlesi Chandrasekhar sınırını aşar'], ['Kalıntısız yok oluş!', 'Büyük demir bulutu: yeniden doğuşta Metal bonusu'], [], ['molekuler']);
+
+n('mavi_dev', 'Mavi dev', 'tier', '', ['B yıldızı yakıtı biter'], ['Işıma ++'], [], ['kirmizi_superdev']);
+n('kirmizi_superdev', 'Kırmızı süperdev', 'tier', '', ['Genişleme'], ['Dev yutma alanı', 'Kararsız'], [], ['mavi_superdev', 'supernova', 'thorne']);
+n('mavi_superdev', 'Mavi süperdev', 'tier', '', ['Kırmızı süperdevden geri büzülme ya da O yıldızı'], ['Işıma +++'], [], ['kirmizi_superdev', 'supernova', 'hipergiant']);
+n('supernova', 'Süpernova', 'event', '', ['Çekirdek demire döner: çöküş'], ['Dev patlama: çevreyi temizler', 'Ağır element bulutu (kalıcı metalisite)'], [], ['notron', 'sn_kalintisi', 'kd_yildiz']);
+n('notron', 'Nötron yıldızı', 'tier', '', ['Kalıntı 10^9 – 10^9.4'], ['Aşırı yoğun: sertlik maksimum'], [], ['pulsar', 'magnetar', 'kilonova', 'kuark']);
+n('pulsar', 'Pulsar', 'tier', '', ['Nötron yıldızı + hızlı dönüş'], ['Pulsar ışını'], ['Dönen ışın: önüne geleni keser'], ['milisaniye', 'pwn', 'pulsar_gezegeni']);
+n('magnetar', 'Magnetar', 'tier', '', ['Nötron yıldızı + güçlü manyetik alan'], ['Manyetik şok'], ['Manyetik şok: gemileri devre dışı bırakır'], []);
+n('milisaniye', 'Milisaniye pulsarı', 'tier', '', ['Pulsar + yoldaştan kütle yut'], ['Işın hızı ×10'], [], []);
+n('xray', 'X-ışını ikilisi', 'state', '', ['Kalıntı + yoldaş yıldız'], ['Sürekli kütle akışı'], [], ['milisaniye', 'mikrokuasar']);
+
+n('lbv', 'LBV (Parlak mavi değişen)', 'tier', '', ['O yıldızının yakıtı azalır'], ['Seçim: kütle saç ya da tut'], ['Kütle saç: bulutsu bırakır, kara delik yerine nötron yıldızına düşersin'], ['hipergiant', 'wolf_rayet']);
+n('hipergiant', 'Hipergiant', 'tier', 'En büyük yıldız formu.', ['Kütle ≥ 10^10'], ['Muazzam ışıma ve çekim'], [], ['wolf_rayet', 'cift_kararsizlik', 'sari_hipergiant']);
+n('sari_hipergiant', 'Sarı hipergiant', 'tag', '', ['Hipergiant geçiş evresi'], ['Kararsız: kütle kaybı'], [], []);
+n('wolf_rayet', 'Wolf-Rayet', 'tier', 'Zarfı atılmış çıplak, sıcak çekirdek.', ['Dış katmanlar atıldı'], ['Güçlü rüzgar: çevreyi iter'], [], ['supernova', 'hipernova']);
+n('hipernova', 'Hipernova / Gama ışını patlaması', 'event', '', ['Wolf-Rayet çöküşü + hızlı dönüş'], ['Işın: sistemler arası hasar'], [], ['kd_yildiz']);
+n('cift_kararsizlik', 'Çift kararsızlık süpernovası', 'event', '', ['Kütle ≥ 10^11 (aşırı)'], ['Kalıntı yok: tamamen yok oluş', 'Devasa metal bulutu'], [], ['molekuler']);
+
+n('sn_kalintisi', 'Süpernova kalıntısı', 'tier', '', ['Süpernova'], ['Yeniden doğuş kapısı'], [], ['molekuler']);
+n('pwn', 'Pulsar rüzgar bulutsusu', 'state', '', ['Pulsar'], ['Çevredeki gemilere hasar'], [], []);
+n('kilonova', 'Kilonova', 'event', '', ['İki nötron yıldızı birleşir'], ['Altın, platin: nadir metal yağmuru', 'Kara delik doğabilir'], [], ['kd_yildiz', 'nadirmetal']);
+n('kuark', 'Kuark yıldızı', 'secret', '', ['Nötron yıldızı kütlesi 10^9.35 – 10^9.4 (dar pencere)'], ['Teorik gizli form'], [], []);
+n('thorne', 'Thorne-Żytkow nesnesi', 'secret', 'Dışı dev, içi nötron yıldızı.', ['Bir nötron yıldızı kırmızı süperdevin içine girer'], ['Egzotik gizli form'], [], []);
+
+n('kd_yildiz', 'Yıldız kütleli kara delik', 'tier', '', ['Kalıntı ≥ 10^9.4'], ['Olay ufku: değen her şey yutulur'], ['Olay ufku', 'Gelgit parçalama'], ['kd_orta', 'mikrokuasar', 'tde', 'kd_birlesme']);
+n('kd_orta', 'Orta kütleli kara delik', 'tier', '', ['Kütle ≥ 10^11'], ['Küme merkezlerinde baskın'], [], ['kd_super']);
+n('kd_super', 'Süper kütleli kara delik', 'tier', '', ['Kütle ≥ 10^13'], ['Galaksi çekirdeği olabilir'], [], ['aktif', 'cuce_galaksi']);
+n('mikrokuasar', 'Mikrokuasar', 'state', '', ['Yıldız kütleli KD + yoldaştan yutma'], ['Küçük jetler'], [], []);
+n('aktif', 'Aktif kara delik', 'state', '', ['Yutma hızı > eşik'], ['Yığılma diski parlar: enerji'], [], ['kuasar', 'seyfert']);
+n('kuasar', 'Kuasar', 'state', '', ['Yutma hızı çok yüksek'], ['Evrenin en parlak cismi', 'Çevrede yıldız oluşumunu durdurur'], [], ['blazar', 'radyo']);
+n('blazar', 'Blazar', 'state', '', ['Kuasar jeti hedefe çevrili'], ['Galaksiler arası hasar'], ['Blazar ışını: nişan alınabilir dev jet'], []);
+n('tde', 'Gelgit bozulma olayı', 'event', '', ['Kara delik bir yıldızı parçalar'], ['Büyük kütle kazanımı ve parlama'], [], []);
+n('kd_birlesme', 'Kara delik birleşmesi', 'event', '', ['İki kara delik'], ['Kütleçekim dalgası: tüm haritada şok', 'Kütleler toplanır'], [], ['kd_orta', 'kd_super']);
+
+// ---- Çağ V
+n('acik_kume', 'Açık küme', 'tier', 'Genç ve dağınık.', ['≥ 10 bağlı yıldız'], ['Yeni yıldız üretimi +'], [], ['kuresel_kume']);
+n('kuresel_kume', 'Küresel küme', 'tier', 'Yaşlı ve yoğun.', ['≥ 100 bağlı yıldız'], ['Kararlı: dayanıklılık +'], [], ['cuce_galaksi']);
+n('bulutsu_emisyon', 'Emisyon bulutsusu (H II)', 'tag', '', ['Genç sıcak yıldız + gaz'], ['Yıldız doğum hızı ++'], [], []);
+n('bulutsu_yansima', 'Yansıma bulutsusu', 'tag', '', ['Toz + yakın yıldız'], ['Toz kaynağı'], [], []);
+n('bulutsu_karanlik', 'Karanlık bulutsu', 'tag', '', ['Yoğun soğuk toz'], ['Saklanma bölgesi: gemiler göremez'], [], []);
+
+n('cuce_galaksi', 'Cüce galaksi', 'tier', '', ['Süper kütleli KD ya da küresel küme', 'Karanlık madde halesi', '≥ 10^3 yıldız'], ['Galaksi ölçeği açılır'], [], ['duzensiz', 'sarmal', 'uydu_galaksi']);
+n('duzensiz', 'Düzensiz galaksi', 'tier', '', ['Kaotik yapı'], ['Yıldız patlaması şansı +'], [], ['sarmal']);
+n('sarmal', 'Sarmal galaksi', 'tier', '', ['Dönen düzenli disk', '≥ 10^5 yıldız'], ['Sarmal kollar: yıldız üretim bandı'], ['Kol oluştur'], ['cubuklu', 'lentikuler', 'galaksi_birlesmesi', 'galaksi_grubu']);
+n('cubuklu', 'Çubuklu sarmal', 'tag', '', ['Merkezde çubuk yapı'], ['Merkeze gaz akışı: KD büyür'], [], []);
+n('lentikuler', 'Lentiküler galaksi', 'tag', '', ['Gazını tüketmiş sarmal'], ['Kararlı, az yıldız doğumu'], [], []);
+n('galaksi_birlesmesi', 'Galaksi birleşmesi', 'event', '', ['İki galaksi çarpışır'], ['Yıldız patlaması', 'Sonuç eliptik galaksi'], ['Galaksi birleştir'], ['eliptik', 'yildiz_patlamasi']);
+n('eliptik', 'Eliptik galaksi', 'tier', 'Dev, yaşlı, kararlı.', ['Galaksi birleşmesi'], ['Dayanıklılık +++'], [], ['galaksi_grubu']);
+
+n('uydu_galaksi', 'Uydu galaksi', 'state', '', ['Büyük bir galaksinin yörüngesinde'], ['Yutulabilir kaynak'], [], []);
+n('yildiz_patlamasi', 'Yıldız patlaması galaksisi', 'state', '', ['Birleşme ya da gaz akını'], ['Yıldız üretimi ×10 (kısa süre)'], [], []);
+n('seyfert', 'Seyfert galaksi', 'state', '', ['Galaksi + aktif KD'], ['Merkez enerjisi'], [], []);
+n('radyo', 'Radyo galaksi', 'state', '', ['Galaksi + jetli KD'], ['Devasa jet lobları'], [], []);
+
+n('galaksi_grubu', 'Galaksi grubu', 'tier', '', ['≥ 3 bağlı galaksi'], ['Grup bonusu'], [], ['galaksi_kumesi']);
+n('galaksi_kumesi', 'Galaksi kümesi', 'tier', '', ['≥ 50 galaksi'], ['Küme ölçeği'], [], ['superkume']);
+n('superkume', 'Süperküme', 'tier', '', ['≥ 10 küme'], ['Ağ bağlantıları açılır'], ['Filament bağla'], ['kozmik_ag', 'filament']);
+n('kozmik_ag', 'Kozmik Ağ', 'tier', 'Final: evrenin iskeleti sensin.', ['Filament ve duvar bağlantıları tamam', 'Entropi sayacı bitmeden'], ['Oyun sonu', 'Yeni Evren+: fizik sabitlerini değiştir'], [], []);
+n('filament', 'Filament', 'tag', 'Galaksileri birbirine bağlayan iplik.', ['İki küme arasında bağlantı'], ['Kaynak akışı'], [], ['duvar']);
+n('duvar', 'Duvar', 'tag', 'Filamentlerin oluşturduğu tabaka.', ['Birden çok filament'], ['Kozmik Ağ’a ilerleme'], [], ['kozmik_ag']);
+n('bosluk', 'Kozmik boşluk', 'state', 'Ağın arasındaki boş bölgeler.', ['Ağın arasında'], ['Kaynak yok, hızlı yolculuk', 'Rakip filolar pusu kurar'], [], []);
+
+// ---- Yaşam ve Uygarlık
+n('prebiyotik', 'Prebiyotik çorba', 'tier', 'Yaşamın kimyası hazır.', ['Su ≥ %10', 'Yaşanabilir bölge (0–100 °C)', 'Atmosfer'], ['Yaşam sayacı başlar', 'Su oranı yaşamı hızlandırır'], [], ['mikrobiyal']);
+n('mikrobiyal', 'Mikrobiyal yaşam', 'tier', '', ['Prebiyotik + zaman (~2 dk)'], ['Atmosfere yavaşça oksijen'], [], ['cok_hucreli']);
+n('cok_hucreli', 'Çok hücreli yaşam', 'tier', '', ['Oksijen ≥ %10', 'Manyetik alan (metal çekirdek)'], ['Biyokütle üretimi'], [], ['okyanus_yasami', 'kara_yasami']);
+n('okyanus_yasami', 'Okyanus yaşamı', 'tier', '', ['Su ≥ %30'], ['Dayanıklı: çarpışmalara karşı tampon'], [], ['karmasik']);
+n('kara_yasami', 'Kara yaşamı', 'tier', '', ['Kıta (Kayaç ≥ %30)'], ['Hızlı çeşitlenme'], [], ['karmasik']);
+n('karmasik', 'Karmaşık yaşam', 'tier', '', ['Biyokütle eşiği', 'Son 3 dk içinde yok oluş yok'], ['Biyokütle ×2'], [], ['akilli']);
+n('akilli', 'Akıllı tür', 'tier', '', ['Karmaşık yaşam'], ['Uygarlık eğilimi gezegen bileşiminden seçilir'], [], ['tip0', 'e_sanayi', 'e_deniz', 'e_suru', 'e_enerji']);
+
+n('tip0', 'Tip 0 · Gezegen öncesi uygarlık', 'tier', '', ['Akıllı tür'], ['Sonda ve Madenci gemileri', 'Teknoloji puanı'], ['Tutum: Topla / Keşfet'], ['tip1']);
+n('tip1', 'Tip I · Gezegen uygarlığı', 'tier', '', ['Teknoloji ≥ 100', 'Gezegenin tüm enerjisi'], ['Avcı, Fırkateyn, Kolonici', 'Otomatik asteroid savunması'], ['Tutum: Savun / Saldır'], ['tip2']);
+n('tip2', 'Tip II · Yıldız uygarlığı', 'tier', '', ['Gezegen sistemi', 'Dyson sürüsü %50'], ['Taşıyıcı, Dyson inşaatçısı', 'Yıldız motoru: sistemini hareket ettir'], [], ['tip3']);
+n('tip3', 'Tip III · Galaktik uygarlık', 'tier', '', ['Galaksi ölçeği', '≥ 100 kolonize sistem'], ['Dünya gemisi', 'Kütle kapısı: galaksi içinde ışınlanma'], [], []);
+
+n('e_sanayi', 'Sanayi eğilimi', 'tag', '', ['Metal ≥ %35 gezegen'], ['Ağır zırhlı gemiler', 'Gemi gövdesi +%40'], [], []);
+n('e_deniz', 'Deniz eğilimi', 'tag', '', ['Okyanus gezegeni'], ['Kalkan ve onarım gemileri', 'Biyoteknoloji'], [], []);
+n('e_suru', 'Sürü eğilimi', 'tag', '', ['Hafif gezegen (gaz + su ≥ %40)'], ['Ucuz, çok sayıda hafif gemi'], [], []);
+n('e_enerji', 'Enerji eğilimi', 'tag', '', ['Yüksek iç ısı (radyoaktif ya da volkanik)'], ['Işın silahları +', 'Kalkan +'], [], []);
+
+n('yok_olus', 'Kitlesel yok oluş', 'event', '', ['Büyük çarpışma (gezegen kütlesinin ≥ %1’i)', 'ya da güçlü parlama + manyetik alan yok'], ['Yaşam 1–3 evre geri düşer'], [], []);
+n('buzul', 'Buzul çağı', 'state', '', ['Yıldızdan uzaklaşma'], ['Yaşam büyümesi −%50'], [], []);
+n('sera', 'Kaçak sera etkisi', 'state', '', ['Yıldıza çok yakın + kalın atmosfer'], ['Okyanuslar buharlaşır: yaşam ölür'], [], []);
+n('radyasyon', 'Radyasyon fırtınası', 'state', '', ['Pulsar, magnetar ya da süpernova yakını', 'ya da Radyoaktif > %8'], ['Yaşam hasarı (manyetik alan azaltır)'], [], []);
+
+// Şeritler: [çağ, başlık, düğümler]
+const LANES = [
+  [0, 'Başlangıç', ['plazma', 'hhe', 'pop3', 'ilksn']],
+  [0, 'Ortam ve gizli', ['karanlik', 'ilkelkd']],
+  [1, 'Kaya ana hattı', ['toz', 'kayaparca', 'meteoroid', 'ast_s', 'ast_m', 'ast_l', 'ast_xl']],
+  [1, 'Asteroid türleri', ['metalik', 'silikat', 'gazli', 'hidratli', 'radyoaktif', 'nadirmetal', 'moloz']],
+  [1, 'Buz dalı', ['buzlukaya', 'kuiper', 'tno']],
+  [1, 'Yörünge durumları', ['kuyruklu', 'sonmus_kuyruklu', 'centaur', 'oort', 'trojan', 'yildizlararasi', 'temas_ikili']],
+  [2, 'Gezegen oluşumu', ['gezegenimsi', 'protogezegen', 'cuce_gezegen', 'gezegen']],
+  [2, 'Kaya dalı', ['kayalik', 'super_dunya', 'lav', 'okyanus', 'demir_gez', 'col', 'kartopu']],
+  [2, 'Gaz dalı', ['mini_neptun', 'buz_devi', 'gaz_devi', 'super_jupiter', 'sicak_jupiter', 'chthonian', 'superpuf']],
+  [2, 'Gezegen durumları', ['basibos', 'gelgit_kilitli', 'pulsar_gezegeni']],
+  [2, 'Uydular ve halkalar', ['uydu_kucuk', 'uydu_kaya', 'uydu_buz', 'uydu_okyanus', 'uydu_volkanik', 'uydu_atmosfer', 'uydu_dev', 'uydu_ikili', 'halka', 'coban_uydu', 'yakalanmis_uydu']],
+  [3, 'Kahverengi cüce köprüsü', ['bd_y', 'bd_t', 'bd_l']],
+  [3, 'Yıldız doğumu', ['molekuler', 'bok', 'protoyildiz', 'ttauri', 'herbig', 'hh', 'ongezegen']],
+  [3, 'Ana kol', ['ms_m', 'ms_k', 'ms_g', 'ms_f', 'ms_a', 'ms_b', 'ms_o']],
+  [3, 'Yıldız durumları', ['parlama', 'karbon_yildizi', 'mavi_basibos', 'degisen']],
+  [3, 'Sistemler', ['gezegen_sistemi', 'ikili_yildiz', 'coklu_yildiz']],
+  [4, 'Orta kütle (K–A)', ['altdev', 'turuncu_dev', 'kirmizi_dev', 'yatay_kol', 'agb', 'gez_bulutsu', 'beyaz_cuce', 'siyah_cuce']],
+  [4, 'Beyaz cüce olayları', ['nova', 'tip1a']],
+  [4, 'Yüksek kütle (B)', ['mavi_dev', 'kirmizi_superdev', 'mavi_superdev', 'supernova', 'notron', 'pulsar', 'magnetar', 'milisaniye', 'xray']],
+  [4, 'Çok yüksek kütle (O)', ['lbv', 'hipergiant', 'sari_hipergiant', 'wolf_rayet', 'hipernova', 'cift_kararsizlik']],
+  [4, 'Kalıntılar', ['sn_kalintisi', 'pwn', 'kilonova', 'kuark', 'thorne']],
+  [4, 'Kara delikler', ['kd_yildiz', 'kd_orta', 'kd_super', 'mikrokuasar', 'aktif', 'kuasar', 'blazar', 'tde', 'kd_birlesme']],
+  [5, 'Kümeler ve bulutsular', ['acik_kume', 'kuresel_kume', 'bulutsu_emisyon', 'bulutsu_yansima', 'bulutsu_karanlik']],
+  [5, 'Galaksiler', ['cuce_galaksi', 'duzensiz', 'sarmal', 'cubuklu', 'lentikuler', 'galaksi_birlesmesi', 'eliptik']],
+  [5, 'Galaksi durumları', ['uydu_galaksi', 'yildiz_patlamasi', 'seyfert', 'radyo']],
+  [5, 'Büyük yapılar', ['galaksi_grubu', 'galaksi_kumesi', 'superkume', 'filament', 'duvar', 'kozmik_ag', 'bosluk']],
+  [6, 'Yaşamın doğuşu', ['prebiyotik', 'mikrobiyal', 'cok_hucreli', 'okyanus_yasami', 'kara_yasami', 'karmasik', 'akilli']],
+  [6, 'Uygarlık (Kardashev)', ['tip0', 'tip1', 'tip2', 'tip3']],
+  [6, 'Uygarlık eğilimleri', ['e_sanayi', 'e_deniz', 'e_suru', 'e_enerji']],
+  [6, 'Tehditler', ['yok_olus', 'buzul', 'sera', 'radyasyon']],
+];
+
+// ---- Doğrulama: her düğüm tam bir şeritte, her bağlantı var olan bir düğüme gitmeli
+const errors = [];
+for (const [era, title, ids] of LANES) for (const id of ids) {
+  if (!N[id]) errors.push(`Şeritte tanımsız düğüm: ${id}`);
+  else if (N[id].era !== undefined) errors.push(`İki şeritte birden: ${id}`);
+  else Object.assign(N[id], { era, lane: title });
+}
+const PREV = {};
+for (const node of Object.values(N)) {
+  if (node.era === undefined) errors.push(`Hiçbir şeritte değil: ${node.id}`);
+  if (!KIND[node.kind]) errors.push(`Bilinmeyen tür: ${node.id} (${node.kind})`);
+  for (const t of node.next) {
+    if (!N[t]) errors.push(`${node.id} → tanımsız ${t}`);
+    else (PREV[t] ??= []).push(node.id);
+  }
+}
+// ---- Ağacı çiz
+const tree = document.getElementById('tree');
+const sup = (s) => s.replace(/10\^([\d.]+)/g, '10<sup>$1</sup>');
+const esc = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+ERAS.forEach(([name, sub], era) => {
+  const sec = document.createElement('div');
+  sec.className = 'era';
+  sec.id = 'era-' + era;
+  sec.innerHTML = `<div class="era-h"><strong>${name}</strong><span>${sub}</span></div>`;
+  for (const [e, title, ids] of LANES) {
+    if (e !== era) continue;
+    const lane = document.createElement('div');
+    lane.className = 'lane';
+    lane.innerHTML = `<div class="lane-t">${title}</div>`;
+    const chips = document.createElement('div');
+    chips.className = 'chips';
+    ids.forEach((id, i) => {
+      const node = N[id];
+      if (!node) return;
+      if (i > 0) {
+        const linked = N[ids[i - 1]]?.next.includes(id);
+        const sep = document.createElement('span');
+        sep.className = linked ? 'arrow' : 'gap';
+        sep.textContent = linked ? '→' : '';
+        chips.append(sep);
+      }
+      const out = node.next.filter((t) => N[t] && N[t].lane !== node.lane).length;
+      const b = document.createElement('button');
+      b.className = `chip k-${node.kind}`;
+      b.dataset.id = id;
+      b.style.setProperty('--c', KIND[node.kind][1]);
+      b.innerHTML = esc(node.name) + (out ? `<span class="x">⤳${out}</span>` : '');
+      b.title = KIND[node.kind][0];
+      b.onclick = () => select(id === selected ? null : id);
+      chips.append(b);
+    });
+    lane.append(chips);
+    sec.append(lane);
+  }
+  tree.append(sec);
+
+  const jump = document.createElement('button');
+  jump.className = 'era-btn';
+  jump.textContent = name.split(' · ')[0] === name ? name : name.split(' · ')[0];
+  jump.title = name;
+  jump.onclick = () => sec.scrollIntoView({ block: 'start' });
+  document.getElementById('eras').append(jump);
+});
+
+// ---- Tür filtreleri
+const kindsOn = new Set(Object.keys(KIND));
+const kindsBox = document.getElementById('kinds');
+for (const [k, [label, color]] of Object.entries(KIND)) {
+  const b = document.createElement('button');
+  b.className = 'kind-btn';
+  b.innerHTML = `<i style="background:${color}"></i>${label}`;
+  b.onclick = () => {
+    kindsOn.has(k) ? kindsOn.delete(k) : kindsOn.add(k);
+    b.classList.toggle('off', !kindsOn.has(k));
+    applyFilters();
+  };
+  kindsBox.append(b);
+}
+const q = document.getElementById('q');
+q.oninput = applyFilters;
+function applyFilters() {
+  const s = q.value.trim().toLocaleLowerCase('tr');
+  for (const chip of document.querySelectorAll('.chip')) {
+    const node = N[chip.dataset.id];
+    chip.classList.toggle('hidden', !kindsOn.has(node.kind));
+    const hay = [node.name, node.desc, ...node.req, ...node.gives, ...node.abil].join(' ').toLocaleLowerCase('tr');
+    chip.classList.toggle('nomatch', !!s && !hay.includes(s));
+  }
+}
+
+// ---- Seçim ve ayrıntı paneli
+let selected = null;
+const panel = document.getElementById('panel');
+const wrap = document.getElementById('treeWrap');
+function list(title, items) {
+  return items.length ? `<h5>${title}</h5><ul>${items.map((x) => `<li>${sup(esc(x))}</li>`).join('')}</ul>` : '';
+}
+function links(title, ids) {
+  if (!ids?.length) return '';
+  return `<h5>${title}</h5><div class="links">${ids
+    .map((id) => `<button class="chip k-${N[id].kind}" style="--c:${KIND[N[id].kind][1]}" data-go="${id}">${esc(N[id].name)}</button>`)
+    .join('')}</div>`;
+}
+function select(id) {
+  selected = id;
+  tree.classList.toggle('has-sel', !!id);
+  wrap.classList.toggle('has-panel', !!id);
+  const rel = new Set(id ? [...N[id].next, ...(PREV[id] ?? [])] : []);
+  for (const chip of document.querySelectorAll('#tree .chip')) {
+    chip.classList.toggle('sel', chip.dataset.id === id);
+    chip.classList.toggle('rel', rel.has(chip.dataset.id));
+  }
+  if (!id) return;
+  const node = N[id];
+  panel.innerHTML =
+    `<button class="close" aria-label="Kapat">×</button>` +
+    `<h3>${esc(node.name)}</h3>` +
+    `<div class="meta"><span class="pill" style="border-color:${KIND[node.kind][1]}">${KIND[node.kind][0]}</span>` +
+    `<span class="pill">${ERAS[node.era][0]}</span><span class="pill">${node.lane}</span></div>` +
+    (node.desc ? `<p>${esc(node.desc)}</p>` : '') +
+    list('Gereksinimler', node.req) +
+    list('Kazanımlar ve etkiler', node.gives) +
+    list('Yetenekler', node.abil) +
+    links('Önceki', PREV[id]) +
+    links('Sonraki', node.next);
+  panel.querySelector('.close').onclick = () => select(null);
+  for (const b of panel.querySelectorAll('[data-go]')) {
+    b.onclick = () => {
+      select(b.dataset.go);
+      document.querySelector(`#tree .chip[data-id="${b.dataset.go}"]`)?.scrollIntoView({ block: 'center', inline: 'center' });
+    };
+  }
+}
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') select(null); });
+
+// ---- Çarpışma modeli (Çarpışma ve Dönüşüm sekmesindeki tüm sayılar buradan gelir)
+const MAT = {
+  metal:   { ad: 'Metal',    renk: '#9fb0c8', rho: 7.8, D: 2.0, H: 0.8,  c: 0.5, isi: '5 (erir)',        kop: '%25 parça, %75 toz' },
+  silikat: { ad: 'Kayaç',    renk: '#c9a27a', rho: 3.0, D: 1.0, H: 0.5,  c: 1.0, isi: '3 (erir)',        kop: '%10 parça, %90 toz' },
+  buz:     { ad: 'Su / Buz', renk: '#6fd3ff', rho: 0.9, D: 0.4, H: 0.2,  c: 2.0, isi: '1 (buharlaşır)',  kop: 'Tamamı buharlaşır' },
+  gaz:     { ad: 'Gaz',      renk: '#ffd27a', rho: 0.2, D: 0.1, H: 0,    c: 1.0, isi: '0 (hep uçar)',    kop: 'Tamamı buharlaşır' },
+  radyo:   { ad: 'Radyoaktif', renk: '#7dff8a', rho: 9.0, D: 1.2, H: 0.6, c: 0.5, isi: '— (içten ısıtır)', kop: '%10 parça, %90 toz' },
+};
+const PRESETS = {
+  baslangic:     ['Başlangıç tozu', { silikat: 0.8, metal: 0.1, buz: 0.08, gaz: 0.02 }],
+  metalikOyuncu: ['Metalik oyuncu (%50 metal)', { metal: 0.5, silikat: 0.45, buz: 0.05 }],
+  suOyuncu:      ['Su bazlı oyuncu (%30 su)', { buz: 0.3, silikat: 0.65, metal: 0.05 }],
+  gazOyuncu:     ['Gaz zengini oyuncu (%20 gaz)', { gaz: 0.2, buz: 0.2, silikat: 0.55, metal: 0.05 }],
+  metalik:       ['Metalik asteroid (%70 metal)', { metal: 0.7, silikat: 0.3 }],
+  silikat:       ['Kayaç asteroid', { silikat: 0.85, metal: 0.15 }],
+  gazli:         ['Gaz zengini asteroid', { gaz: 0.45, buz: 0.35, silikat: 0.2 }],
+  hidratli:      ['Su bazlı asteroid', { buz: 0.55, silikat: 0.4, gaz: 0.05 }],
+  buzlu:         ['Buzlu kaya (mavi)', { buz: 0.7, gaz: 0.15, silikat: 0.15 }],
+};
+// G ve itki ölçek birimindedir (oyuncunun çapı = 1): aynı kütle oranı her kademede aynı çekimi verir.
+// G oyunda ölçülerek seçildi: 4,6’da her cisim çekince büyük kayalar yoğun bir kuşağı 20 sn’de yuttu (kalan %13); 0,12’de %62 kalıyor (çekimsiz %78).
+// İtki oyuncunun başlangıç ivmesi (500 birim/sn², çapı 32): 15,6 çap/sn². Büyüdükçe çap cinsinden düşer (boyut^−0,6).
+const C = { Q0: 40, vY: 8, heatKin: 1.5, heatFall: 2, startR: 16, piece: 0.10, metalPiece: 0.15, G: 0.12, thrust: 15.6, deathD: 5, eaten: 1.15 };
+// Çekim kütlesi (rules.ts pullMass): senden ağır cisim daha sert çeker, güçlenme en fazla 10 kat.
+const pullMass = (m, you) => 2 * m * Math.min(10, (m / you) ** 0.5);
+// Dayanıklılık: fazların ağırlıklı geometrik ortalaması (rules.ts durability).
+const dur = (comp) => Math.exp(Object.entries(comp).reduce((s, [e, f]) => s + f * Math.log(MAT[e].D), 0));
+const TIERS = [[1, 'Kozmik toz'], [10 ** 0.5, 'Kaya parçası'], [10, 'Meteoroid'], [10 ** 1.5, 'Küçük asteroid'], [100, 'Orta asteroid'], [10 ** 2.5, 'Büyük asteroid'], [1000, 'Dev asteroid'], [10 ** 3.5, 'Gezegenimsi cisim']];
+
+const mix = (comp, key) => Object.entries(comp).reduce((s, [e, f]) => s + f * MAT[e][key], 0);
+const tierOf = (m) => TIERS.filter(([t]) => m >= t).pop()?.[1] ?? 'Kozmik toz';
+/** Where m sits between its tier and the next: for the "X kaldı" progress bar. */
+function progress(m) {
+  const i = Math.max(0, TIERS.findLastIndex(([t]) => m >= t));
+  if (i === TIERS.length - 1) return { name: TIERS[i][1], last: true };
+  const [cur] = TIERS[i], [next, nextName] = TIERS[i + 1];
+  return { name: TIERS[i][1], nextName, next, left: next - m, frac: Math.max(0, (m - cur) / (next - cur)), meals: Math.ceil(Math.log(next / m) / Math.log(1.1)) };
+}
+const fmt = (x, dp = 1) => x.toLocaleString('tr', { maximumFractionDigits: dp, minimumFractionDigits: 0 });
+const pct = (x) => '%' + fmt(x * 100, 0);
+const heatState = (t, comp) => (t > 8 ? 'Buharlaşma' : t > 5 ? 'Erimiş metal' : t > 3 ? 'Erimiş yüzey' : t > 1 ? (comp.buz ? 'Buz kaynıyor' : 'Isındı') : 'Normal');
+const lossFrac = (d) => (d < 0.1 ? 0 : d < 1 ? (0.5 * (d - 0.1)) / 0.9 : 1 - 0.5 / d);
+
+/** One body's share of a collision with another. */
+function side(m, comp, mo, compo, v, cracks) {
+  const Q = 0.5 * v * v * (mo / (m + mo)) ** 2 * (0.5 + mix(compo, 'H')) / (0.5 + mix(comp, 'H'));
+  const qs = C.Q0 * dur(comp) * m ** 0.2 * (1 - 0.1 * cracks);
+  const d = Q / qs, L = lossFrac(d), lost = m * L;
+  const vapor = lost * ((comp.buz ?? 0) + (comp.gaz ?? 0));
+  const pieces = (lost - vapor) * (C.piece + C.metalPiece * (comp.metal ?? 0));
+  // Isı hıza bağlı (rules.ts impactHeat): s = karşı cismin payı, v kendi çapın/sn, r yarıçap (birim).
+  const s = mo / (m + mo), r = 4 * Math.cbrt((3 * m) / mix(comp, 'rho'));
+  const heat = Math.min(10, C.heatKin * s * (v / C.vY) ** 2 + C.heatFall * s * s * Math.sqrt(r / C.startR));
+  return { comp, Q, qs, d, L, lost, vapor, pieces, dust: lost - vapor - pieces, rest: m - lost, heat };
+}
+/** Gravity between player A and target B, in player units (player diameter = 1, player mass = 1). */
+function grav(mA, cA, mB, cB) {
+  const q = mB / mA, rB = 0.5 * Math.cbrt(q * mix(cA, 'rho') / mix(cB, 'rho')), contact = 0.5 + rB;
+  return {
+    rB, contact,
+    vEsc: Math.sqrt((2 * C.G * (pullMass(q, 1) + pullMass(1, 1))) / contact), // falling from far away, you hit at least this fast (rules.ts fallSpeed)
+    gSurf: (C.G * pullMass(q, 1)) / contact ** 2, // B's pull on the player at contact
+    rTrap: Math.sqrt((C.G * pullMass(q, 1)) / C.thrust), // inside this the pull beats full thrust: point of no return
+    rFeel: Math.sqrt((C.G * pullMass(q, 1)) / (0.1 * C.thrust)), // pull is 10% of thrust: you start to feel it
+  };
+}
+/**
+ * Çarpışma rejimleri (oyundaki rules.ts collide ile aynı; burada hep kafa kafaya, sıyırma yok). Hızlar oyuncunun
+ * çapı/sn; her taraf hasarı KENDİ çapı cinsinden alır, yapışma hızı ağır olanın çapı cinsindendir.
+ */
+function collide(mA, cA, mB, cB, v, cracks = 0) {
+  const g = grav(mA, cA, mB, cB), vi = Math.hypot(v, g.vEsc); // energy: approach speed plus the fall
+  const dB = 2 * g.rB, aT = mA >= mB, vm = C.vY * (aT ? 1 : dB); // B's diameter in yours; stick speed in the heavier's diameters
+  const A = side(mA, cA, mB, cB, vi, cracks), B = side(mB, cB, mA, cA, vi / dB, 0);
+  let verdict, color, final = A.rest;
+  if (vi < vm && aT) [verdict, color, final] = ['Tam birleşme', 'var(--collect)', mA + mB];
+  else if (vi < vm && mB >= C.eaten * mA) [verdict, color, final] = ['Yutuldun', '#ff3355', 0];
+  else if (A.d >= C.deathD) [verdict, color, final] = ['Öldün', '#ff3355', 0];
+  else if (A.d >= 1) [verdict, color] = ['Oyuncu parçalandı', 'var(--event)'];
+  else if (aT && vi < 3 * vm) [verdict, color, final] = ['Kısmi birikim', 'var(--tag)', A.rest + ((3 * vm - vi) / (2 * vm)) * B.rest];
+  else if (vi < vm) [verdict, color] = ['Hafif sekme', '#ff9f43'];
+  else [verdict, color] = [B.d >= C.deathD ? 'Sekme, hedef yok oldu' : B.d >= 1 ? 'Sekme, hedef parçalandı' : 'Sekme', '#ff9f43'];
+  return { A, B, g, vi, vm, verdict, color, final };
+}
+
+// Malzeme tablosu
+document.getElementById('matTable').innerHTML =
+  '<tr><th>Element</th><th>Yoğunluk</th><th>Dayanıklılık (D)</th><th>Sertlik (H)</th><th>Isı kapasitesi</th><th>Erime / buharlaşma ısısı</th><th>Çarpışmada kopan kısım</th></tr>' +
+  Object.values(MAT).map((m) => `<tr><td><i class="el" style="background:${m.renk}"></i><b>${m.ad}</b></td><td>${fmt(m.rho)}</td><td>${fmt(m.D)}</td><td>${fmt(m.H, 2)}</td><td>${fmt(m.c)}</td><td>${m.isi}</td><td>${m.kop}</td></tr>`).join('');
+
+// Laboratuvar: oyuncu → hedef cisim
+const $ = (id) => document.getElementById(id);
+const options = (keys) => keys.map((k) => `<option value="${k}">${PRESETS[k][0]}</option>`).join('');
+$('labCA').innerHTML = options(['baslangic', 'metalikOyuncu', 'suOyuncu', 'gazOyuncu']);
+$('labCB').innerHTML = options(['metalik', 'silikat', 'gazli', 'hidratli', 'buzlu']);
+$('labCB').value = 'metalik';
+const WHY = {
+  'Tam birleşme': 'Yapışma hızından yavaş: oyuncu hedefin hepsini aldı, sıçrayan da geri düştü.',
+  'Kısmi birikim': 'Oyuncu hedefin bir kısmını tuttu; kalanı parça ve toz olarak saçıldı. Parçalar sonra toplanabilir.',
+  'Yutuldun': 'Hedef oyuncudan en az 1,15 kat ağır ve oyuncu yavaş değdi: hedef oyuncuyu yuttu. Oyun biter.',
+  'Hafif sekme': 'Hedef biraz ağır ama yutacak kadar değil: yavaşça sektiler.',
+  'Sekme': 'Hız fazla, yapışmadılar. İkisi de birbirinden sekti ve yontuldu.',
+  'Sekme, hedef parçalandı': 'Yapışmadılar ama hedef kırıldı. Parçaları sonra toplanabilir.',
+  'Sekme, hedef yok oldu': 'Hedef kendi boyuna göre çok sert çarptı ve dağıldı: küçük hızlı cisim gezegene sekmez, sıçrar.',
+  'Oyuncu parçalandı': 'Darbe dayanıklılığı aştı. Oyuncu en büyük parçasıyla devam ediyor.',
+  'Öldün': 'Darbe çok büyük: geriye kütlenin %10’undan azı kaldı. Oyun biter, baştan başlarsın.',
+};
+function resultCard(title, before, after, s, gone) {
+  const dmg = Math.min(1, s.d);
+  const dmgColor = s.d >= 1 ? 'var(--event)' : s.d >= 0.5 ? '#ff9f43' : s.d >= 0.1 ? 'var(--tag)' : 'var(--collect)';
+  const lossLine = s.lost < 0.05 ? 'Kayıp yok.' :
+    `Kaybedilen <b>${fmt(s.lost)}</b>: ${fmt(s.pieces)} toplanabilir parça, ${fmt(s.dust)} toz` + (s.vapor >= 0.05 ? `, ${fmt(s.vapor)} buhar.` : '.');
+  return `<div class="card"><h4>${title}</h4>` +
+    `<div class="big">${fmt(before)} → ${gone ?? fmt(after)}</div>` +
+    `<div class="tier">${tierOf(before)}${gone ? '' : ' → ' + tierOf(after)}</div>` +
+    `<p>Hasar: <b style="color:${dmgColor}">${s.d >= 1 ? 'parçalandı' : pct(dmg)}</b></p>` +
+    `<div class="bar"><i style="width:${dmg * 100}%;background:${dmgColor}"></i></div>` +
+    `<p>${lossLine}</p><p>Isı: ${heatState(s.heat, s.comp)}</p>` +
+    (title === 'Oyuncu' && !gone ? progressBlock(before, after) : '') + `</div>`;
+}
+function progressBlock(before, after) {
+  const p = progress(after), b = progress(before);
+  if (p.last) return `<p class="prog-t">En üst kademedesin: ${p.name}</p>`;
+  const mark = b.name === p.name ? `<b class="mark" style="left:${b.frac * 100}%" title="Çarpışmadan önce"></b>` : '';
+  return `<p class="prog-t">Sıradaki kademe: <b>${p.nextName}</b></p>` +
+    `<div class="bar prog"><i style="width:${p.frac * 100}%"></i>${mark}</div>` +
+    `<p>${fmt(after)} / ${fmt(p.next)} · <b>${fmt(p.left)} kaldı</b> (~${p.meals} yem)</p>`;
+}
+function runLab() {
+  const mA = Math.max(1, +$('labMA').value || 1), mB = Math.max(1, +$('labMB').value || 1), v = +$('labV').value;
+  $('labVv').textContent = v;
+  const r = collide(mA, PRESETS[$('labCA').value][1], mB, PRESETS[$('labCB').value][1], v);
+  const eaten = r.final > r.A.rest;
+  $('labOut').innerHTML =
+    `<p class="verdict" style="color:${r.color}">${r.verdict}</p><p class="why">${WHY[r.verdict]}</p>` +
+    `<p class="why">Yaklaşma hızı ${v} + çekim (kaçış hızı ${fmt(r.g.vEsc)}) → <b style="color:var(--text)">çarpma hızı ${fmt(r.vi)}</b>` +
+    (mB > mA ? ` · hedefin çekimi itkinin ${fmt(r.g.gSurf / C.thrust)} katı` : '') + `</p>` +
+    `<div class="res">${resultCard('Oyuncu', mA, r.final, r.A, r.verdict === 'Öldün' ? 'yok oldu' : r.verdict === 'Yutuldun' ? 'yutuldu' : null)}` +
+    `${resultCard('Hedef cisim', mB, r.verdict === 'Yutuldun' ? mB + mA : r.B.rest, r.B, eaten ? 'yutuldu' : null)}</div>`;
+}
+for (const id of ['labMA', 'labCA', 'labMB', 'labCB', 'labV']) $(id).oninput = runLab;
+runLab();
+
+// Düşüş tablosu: yaklaşma hızı 0, yalnızca çekim
+$('fallTable').innerHTML =
+  '<tr><th>Hedef (oyuncunun kaç katı)</th><th>Kaçış hızı</th><th>Yüzey çekimi (itki 15,6)</th><th>Dönüşü olmayan nokta</th><th>Çarpma hızı</th><th>Sonuç</th><th>Oyuncunun kaybı</th></tr>' +
+  [0.1, 1, 3, 10, 100, 1000, 10000, 100000].map((q) => {
+    const r = collide(150, PRESETS.baslangic[1], 150 * q, PRESETS.silikat[1], 0), g = r.g;
+    const trap = g.rTrap > g.contact ? `yüzeyden ${fmt(g.rTrap - g.contact)} çap dışarıda` : 'yok';
+    return `<tr><td><b>${fmt(q)}×</b> (${fmt(150 * q, 0)})</td><td>${fmt(g.vEsc)}</td>` +
+      `<td style="color:${g.gSurf > C.thrust ? 'var(--event)' : 'inherit'}">${fmt(g.gSurf)}</td><td>${trap}</td><td>${fmt(r.vi)}</td>` +
+      `<td style="color:${r.color}"><b>${r.verdict}</b></td><td>${pct(r.A.L)}</td></tr>`;
+  }).join('');
+
+// Örnek tablo
+$('exTable').innerHTML =
+  '<tr><th>Oyuncu</th><th>Yaklaşma → çarpma hızı</th><th>Sonuç</th><th>Oyuncunun kaybı</th><th>Toplanabilir parça</th><th>Kalıcı toz + buhar</th><th>Isı</th><th>Oyuncunun yeni kademesi</th></tr>' +
+  ['baslangic', 'metalikOyuncu'].flatMap((k) => [6, 15, 30].map((v) => {
+    const r = collide(150, PRESETS[k][1], 400, PRESETS.metalik[1], v);
+    return `<tr><td>${PRESETS[k][0]}</td><td>${v} → ${fmt(r.vi)}</td><td style="color:${r.color}"><b>${r.verdict}</b></td><td>${fmt(r.A.lost)} (${pct(r.A.L)})</td>` +
+      `<td>${fmt(r.A.pieces)}</td><td>${fmt(r.A.dust + r.A.vapor)}</td><td>${fmt(r.A.heat, 2)} · ${heatState(r.A.heat, r.A.comp)}</td><td>${tierOf(r.final)}</td></tr>`;
+  })).join('');
+
+// Kademe tarifi
+const meals = (from, to) => Math.ceil(Math.log(to / from) / Math.log(1.1));
+let totalMeals = 0, totalMerges = 0;
+$('tierTable').innerHTML =
+  '<tr><th>Kademe</th><th>Kütle</th><th>Sonraki</th><th>Yem boyutu (≈%10)</th><th>Yavaş yem sayısı</th><th>ya da denk birleşme</th></tr>' +
+  TIERS.slice(0, -1).map(([m, ad], i) => {
+    const next = TIERS[i + 1][0], n = meals(m, next), merges = Math.ceil(Math.log2(next / m));
+    totalMeals += n; totalMerges += merges;
+    return `<tr><td><b>${ad}</b></td><td>${fmt(m)}</td><td>${TIERS[i + 1][1]} (${fmt(next)})</td><td>${fmt(m / 10, 2)}</td><td>${n}</td><td>${merges}</td></tr>`;
+  }).join('') +
+  `<tr><td colspan="4"><b>Toplam: tozdan gezegenimsiye</b></td><td><b>${totalMeals}</b></td><td><b>${totalMerges}</b></td></tr>`;
+
+// Bileşim tarifleri: her yem %10 kütle ekler, bileşim y + (b − y)·(10/11)^n
+const START = PRESETS.baslangic[1];
+const afterMeals = (b, y, n) => Object.fromEntries(Object.keys(MAT).map((e) => [e, (y[e] ?? 0) + ((b[e] ?? 0) - (y[e] ?? 0)) * (10 / 11) ** n]));
+const recipeCount = (b, y, h) => Math.ceil(Math.log((y - b) / (y - h)) / Math.log(1.1));
+const RECIPES = [
+  ['Metalik etiketi', 'metal', 0.4, 'metalik', 'Ağırlaşırsın: hız −'],
+  ['Demir gezegen yolu', 'metal', 0.5, 'metalik', 'Çok sert ve ağır'],
+  ['Gaz zengini etiketi', 'gaz', 0.2, 'gazli', 'Hafiflersin: hız +, çok kırılgan'],
+  ['Su bazlı (Su %25)', 'buz', 0.25, 'hidratli', 'İç sistemde bulunur, güvenli'],
+  ['Su bazlı (Su %25), hızlı yol', 'buz', 0.25, 'buzlu', 'Kar çizgisinin ötesinde; ısınınca buz kaybı'],
+  ['Okyanus için su (Su %30)', 'buz', 0.3, 'buzlu', 'Gezegen olunca yaşanabilir bölgeye dön'],
+  ['Buzlu kaya formu (Buz %40)', 'buz', 0.4, 'buzlu', 'Çok kırılgan; yıldıza yaklaşınca erirsin'],
+];
+$('recipeTable').innerHTML =
+  '<tr><th>Hedef</th><th>Koşul</th><th>Yem</th><th>Art arda yem</th><th>Dayanıklılık D</th><th>Sertlik H</th><th>Yan etki</th></tr>' +
+  RECIPES.map(([ad, el, h, key, note]) => {
+    const y = PRESETS[key][1], n = recipeCount(START[el] ?? 0, y[el], h), after = afterMeals(START, y, n);
+    if (after[el] < h || afterMeals(START, y, n - 1)[el] >= h) errors.push(`Tarif sayısı yanlış: ${ad}`);
+    return `<tr><td><b>${ad}</b></td><td>${MAT[el].ad} ≥ ${pct(h)}</td><td>${PRESETS[key][0]}</td><td><b>${n}</b></td>` +
+      `<td>${fmt(dur(START), 2)} → ${fmt(dur(after), 2)}</td><td>${fmt(mix(START, 'H'), 2)} → ${fmt(mix(after, 'H'), 2)}</td><td>${note}</td></tr>`;
+  }).join('') +
+  `<tr><td><b>Radyoaktif etiketi</b></td><td>Ağır element (iz) ≥ %5</td><td>Radyoaktif asteroid (%30 ağır element)</td><td><b>${recipeCount(0, 0.3, 0.05)}</b></td><td colspan="2">İz element; ana beşliği değiştirmez</td><td>Fazlası (%8+) yaşamı öldürür</td></tr>`;
+
+// ---- HUD maketi
+$('hCA').innerHTML = options(['baslangic', 'metalikOyuncu', 'suOyuncu', 'gazOyuncu']);
+$('hCB').innerHTML = options(['metalik', 'silikat', 'gazli', 'hidratli', 'buzlu']);
+$('hCB').value = 'silikat';
+const TAGS = [['Metalik', 'metal', 0.4, 'metalik'], ['Kayaç', 'silikat', 0.4, 'silikat'], ['Gaz zengini', 'gaz', 0.2, 'gazli'], ['Su bazlı', 'buz', 0.25, 'hidratli'], ['Buzlu', 'buz', 0.4, 'buzlu']];
+const zone = (v, vm = C.vY) => (v < vm ? ['yapışır', 'var(--collect)'] : v < 3 * vm ? ['kısmi', 'var(--tag)'] : ['seker', '#ff9f43']);
+const heatColor = (t) => (t > 8 ? 'var(--event)' : t > 5 ? '#ff9f43' : t > 3 ? 'var(--tag)' : t > 1 ? 'var(--tier)' : 'var(--accent)');
+function blend(comp) {
+  const rgb = [0, 0, 0];
+  for (const [e, f] of Object.entries(comp)) MAT[e].renk.match(/\w\w/g).forEach((h, i) => (rgb[i] += f * parseInt(h, 16)));
+  return `rgb(${rgb.map(Math.round).join(',')})`;
+}
+const noise = (x) => { const s = Math.sin(x) * 43758.5453; return s - Math.floor(s); };
+function blob(cx, cy, r, seed) {
+  const n = 12;
+  return 'M' + Array.from({ length: n }, (_, i) => {
+    const a = (i / n) * Math.PI * 2, rr = r * (0.82 + 0.18 * noise(i * 7.1 + seed));
+    return `${(cx + Math.cos(a) * rr).toFixed(1)},${(cy + Math.sin(a) * rr).toFixed(1)}`;
+  }).join('L') + 'Z';
+}
+function gauge(v) {
+  const cx = 65, cy = 64, R = 52, p = (x, r = R) => {
+    const a = Math.PI - (Math.min(40, x) / 40) * Math.PI;
+    return [(cx + Math.cos(a) * r).toFixed(1), (cy - Math.sin(a) * r).toFixed(1)];
+  };
+  const arc = (a, b, c) => `<path d="M${p(a)} A${R} ${R} 0 0 1 ${p(b)}" stroke="${c}" stroke-width="8" fill="none"/>`;
+  return `<svg viewBox="0 0 130 70" width="130" height="70">${arc(0, 8, 'var(--collect)')}${arc(8, 16, 'var(--tag)')}${arc(16, 40, '#ff9f43')}` +
+    `<line x1="${cx}" y1="${cy}" x2="${p(v, R - 12)[0]}" y2="${p(v, R - 12)[1]}" stroke="var(--text)" stroke-width="3" stroke-linecap="round"/><circle cx="${cx}" cy="${cy}" r="4" fill="var(--text)"/></svg>`;
+}
+const stack = (comp) => `<div class="bar" style="display:flex">${Object.entries(comp).map(([e, f]) => `<i style="width:${f * 100}%;background:${MAT[e].renk}"></i>`).join('')}</div>`;
+
+function renderHud() {
+  const scr = $('scr'), W = scr.clientWidth, H = scr.clientHeight;
+  if (!W) return; // sekme gizliyken boyut yok; sekme açılınca yeniden çizilir
+  const ca = $('hCA').value, cb = $('hCB').value, compA = PRESETS[ca][1], compB = PRESETS[cb][1];
+  const mA = Math.max(1, +$('hMA').value || 1), mB = Math.max(1, +$('hMB').value || 1), v = +$('hV').value;
+  const heat = +$('hT').value, cracks = Math.min(5, Math.max(0, +$('hCr').value || 0));
+  $('hVv').textContent = v;
+  $('hTv').textContent = fmt(heat);
+  const r = collide(mA, compA, mB, compB, v, cracks), p = progress(mA), [zLabel, zColor] = zone(r.vi, r.vm), g = r.g;
+
+  // ① Kademe ve ilerleme
+  const tags = TAGS.filter(([, e, h]) => (compA[e] ?? 0) >= h).map(([t]) => `<span>${t}</span>`).join('');
+  $('hTier').innerHTML = p.last ? `<div class="h-title">${p.name}</div><div class="muted">Kütle ${fmt(mA)}</div>` :
+    `<div class="h-title">${p.name}</div><div class="bar prog"><i style="width:${p.frac * 100}%"></i></div>` +
+    `<div>${fmt(mA)} / ${fmt(p.next)} · <b>${fmt(p.left)} kaldı</b></div><div class="muted">~${p.meals} yem · sıradaki: ${p.nextName}</div>` +
+    (tags ? `<div class="tags">${tags}</div>` : '');
+
+  // ② Bileşim
+  const hint = TAGS.filter(([, e, h, key]) => (compA[e] ?? 0) < h && PRESETS[key][1][e] > h)
+    .map(([t, e, h, key]) => [t, recipeCount(compA[e] ?? 0, PRESETS[key][1][e], h), PRESETS[key][0]])
+    .sort((a, b) => a[1] - b[1])[0];
+  $('hComp').innerHTML = `<div class="h-title">Bileşim</div>` +
+    Object.entries(MAT).map(([e, m]) => `<div class="crow"><i class="el" style="background:${m.renk}"></i><span>${m.ad}</span><span class="bar"><i style="width:${(compA[e] ?? 0) * 100}%;background:${m.renk}"></i></span><b>${pct(compA[e] ?? 0)}</b></div>`).join('') +
+    (hint ? `<div class="muted" style="margin-top:4px">${hint[0]} etiketine ~${hint[1]} yem (${hint[2]})</div>` : '');
+
+  // ③ Hız
+  $('hSpeed').innerHTML = gauge(r.vi) + `<div class="h-title">${v} <span class="muted" style="font-weight:400">çap/sn</span></div>` +
+    `<div class="muted">çarpma hızı <b style="color:${zColor}">${fmt(r.vi)}</b> · <span style="color:${zColor}">${zLabel}</span></div>`;
+
+  // ④ Durum
+  const D = mix(compA, 'D') * (1 - 0.1 * cracks), Hd = mix(compA, 'H');
+  $('hState').innerHTML = `<div class="h-title">Durum</div>` +
+    `<div>Dayanıklılık ${fmt(D, 2)}${cracks ? ` <span class="muted">(−%${cracks * 10})</span>` : ''}</div><div class="bar"><i style="width:${Math.min(1, D / 2) * 100}%;background:var(--collect)"></i></div>` +
+    `<div>Sertlik ${fmt(Hd, 2)}</div><div class="bar"><i style="width:${Hd * 100}%;background:var(--tier)"></i></div>` +
+    `<div>Isı ${fmt(heat)} · <span style="color:${heatColor(heat)}">${heatState(heat, compA)}</span></div>` +
+    `<div class="bar"><i style="width:${heat * 10}%;background:${heatColor(heat)}"></i></div><div class="ticks">${[1, 3, 5, 8].map((t) => `<i style="left:${t * 10}%"></i>`).join('')}</div>` +
+    `<div style="margin-top:4px">Çatlak <span class="pips">${[0, 1, 2, 3, 4].map((i) => `<i class="${i < cracks ? 'on' : ''}"></i>`).join('')}</span></div>`;
+
+  // ⑤ Hedef cisim
+  $('hTarget').innerHTML = `<div class="h-title">${PRESETS[cb][0]}</div><div class="muted">Kütle ${fmt(mB)} · ${tierOf(mB)}</div>${stack(compB)}` +
+    (mB <= mA ? `<div style="color:var(--collect)">Yutulabilir</div>` : `<div style="color:var(--event)">Oyuncudan ${fmt(mB / mA)}× büyük, yutulamaz</div>`) +
+    `<div class="muted">Kaçış hızı ${fmt(g.vEsc)} · çekim itkinin ${fmt(g.gSurf / C.thrust)}×</div>` +
+    (g.rTrap > g.contact ? `<div style="color:var(--event)">Dönüşü olmayan nokta: yüzeyden ${fmt(g.rTrap - g.contact)} çap</div>` : '') +
+    `<div style="margin-top:4px;color:${r.color}"><b>${r.verdict}</b></div><div class="muted">Oyuncu kaybı ${pct(r.A.L)} · hedef kaybı ${pct(r.B.L)}</div>`;
+
+  // Sahne
+  const narrow = W < 640;
+  // Telefonda gövdeler hız göstergesi ile alt paneller arasındaki boş banda yerleşir.
+  const [ax, ay] = narrow ? [W * 0.27, H * 0.6] : [W * 0.36, H * 0.56];
+  const [bx, by] = narrow ? [W * 0.72, H * 0.6] : [W * 0.66, H * 0.42];
+  const rA = Math.min(H * (narrow ? 0.05 : 0.09), 46), rB = Math.max(8, Math.min(H * (narrow ? 0.1 : 0.2), rA * Math.cbrt(mB / mA)));
+  const dx = bx - ax, dy = by - ay, dl = Math.hypot(dx, dy), ux = dx / dl, uy = dy / dl;
+  const len = Math.min(dl - rA - rB - 14, 10 + v * 4);
+  let stars = '';
+  for (let i = 0; i < 110; i++) stars += `<circle cx="${(noise(i * 3.3) * W).toFixed(0)}" cy="${(noise(i * 5.7 + 1) * H).toFixed(0)}" r="${(0.4 + noise(i) * 1.1).toFixed(2)}" fill="#fff" opacity="${(0.2 + noise(i * 9.1) * 0.6).toFixed(2)}"/>`;
+  let dust = '';
+  for (let i = 0; i < 40; i++) {
+    const a = noise(i * 2.7) * Math.PI * 2, d = rA * (1.6 + noise(i * 4.1) * 3);
+    dust += `<circle cx="${(ax + Math.cos(a) * d).toFixed(1)}" cy="${(ay + Math.sin(a) * d * 0.6).toFixed(1)}" r="${(0.6 + noise(i * 6.3) * 1.4).toFixed(2)}" fill="#9fb4ff" opacity=".45"/>`;
+  }
+  $('scene').setAttribute('viewBox', `0 0 ${W} ${H}`);
+  $('scene').innerHTML =
+    `<defs><radialGradient id="gA" cx="35%" cy="35%"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".35" stop-color="${blend(compA)}"/><stop offset="1" stop-color="#111"/></radialGradient>` +
+    `<radialGradient id="gB" cx="35%" cy="35%"><stop offset="0" stop-color="#fff" stop-opacity=".45"/><stop offset=".35" stop-color="${blend(compB)}"/><stop offset="1" stop-color="#111"/></radialGradient>` +
+    `<marker id="arr" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0L10,5L0,10z" fill="${zColor}"/></marker></defs>` +
+    stars + dust +
+    // Çekim alanı: hissedilen bölge (soluk) ve dönüşü olmayan nokta (kırmızı), çizilen hedef boyutuna oranlı
+    (g.rFeel > g.contact ? `<circle cx="${bx}" cy="${by}" r="${(rB * g.rFeel) / g.rB}" fill="rgba(255,80,100,.04)" stroke="rgba(255,120,140,.25)" stroke-width="1"/>` : '') +
+    (g.rTrap > g.contact ? `<circle cx="${bx}" cy="${by}" r="${(rB * g.rTrap) / g.rB}" fill="rgba(255,51,85,.07)" stroke="#ff3355" stroke-width="1.5" stroke-dasharray="3 4"/>` +
+      `<text x="${bx}" y="${by - (rB * g.rTrap) / g.rB - 6}" fill="#ff6b80" font-size="11" text-anchor="middle">dönüşü olmayan nokta</text>` : '') +
+    `<circle cx="${bx}" cy="${by}" r="${rB + 10}" fill="none" stroke="${r.color}" stroke-width="2" stroke-dasharray="6 5" opacity=".9"/>` +
+    `<path d="${blob(bx, by, rB, 11)}" fill="url(#gB)"/>` +
+    `<text x="${bx}" y="${by + rB + 26}" fill="${r.color}" font-size="12" text-anchor="middle" font-weight="700">${r.verdict} · −${pct(r.A.L)}</text>` +
+    `<path d="${blob(ax, ay, rA, 3)}" fill="url(#gA)" stroke="${heatColor(heat)}" stroke-opacity="${Math.min(1, heat / 5)}" stroke-width="3"/>` +
+    (len > 4 ? `<line x1="${ax + ux * (rA + 6)}" y1="${ay + uy * (rA + 6)}" x2="${ax + ux * (rA + 6 + len)}" y2="${ay + uy * (rA + 6 + len)}" stroke="${zColor}" stroke-width="3" marker-end="url(#arr)"/>` : '') +
+    `<text x="${ax}" y="${ay + rA + 22}" fill="var(--text)" font-size="12" text-anchor="middle">Oyuncu</text>`;
+}
+for (const id of ['hCA', 'hMA', 'hV', 'hCB', 'hMB', 'hT', 'hCr']) $(id).oninput = renderHud;
+window.addEventListener('resize', renderHud);
+
+for (const [k, [, comp]] of Object.entries(PRESETS)) {
+  const sum = Object.values(comp).reduce((a, b) => a + b, 0);
+  if (Math.abs(sum - 1) > 1e-9) errors.push(`Bileşim toplamı %100 değil: ${k} (${fmt(sum * 100)})`);
+}
+
+if (errors.length) {
+  const box = document.getElementById('err');
+  box.style.display = 'block';
+  box.textContent = 'Veri hataları:\n' + errors.join('\n');
+}
+
+// ---- Sekmeler
+const tabs = [...document.querySelectorAll('#nav button')];
+function show(name) {
+  if (!document.getElementById(name)) name = 'agac';
+  for (const t of document.querySelectorAll('.tab')) t.classList.toggle('on', t.id === name);
+  for (const b of tabs) b.classList.toggle('on', b.dataset.tab === name);
+  if (name === 'hud') renderHud();
+}
+for (const b of tabs) b.onclick = () => { history.replaceState(null, '', '#' + b.dataset.tab); show(b.dataset.tab); };
+show(location.hash.slice(1));
+window.addEventListener('hashchange', () => show(location.hash.slice(1)));
+</script>
+</body>
+</html>

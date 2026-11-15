@@ -1,0 +1,38 @@
+/* The one toast banner (ui/toast.ts): big moments under the top edge, inside the stage HUD (#game-hud). */
+#game-hud .toast {
+  position: absolute;
+  top: 18%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  opacity: 0;
+  text-align: center;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+#game-hud .toast b {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ui-accent);
+  text-shadow: 0 0 18px rgb(127 227 255 / 0.55);
+}
+
+#game-hud .toast span {
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ui-muted);
+}
+
+#game-hud .toast.show { animation: toast 3.2s ease-out forwards; }
+
+@keyframes toast {
+  0% { opacity: 0; transform: translate(-50%, 8px); }
+  12%, 75% { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; transform: translate(-50%, -6px); }
+}

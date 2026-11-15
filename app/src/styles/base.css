@@ -1,0 +1,71 @@
+/* Page base, design tokens and the shared panel look for every UI module. Each module imports its own
+   CSS next to its code (ui/settings.css, ui/gameover.css, core/input.css, evolution/<stage>/hud.css).
+   Font: Oxanium (Google Fonts, SIL OFL), a squared sci-fi face with clear numerals; system fonts until it loads. */
+@import url('https://fonts.googleapis.com/css2?family=Oxanium:wght@400;500;600;700&display=swap');
+
+:root {
+  --space: #02030a;
+  --ui-bg: linear-gradient(140deg, rgb(16 26 52 / 0.82), rgb(5 9 22 / 0.62));
+  --ui-edge: rgb(127 227 255 / 0.16);
+  --ui-text: #dde8ff;
+  --ui-muted: #7f90bb;
+  --ui-accent: #7fe3ff;
+  --ui-family: 'Oxanium', 'Segoe UI', system-ui, sans-serif;
+  --ui-font: 500 12px/1.4 var(--ui-family);
+  --ui-cut: 10px; /* cut corners */
+}
+
+/* The shared panel: dark glass with two cut corners and two bright corner brackets in the panel's
+   --accent colour. Used by the HUD panels, the settings and the game over card. */
+.ui-panel {
+  position: relative;
+  background: var(--ui-bg);
+  box-shadow: inset 0 0 0 1px var(--ui-edge);
+  clip-path: polygon(var(--ui-cut) 0, 100% 0, 100% calc(100% - var(--ui-cut)), calc(100% - var(--ui-cut)) 100%, 0 100%, 0 var(--ui-cut));
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.ui-panel::before,
+.ui-panel::after {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border: 0 solid var(--accent, var(--ui-accent));
+  pointer-events: none;
+}
+
+.ui-panel::before { top: 0; right: 0; border-top-width: 2px; border-right-width: 2px; }
+.ui-panel::after { bottom: 0; left: 0; border-bottom-width: 2px; border-left-width: 2px; }
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--space);
+  color: var(--ui-text);
+  font: 12px/1.4 ui-monospace, Consolas, monospace;
+}
+
+[hidden] {
+  display: none !important; /* beats the display rules below */
+}
+
+canvas {
+  display: block;
+  touch-action: none;
+}
+
+/* Debug stats (FPS, bodies...), top centre: the corners belong to the game HUD. */
+#hud {
+  position: fixed;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  opacity: 0.7;
+  white-space: pre;
+  pointer-events: none;
+  text-shadow: 0 0 4px #000;
+}
