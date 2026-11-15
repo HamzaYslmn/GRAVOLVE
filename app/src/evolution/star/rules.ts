@@ -48,6 +48,8 @@ export const flux = (glow: number, cover: number, x: number) => (FLUX_K * dimmed
 // (liquid band a sliver) and equilibrium temperature's 1/√x (band the whole map). A sun adds 25 K at 2 R★.
 const WARM_K = 50;
 export const warmth = (glow: number, cover: number, x: number) => (WARM_K * Math.sqrt(dimmed(glow, cover))) / x;
+export const SUN_X = 3; // light on your collectors (civilization/rules.ts solar): 1 = a sun at 3 R★ (fun first: 1/x like warmth, no floor)
+export const sunlight = (glow: number, cover: number, x: number) => (dimmed(glow, cover) * SUN_X) / x;
 // One gravity: the star pulls you, loose bodies and other stars with starMu(M) / d² (floored at its surface); on you and on
 // loose bodies only out to PULL_X R★. Rocks near a star fall in and burn (stars sweep their space clean).
 export const PULL_X = 12;
@@ -83,7 +85,7 @@ export const linkStep = (p: number, x: number, dt: number) => (inBand(x) ? Math.
 
 // ---- Compressed layout (stylised scale, so the system fits on screen), in R★ from the star's centre for a star of radius
 // R and you of radius r with `slots` moon slots:
-//   reach  your outer moon slot + half your radius (a 12.5% moon);
+//   reach  your outer moon slot + half your radius (moons are at most 0.45 R);
 //   orbit  your world's range: from max(BAND[0], 1.25 + reach) (your moons always clear the star) to 1.2 R★ beyond;
 //   ring k a caught planet's ring outside your orbit `at`: at + reach + 0.4 + 0.35·k (rings always clear your moons;
 //          planets are at most 0.15 R★, system.ts); the catch zone is ring 0 to ring 0 + 1.

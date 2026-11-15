@@ -18,6 +18,8 @@ type YT = {
 };
 declare const ytgame: YT | undefined;
 export const yt = typeof ytgame !== 'undefined' && ytgame.IN_PLAYABLES_ENV ? ytgame : null;
+/** Debug mode exists only on the dev server at localhost: a deployed build (YouTube, the web) has none, so no run can cheat the scores. */
+export const DEBUG = import.meta.env.DEV && ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
 let cloud: Record<string, string> = {}, canSave = false, dirty = false;
 
 /** Fills the cloud record (await before anything reads storage). A failed load never saves, so it can't overwrite. */
@@ -140,7 +142,8 @@ export function createSettings(handlers: Handlers) {
   onOff('show-stats', 'showStats', handlers.onStats);
   if (yt) root.querySelector('#sound')!.closest('label')!.remove(); // YouTube's mute is the one mute
   else onOff('sound', 'sound', handlers.onSound);
-  onOff('debug-mode', 'debug', handlers.onDebug, false);
+  if (DEBUG) onOff('debug-mode', 'debug', handlers.onDebug, false);
+  else root.querySelector('#debug-mode')!.closest('label')!.remove();
   const vol = root.querySelector<HTMLInputElement>('#volume')!, volOut = root.querySelector<HTMLOutputElement>('#volume-out')!;
   const stored = Number(load('volume') ?? VOLUME);
   vol.value = String(Number.isFinite(stored) ? stored : VOLUME);

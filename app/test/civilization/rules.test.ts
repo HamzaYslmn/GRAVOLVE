@@ -6,15 +6,16 @@ import assert from 'node:assert/strict';
 import { burnShare, collide, COMP, impactHeat, pieceShares, radiusOf, shellPass, SPECK, V_STICK, type Phys } from '../../src/evolution/asteroid/rules.ts';
 import { GAP, RATE } from '../../src/evolution/civilization/flight.ts';
 import { pull, trigger } from '../../src/evolution/civilization/guns.ts';
-import { EXTINCT, PLANET_M, SUPER_M } from '../../src/evolution/planet/rules.ts';
-import { beamK } from '../../src/evolution/star/rules.ts';
+import { EXTINCT, magnet, PLANET_M, SUPER_M } from '../../src/evolution/planet/rules.ts';
+import { beamK, sunlight } from '../../src/evolution/star/rules.ts';
 import {
   buildSpeed, capacity, cityLevel, dose, energy, fedCapacity, GEO, geo, killRate, RADIO_LIMIT, radioDose, radioLimit, lack, mineable, mineMix, MINE_RATE, NEED, P0, popHit, popStep,
   ASLEEP_FALL, FLEET, shellR, fleetCap, FRAG, ROCKET, rocketRange, rocketSpread, shieldFed, shieldMax, upkeep, units, type Ore,
-  FUEL_E, FUEL_LOW, fuelBurn, reactor, REACTOR, refine, UNIT, WORK_E, SHIELD_FLOOR, SHIELD_K, shieldCost, shieldHolds, shieldMeet, shieldPunch, shieldRegen, SHIELD_STOP, START_SHIPS, tier, TIER_MAX,
+  FUEL_E, FUEL_LOW, fuelBurn, reactor, REACTOR, refine, SOLAR, solar, solarWings, UNIT, WORK_E, SHIELD_FLOOR, SHIELD_K, shieldCost, shieldHolds, shieldMeet, shieldPunch, shieldRegen, SHIELD_STOP, START_SHIPS, tier, TIER_MAX,
   BEATEN, chargeRate, DRIVER_COOL, fireDir, fleetSize, HIT_MIN, intercept, RIVAL_LEAD, RIVAL_MASS, RIVAL_HIT_MAX, rivalLevel, SLUG_E, SLUG_ORE, SLUG_SHARE, SLUG_SPEED,
   BEAM_BITE, BEAM_COOL, beamLeft, beamPop, CUT, CUT_SPREAD, cutSpread, edible, KEEP, pieceSize, split, strikeK, type Shield,
   ARMS, buildOrder, BURN_WAVE, kps, LANDING, raid, rivalFrigates, SHIELD_STUN, shieldShot, ttk, weaponHit, shieldLayers, siegeWing, SIEGE, sortieStep, CALM_S,
+  homeDig, HOME_RICH, HOME_VOL,
 } from '../../src/evolution/civilization/rules.ts';
 
 const near = (a: number, b: number, eps = 1e-6) => Math.abs(a - b) <= eps;
@@ -37,6 +38,8 @@ assert.ok(capacity(0.5, PLANET_M) < capacity(0.5, SUPER_M)); // bigger worlds ho
 // Energy caps people: inner heat alone feeds 5 bn at Planet mass, and grows with size like the capacity.
 assert.ok(near(fedCapacity(10, energy(0, PLANET_M)), GEO / NEED) && near(GEO / NEED, 5));
 assert.ok(near(geo(8 * PLANET_M), 2 * GEO) && near(energy(0, PLANET_M, 1), GEO + 1)); // 8× mass: 2× inner heat; Dyson adds on
+// A metal core holds more heat: ×0.75 with none, ×1 at 10%, ×1.25 from 20% (capped); energy passes metal on.
+assert.ok(near(geo(PLANET_M, 0), 0.75 * GEO) && near(geo(PLANET_M, 0.1), GEO) && near(geo(PLANET_M, 0.2), 1.25 * GEO) && near(geo(PLANET_M, 0.5), 1.25 * GEO) && near(energy(0, PLANET_M, 0, 0, 0), 0.75 * GEO));
 
 // Radiation goes by share, not carried mass: 3% alone is the safe limit at any size; a trace stays a trace.
 assert.ok(near(radioDose(RADIO_LIMIT), 1) && radioDose(0) === 0);
@@ -48,19 +51,19 @@ console.log(`safe radioactive share by tier: ${[1, 2, 3, 4, 5, 6].map((T) => `${
 // Reactors burn the fuel stock: REACTOR at Planet mass from FUEL_LOW u, throttled under it (no cliff), ∝ m^⅓ like the capacity.
 assert.ok(reactor(0, PLANET_M) === 0 && near(reactor(FUEL_LOW, PLANET_M), REACTOR) && near(reactor(1e4, PLANET_M), REACTOR) && near(reactor(FUEL_LOW / 2, PLANET_M), REACTOR / 2));
 assert.ok(near(reactor(FUEL_LOW, 8 * PLANET_M), 2 * REACTOR) && near(energy(FUEL_LOW, PLANET_M), GEO + REACTOR));
-// Fuel burns only for what inner heat (+ Dyson) does not cover, at most the reactors' power: a full reactor burns 5 u/min.
+// Fuel burns only for what inner heat (+ solar + Dyson) does not cover, at most the reactors' power: a full reactor burns 1.5 u/min.
 assert.ok(fuelBurn(GEO, GEO, 100, PLANET_M) === 0 && fuelBurn(0.3, GEO, 100, PLANET_M) === 0 && fuelBurn(2, GEO, 0, PLANET_M) === 0);
-assert.ok(near(60 * fuelBurn(100, GEO, 100, PLANET_M), 5) && near(60 * REACTOR / FUEL_E, 5), 'a full reactor burns 5 u/min');
+assert.ok(near(60 * fuelBurn(100, GEO, 100, PLANET_M), 1.5) && near(60 * REACTOR / FUEL_E, 1.5), 'a full reactor burns 1.5 u/min');
 assert.ok(near(fuelBurn(100, GEO, 100, PLANET_M), fuelBurn(GEO + REACTOR, GEO, 100, PLANET_M)), 'never more than its power');
 assert.ok(near(fuelBurn(2 * (GEO + 0.5), 2 * GEO, 100, 8 * PLANET_M), fuelBurn(GEO + 0.5, GEO, 100, PLANET_M)), 'the same u/s at 8× mass for a draw scaled like the world');
 // Your people dig eaten radioactive rock out into fuel (e-folding 180 s): all of it in the end, nothing from nothing.
 assert.ok(near(refine(0.02, 1e9), 0.02) && refine(0, 1) === 0 && refine(-1, 1) === 0 && near(refine(0.01, 180), 0.01 * (1 - Math.exp(-1))));
-// Idle burn at Planet mass with a level-3 shield: tiers 1–3 burn nothing (inner heat feeds them), a full tier-6 world 3–5 u/min.
+// Idle burn at Planet mass with a level-3 shield: tiers 1–3 burn nothing (inner heat feeds them), a full tier-6 world 0.8–1.3 u/min.
 {
   const idle = (P: number) => 60 * fuelBurn(NEED * P + upkeep(3), GEO, 100, PLANET_M), works = (P: number, n: number) => 60 * fuelBurn(NEED * P + upkeep(3) + WORK_E * n, GEO, 100, PLANET_M);
   assert.ok(idle(P0) === 0 && idle(1.59) === 0 && tier(1.59) === 3, 'tiers 1–3 idle: no burn');
-  assert.ok(idle(8) >= 3 && idle(10) <= 5 && tier(8) === TIER_MAX, `tier 6 idle: ${idle(8).toFixed(1)}–${idle(10).toFixed(1)} u/min`);
-  console.log(`fuel burn at Planet mass, L3 (u/min): tier 4 (1.6 bn) idle ${idle(1.6).toFixed(1)}, 2 works ${works(1.6, 2).toFixed(1)} · tier 6 (6.4 / 8 / 10 bn) idle ${idle(6.4).toFixed(1)} / ${idle(8).toFixed(1)} / ${idle(10).toFixed(1)}, 2 works ${works(10, 2).toFixed(1)}`);
+  assert.ok(idle(8) >= 0.8 && idle(10) <= 1.3 && tier(8) === TIER_MAX, `tier 6 idle: ${idle(8).toFixed(1)}–${idle(10).toFixed(1)} u/min`);
+  console.log(`fuel burn at Planet mass, L3 (u/min): tier 4 (1.6 bn) idle ${idle(1.6).toFixed(2)}, 2 works ${works(1.6, 2).toFixed(2)} · tier 6 (6.4 / 8 / 10 bn) idle ${idle(6.4).toFixed(2)} / ${idle(8).toFixed(2)} / ${idle(10).toFixed(2)}, 2 works ${works(10, 2).toFixed(2)}`);
 }
 // Run dry: a full tier-6 world (10 bn, L3) with 25 u is fully fed for minutes, then its reactors throttle down; its people
 // decline toward what inner heat feeds, never below it; 25 u more and it is fed again.
@@ -76,13 +79,30 @@ assert.ok(near(refine(0.02, 1e9), 0.02) && refine(0, 1) === 0 && refine(-1, 1) =
     if (fed < 0.8) under = Math.min(under, t);
     return fed;
   };
-  for (let t = 0; t < 1800; t += 0.1) step(t, 0.1);
+  for (let t = 0; t < 5400; t += 0.1) step(t, 0.1);
   const floor = fedCapacity(capacity(1, m), GEO - upkeep(sh));
-  assert.ok(fedUntil >= 3.5 * 60 && fedUntil <= 9 * 60 && under < 10 * 60, `25 u at tier 6: fed until ${clock(fedUntil)}, under 0.8 from ${clock(under)}`);
+  assert.ok(fedUntil >= 12 * 60 && fedUntil <= 18 * 60 && under < 20 * 60, `25 u at tier 6: fed until ${clock(fedUntil)}, under 0.8 from ${clock(under)}`);
   assert.ok(P >= floor && P < floor + 0.1, `out of fuel the people settle at what inner heat feeds: ${P.toFixed(3)} bn (floor ${floor})`);
   fuel += 25;
-  assert.ok(step(1800, 0.1) >= 1 - 1e-9, '25 u more: fed again at once');
-  console.log(`run dry: 10 bn, L3, 25 u: fed until ${clock(fedUntil)}, under 0.8 from ${clock(under)}; after 30 min ${P.toFixed(2)} bn (inner heat feeds ${floor.toFixed(2)})`);
+  assert.ok(step(5400, 0.1) >= 1 - 1e-9, '25 u more: fed again at once');
+  console.log(`run dry: 10 bn, L3, 25 u: fed until ${clock(fedUntil)}, under 0.8 from ${clock(under)}; after 90 min ${P.toFixed(2)} bn (inner heat feeds ${floor.toFixed(2)})`);
+}
+// Solar wings (user, 2026-11-15): free energy from starlight, counted like inner heat, more wings with the tier (none at
+// tier 1); they keep an empty-fuel world going near a star, never as far as fuel takes it.
+assert.deepEqual([1, 2, 3, 4, 5, 6].map(solarWings), [0, 2, 3, 4, 5, 6]);
+assert.ok(near(solar(1, 6, PLANET_M), SOLAR) && near(solar(5, 6, PLANET_M), SOLAR) && solar(0, 6, PLANET_M) === 0 && solar(1, 1, PLANET_M) === 0, 'tier 6 in full light: SOLAR; capped above light 1; none in the dark or at tier 1');
+assert.ok(near(solar(1, 6, 8 * PLANET_M), 2 * SOLAR) && SOLAR < REACTOR && near(energy(0, PLANET_M, 0, SOLAR), GEO + SOLAR), '8× mass: 2×; weaker than a reactor; adds to the energy');
+assert.ok(fuelBurn(GEO + SOLAR, GEO + SOLAR, 100, PLANET_M) === 0 && fuelBurn(1.3, GEO + SOLAR, 100, PLANET_M) < fuelBurn(1.3, GEO, 100, PLANET_M), 'starlight saves fuel');
+{
+  // Where the people settle at Planet mass, L3, habitability 1, by the light (star/rules.ts sunlight of a glow-1 sun): out of fuel, from 10 bn and from P0; with fuel.
+  const settle = (P: number, light: number, fuel: number) => {
+    for (let t = 0; t < 3600; t += 0.5) P = popStep(P, fedCapacity(capacity(1, PLANET_M), energy(fuel, PLANET_M, 0, solar(light, tier(P), PLANET_M)) - upkeep(3)), 0, 0.5);
+    return P;
+  };
+  assert.ok(near(settle(10, 0, 0), 2, 0.01) && settle(10, 1, 0) >= 6.9 && settle(P0, 1, 0) >= 6.0 && near(settle(10, 1, 100), 10, 0.01), 'dark: 2 bn; full light: 6–7 bn; with fuel: 10 bn');
+  const rows = [Infinity, 30, 12, 6, 3].map((x) => [x, x === Infinity ? 0 : sunlight(1, 0, x)]);
+  const row = ([x, l]: number[]) => `${x === Infinity ? 'no star' : `${x} R★`} ${settle(10, l, 0).toFixed(2)} / ${settle(P0, l, 0).toFixed(2)}`;
+  console.log(`empty fuel, L3 (bn from 10 / from P0): ${rows.map(row).join(' · ')} · with fuel 10.00; idle 10 bn in full light burns ${(60 * fuelBurn(NEED * 10 + upkeep(3), GEO + SOLAR, 100, PLANET_M)).toFixed(2)} u/min`);
 }
 // A gorged world (5% radioactive at tier 1): its people dig it under the 3% safe share within 2 min, gaining ≥ 200 u of fuel.
 {
@@ -251,14 +271,17 @@ for (const k of ['probe', 'fighter'] as const) {
   let fired = 0, run = 0, cool = 0, last = -Infinity, gapMin = Infinity;
   for (let t = 0; t < 60; t += h) {
     cool = Math.max(0, cool - h);
-    if (cool > 0 || !pull(g, h, true, f.rounds, RATE, GAP)) continue;
+    if (cool > 0 || !pull(g, h, true, f.rounds, f.rate, GAP)) continue;
     if (run === 0 && last > -Infinity) gapMin = Math.min(gapMin, t - last);
     [fired, run, last] = [fired + 1, run + 1, t];
     if (run >= cap) [run, cool] = [0, f.cool];
   }
   assert.ok(gapMin >= f.cool && fired / 60 <= cap / f.cool, `${k}: ${fired} rounds a minute, ${gapMin.toFixed(2)} s between runs`);
-  console.log(`${k} gun, held a minute: ${fired} rounds (${(fired / 60).toFixed(1)}/s, was 5.6/s), ≤ ${cap} a run, ${gapMin.toFixed(1)} s between runs`);
+  console.log(`${k} gun, held a minute: ${fired} rounds (${(fired / 60).toFixed(1)}/s), ≤ ${cap} a run, ${gapMin.toFixed(1)} s between runs`);
 }
+// Each class its own feel (user, 2026-11-15): fighters fire fast and light, probes slow; the frigate and missiles are slow and heavy.
+assert.ok(FLEET.fighter.rate > FLEET.probe.rate && FLEET.fighter.cool < FLEET.probe.cool && ARMS.lance.reload >= 10 && ARMS.missile.reload >= 10 && ARMS.missile.k >= LANDING && ROCKET.reload > FLEET.fighter.cool, 'fighters fast, probes slow, frigate, missiles and rockets slow but heavy');
+assert.ok(ROCKET.speed <= 0.6 * ARMS.round.u && ARMS.missile.u <= 0.5 * ARMS.round.u, 'rockets and missiles fly well under a round: seen coming');
 // Lost habitability: a minute asleep leaves ≤ 40% of the people (1/min, was 0.25/min).
 {
   let P = 4;
@@ -292,6 +315,28 @@ for (const k of ['probe', 'fighter'] as const) {
 {
   const you = 1e5, moon = 0.02 * you, perMin = mineMix(COMP.stony, moon, moon * MINE_RATE * 60, ['radio', 'metal', 'ice']);
   assert.ok(near(units(perMin.take.metal!, you), 3));
+  // Home extraction (homeDig): a 10% metal world gives a tenth of that moon's ore at the same tier, 0.3 u/min a tier.
+  const home = { rock: 0.9, metal: 0.1 }, oreAt = (T: number, c: Record<string, number> = home) => homeDig(c, T, 60).ore / UNIT;
+  for (const T of [1, 3, 6]) assert.ok(near(oreAt(T), 0.3 * T) && near(oreAt(T), 0.1 * T * units(perMin.take.metal!, you)),`home ore at tier ${T}: ${oreAt(T)}`);
+  assert.ok(near(oreAt(1, { rock: 0.3, metal: 0.7 }), oreAt(1, { rock: 0.8, metal: HOME_RICH })), 'a share over HOME_RICH counts as HOME_RICH');
+  const wet = { rock: 0.82, metal: 0.1, ice: 0.08 };
+  assert.ok(homeDig(wet, 3, 60, 0, 'metal').ore === 0 && homeDig(wet, 3, 60, 0, 'metal').vol > 0, 'never the metal a world lacks');
+  assert.ok(homeDig(wet, 3, 60, 0, 'ice').vol === 0 && homeDig(wet, 3, 60, HOME_VOL).vol === 0 && homeDig(wet, 3, 60, HOME_VOL - 1).vol > 0, 'no water lacking or at HOME_VOL');
+  assert.ok(near(homeDig(wet, 1, 60).vol / UNIT, 0.24), 'water: 0.24 u/min a tier at 8%');
+  assert.ok(!('ice' in homeDig(home, 3, 60).comp), 'a world without water gets no ice key');
+  for (const [T, dt] of [[0, 60], [3, 0]]) {
+    const z = homeDig(wet, T, dt);
+    assert.ok(z.ore === 0 && z.vol === 0 && z.comp.rock === wet.rock && z.comp.metal === wet.metal, 'tier 0 or dt 0: nothing');
+  }
+  // An hour at tier 6: the sum stays 1, the dug metal and water are now rock, the field is untouched.
+  let c: Record<string, number> = { ...home }, ore = 0, vol = 0;
+  for (let t = 0; t < 3600; t++) {
+    const h = homeDig(c, 6, 1);
+    [c, ore, vol] = [h.comp as Record<string, number>, ore + h.ore, vol + h.vol];
+  }
+  const sum = Object.values(c).reduce((a, b) => a + b, 0);
+  assert.ok(near(sum, 1, 1e-9) && near(home.metal - c.metal, ore, 1e-12) && near(c.rock - home.rock, ore + vol, 1e-12), `home dig keeps mass: sum ${sum}`);
+  assert.ok(near(c.metal, 0.0898, 1e-4) && magnet(PLANET_M, c, 1) === 1, `an hour at tier 6: metal ${c.metal}`);
 }
 assert.ok(cityLevel(0.2) === 0.25 && cityLevel(2.4) === 0.5 && cityLevel(9) === 1);
 
@@ -431,7 +476,8 @@ assert.ok(slugK(1e5) > 12 && slugK(1e5) < 13.5, `slug on a shield ${slugK(1e5)}`
   // idle past the stun) and a measured volley-by-volley run (real shieldShot and shieldRegen, averaged over 20 start phases).
   // Volleys land whole, so measured may differ from the mean by up to one firing cycle (the plan's "~170" row: 15%).
   type U = { k: number; at: number[]; every: number; t0: number };
-  const fu = (t0: number): U => ({ k: ARMS.round.k * ARMS.round.hit, at: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6], every: ARMS.round.run, t0 });
+  const F = FLEET.fighter, burst = Array.from({ length: F.rounds * F.bursts }, (_, i) => (i % F.rounds) / F.rate + Math.floor(i / F.rounds) * ((F.rounds - 1) / F.rate + GAP)); // a run: bursts of rounds at rate, GAP between
+  const fu = (t0: number): U => ({ k: ARMS.round.k * ARMS.round.hit, at: burst, every: ARMS.round.run, t0 });
   const fr: U = { k: ARMS.lance.k * ARMS.lance.hit, at: [0, ARMS.lance.gap, 2 * ARMS.lance.gap], every: ARMS.lance.reload, t0: 0 };
   const mi = (n: number, hit: number): U => ({ k: ARMS.missile.k * hit, at: Array(n).fill(0), every: ARMS.missile.reload, t0: 0 });
   const dr: U = { k: slugK(1e5), at: [0], every: DRIVER_COOL, t0: 0 };
@@ -451,12 +497,12 @@ assert.ok(slugK(1e5) > 12 && slugK(1e5) < 13.5, `slug on a shield ${slugK(1e5)}`
   const rate = (u: U, n = 1) => ({ kps: (n * u.k * u.at.length) / u.every, idle: Math.max(0, u.every - SHIELD_STUN - u.at[u.at.length - 1]) / u.every });
   const fire = (n: number) => ({ kps: n * fighter, idle: 0 }); // a wing staggers its runs: never a pause past the stun
   const table: [string, (L: number) => U[], (L: number) => { kps: number; idle: number }[], number[]][] = [
-    ['2 strike fighters', () => [fu(0), fu(3.25)], () => [fire(2)], [36, 72, 108]],
-    ['3 fighters', () => [fu(0), fu(2.17), fu(4.33)], () => [fire(3)], [24, 48, 72]],
-    ['frigate alone', () => [fr], () => [rate(fr)], [16, 36, 61]],
-    ['frigate + 2 fighters', () => [fr, fu(0), fu(3.25)], () => [rate(fr), fire(2)], [10, 21, 31]],
-    ['missiles, all land (salvo = level)', (L) => [mi(L, 1)], (L) => [rate(mi(L, 1))], [39, 39, 39]],
-    ['missiles, ~40% land (salvo = level)', (L) => [mi(L, 0.4)], (L) => [rate(mi(L, 0.4))], [170, 170, 170]],
+    ['2 strike fighters', () => [fu(0), fu(ARMS.round.run / 2)], () => [fire(2)], [31, 62, 94]],
+    ['3 fighters', () => [fu(0), fu(ARMS.round.run / 3), fu((2 * ARMS.round.run) / 3)], () => [fire(3)], [21, 42, 62]],
+    ['frigate alone', () => [fr], () => [rate(fr)], [16, 37, 63]],
+    ['frigate + 2 fighters', () => [fr, fu(0), fu(ARMS.round.run / 2)], () => [rate(fr), fire(2)], [10, 20, 30]],
+    ['missiles, all land (salvo = level)', (L) => [mi(L, 1)], (L) => [rate(mi(L, 1))], [40, 40, 40]],
+    ['missiles, half land (salvo = level)', (L) => [mi(L, 0.5)], (L) => [rate(mi(L, 0.5))], [122, 122, 122]],
     ['your driver', () => [dr], () => [rate(dr)], [10, 19, 29]],
   ];
   console.log('time to break an equal shield L1 / L2 / L3 (s): planned | ttk | measured');
@@ -468,10 +514,10 @@ assert.ok(slugK(1e5) > 12 && slugK(1e5) < 13.5, `slug on a shield ${slugK(1e5)}`
       assert.ok(Math.abs(m[i] - p) <= Math.max((name.includes('~') ? 0.15 : 0.1) * p, cycle), `${name} L${i + 1}: measured ${m[i].toFixed(1)} vs planned ${p}`);
     });
   }
-  // Ground phase: from an open shield, 8 landings (160 K) of heavy fire beat a world; a frigate's 3 × 5.4 K per 8 s does it in
-  // ~79 s, with missiles (salvo 2, 60% land) ~47 s; fighters alone never (rounds take no people).
+  // Ground phase: from an open shield, 8 landings (160 K) of heavy fire beat a world; a frigate's 3 × 6.75 K per 10 s does it in
+  // ~79 s, with missiles (salvo 2, half land) ~53 s; fighters alone never (rounds take no people).
   const ground = (k: number) => (8 * LANDING) / k;
-  const missK = kps(ARMS.missile.k, 2, 0.6, ARMS.missile.reload);
+  const missK = kps(ARMS.missile.k, 2, 0.5, ARMS.missile.reload);
   console.log(`ground phase (people 1 → ${BEATEN}): frigate alone ${ground(frigate).toFixed(0)} s, frigate + missiles ${ground(frigate + missK).toFixed(0)} s, fighters never`);
 }
 console.log('civilization rules: ok');

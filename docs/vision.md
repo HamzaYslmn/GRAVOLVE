@@ -182,7 +182,7 @@ topic docs.
 - **Water kept at the handover:** first rain returns up to 90% (96% after 60 s, measured).
 - **Age I threats and lesson:** first rival at 15 s is a hunter 1.4–1.8× you; a forced shower at 20–30 s; "no drag" hint and "Too fast to eat" hint; rivals chase at most 7 of your D/s.
 - **Gas line:** sticky (in 20%, out 15%), a proper Brown dwarf ending.
-- **Combat:** one hit takes ≤ 45% of a rival's people; rivals come on screen; 79% duel wins (check, under the weapon rules of 2026-11-14).
+- **Combat:** one hit takes ≤ 45% of a rival's people; rivals come on screen; duels by temper (2026-11-15, [aliencivilizations.md](aliencivilizations.md)): a new civilization holds a Careful rival, loses to a Hungry one if it stays and must run from a Raider; with a frigate it wins.
 - **Endgame:** Dyson 100% = "Type II civilization"; orbit framing (view up to 2.5×); respawn at 3,194 reads Planetoid.
 - **Meta:** achievements with toast and gallery (39 today, `core/achievements.ts`; list in [hudandcontrols.md](hudandcontrols.md#achievements)); fastest Age I / II / III bests.
 

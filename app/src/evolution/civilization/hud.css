@@ -1,17 +1,67 @@
-/* The civilization's rows in your card (hud.ts); asteroid/hud.css provides .cells, .cell, .scale. */
-#game-hud .civ .cell { color: #ffd27a; }
-/* Stock in words: Fuel 42 · Ore 984 · Vol 735. */
-#game-hud .civ .stock { display: flex; flex-wrap: wrap; align-items: baseline; font-size: 12px; color: var(--ui-muted); }
-#game-hud .civ .stock span + span::before { content: '·'; margin: 0 6px; }
-#game-hud .civ .stock b { font-size: 13px; font-weight: 600; color: var(--ui-text); }
-/* One slot per fleet class (hud.ts, slots.ts): art, caption + count, reload bar; on = takes the priority, off = cannot, none = nothing yet. */
-#game-hud .civ .slots { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 4px 0; }
-#game-hud .civ .slot { display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: 1px 4px; padding: 3px 4px; color: #ffd27a; background: rgb(255 255 255 / 0.03); }
-#game-hud .civ .slot .art { grid-column: 1 / -1; height: 16px; width: 100%; color: #7fe8ff; }
-#game-hud .civ .slot em { font-style: normal; font-size: 9px; color: var(--ui-muted); }
-#game-hud .civ .slot .v { font-size: 12px; font-weight: 600; text-align: right; color: var(--ui-text); }
-#game-hud .civ .slot .bar { grid-column: 1 / -1; height: 3px; }
-#game-hud .civ .slot .bar > i { background: currentColor; }
-#game-hud .civ .slot.on { box-shadow: inset 0 0 0 1px #7fe8ff; }
-#game-hud .civ .slot.off { opacity: 0.45; }
-#game-hud .civ .slot.none { opacity: 0.35; }
+/* The civilization's rows in your card (hud.ts); asteroid/hud.css provides .bar, .scale, .ok .warn .bad. */
+#game-hud .civ { gap: 3px; line-height: 1.15; }
+#game-hud .civ [hidden] { display: none !important; } /* beats the rows' own display */
+
+/* Vitals: three equal columns, icon and value over a full-width track; the state class colours all three. */
+#game-hud .civ .vit { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+#game-hud .civ .m { display: grid; grid-template-columns: 12px minmax(0, 1fr); align-items: center; column-gap: 4px; row-gap: 3px; min-width: 0; color: #9fd0ff; }
+#game-hud .civ .m b { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; }
+#game-hud .civ .m > :is(.bar, .scale) { grid-column: 1 / -1; height: 4px; }
+#game-hud .civ .m.ok { color: var(--ok); }
+#game-hud .civ .m.warn { color: var(--warn); }
+#game-hud .civ .m.bad { color: var(--bad); }
+#game-hud .civ .m .bar > i { background: currentColor; }
+
+/* Energy: one bar of the sources labelled inside (asteroid/hud.css :is(.mix, .track) > i), a hollow end of unused reactor capacity,
+   a white tick at what the people use and red past supply; the uses as a thin strip under it; totals at the right. Fuel: one line of text. */
+#game-hud .civ :is(.pw, .tank) > .cap { color: var(--ui-muted); }
+#game-hud .civ .pw { display: grid; grid-template-columns: 40px minmax(0, 1fr) 30px; grid-template-rows: 12px 3px; align-items: center; column-gap: 6px; row-gap: 2px; }
+#game-hud .civ .pw > .cap { grid-row: 1 / 3; }
+#game-hud .civ .pw > b { grid-column: 3; grid-row: 1 / 3; display: grid; text-align: right; font-size: 10px; font-weight: 600; line-height: 1.05; color: var(--ui-text); }
+#game-hud .civ .pw .us { color: var(--ui-muted); }
+#game-hud .civ .pw .us.bad { color: var(--bad); }
+#game-hud .civ .track { position: relative; display: flex; height: 12px; overflow: hidden; background: rgb(255 255 255 / 0.06); }
+#game-hud .civ .track > i { flex: none; transition: width 0.25s; }
+#game-hud .civ .track em { font-style: normal; }
+#game-hud .civ .track > i.bare .icon, #game-hud .civ .track em:empty { display: none; }
+#game-hud .civ .track > u { position: absolute; top: 0; bottom: 0; background: var(--bad); }
+#game-hud .civ .track > .need { position: absolute; bottom: 0; height: 4px; width: 2px; margin-left: -1px; background: #fff; box-shadow: 0 0 2px #000; } /* a notch at the bottom edge, never across a label */
+#game-hud .civ .strip { grid-column: 2; display: flex; height: 3px; overflow: hidden; background: rgb(255 255 255 / 0.06); }
+#game-hud .civ .strip > i { flex: none; transition: width 0.25s; }
+#game-hud .civ .s-geo { background: #ff7a4a; }
+#game-hud .civ .s-solar { background: #ffe27a; }
+#game-hud .civ .s-dyson { background: #ffb347; }
+#game-hud .civ .s-fuel { background: #8dff6a; }
+#game-hud .civ .s-spare { box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.3); }
+#game-hud .civ .s-people { background: #c8d4ff; }
+#game-hud .civ .s-shield { background: #7fe8ff; }
+#game-hud .civ .s-yard { background: #ffd27a; }
+#game-hud .civ .s-mend { background: #6cf0a0; }
+#game-hud .civ .s-rockets { background: #ff9f43; }
+#game-hud .civ .tank { display: grid; grid-template-columns: 40px minmax(0, 1fr); align-items: center; column-gap: 6px; }
+#game-hud .civ .tank > b, #game-hud .civ .yard { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#game-hud .civ .tank > b { font-weight: 600; color: var(--ui-text); }
+#game-hud .civ .tank > b.warn { color: var(--warn); }
+#game-hud .civ .tank > b.bad { color: var(--bad); }
+
+/* Fleet: per class an icon, one pip per ship filled by its own reload, faint hollow pips for unbuilt cap; on takes the priority, off cannot, none: nothing yet. */
+#game-hud .civ .fleet { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 6px; }
+#game-hud .civ .g { display: flex; align-items: center; gap: 3px; padding: 1px 3px; color: #7fe8ff; }
+#game-hud .civ .g .art { flex: none; width: 18px; height: 9px; }
+#game-hud .civ .g:is(.rocket, .missile) .art { width: 9px; }
+#game-hud .civ .g .p { display: flex; align-items: center; gap: 2px; }
+#game-hud .civ .g .p i { width: 7px; height: 7px; border-radius: 50%; background: conic-gradient(currentColor calc(var(--p, 0) * 1turn), rgb(255 255 255 / 0.1) 0); }
+#game-hud .civ .g .p i.e { background: none; box-shadow: inset 0 0 0 1px rgb(127 232 255 / 0.3); }
+#game-hud .civ .g .p em { margin-left: 1px; font-style: normal; font-size: 11px; font-weight: 600; color: var(--ui-text); }
+#game-hud .civ .g.on { box-shadow: inset 0 0 0 1px #7fe8ff; }
+#game-hud .civ .g.off { opacity: 0.45; }
+#game-hud .civ .g.none { opacity: 0.35; }
+
+/* Yard, at the fleet row's right end: what is building, its progress, cost / stock (amber while it waits for ore); the stocks while idle. */
+#game-hud .civ .yard { display: flex; align-items: center; gap: 4px; margin-left: auto; color: var(--ui-muted); }
+#game-hud .civ .job { display: flex; align-items: center; gap: 4px; min-width: 0; }
+#game-hud .civ .job em { font-style: normal; color: var(--ui-text); }
+#game-hud .civ .job .bar { width: 28px; height: 4px; }
+#game-hud .civ .job .bar > i { background: #ffd27a; }
+#game-hud .civ .st { font-weight: 600; color: var(--ui-text); }
+#game-hud .civ .st.warn { color: var(--warn); }

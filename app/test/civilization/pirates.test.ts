@@ -3,10 +3,10 @@
 import assert from 'node:assert/strict';
 import { slotRadius } from '../../src/core/orbits.ts';
 import { book, fighterGun, q, R, report, seeded, SR, watch } from './fakes.ts';
-import { ACC, BURST, GAP, GUN, GUN_ARC, H_TURN, inArc, jink, jinkStep, leadAt, M_TURN, P_ACC, P_TURN, RATE, SPECK, startJink, thrust, TURN, want, type Craft } from '../../src/evolution/civilization/flight.ts';
+import { ACC, BURST, GAP, GEE, GUN, GUN_ARC, H_TOP, H_TURN, inArc, jink, jinkStep, leadAt, M_TOP, M_TURN, P_ACC, P_TOP, P_TURN, RATE, SPECK, startJink, thrust, TURN, want, type Craft } from '../../src/evolution/civilization/flight.ts';
 import { createShots, menace, pull, SHOTS, trigger, type Hull } from '../../src/evolution/civilization/guns.ts';
 import { createPirates } from '../../src/evolution/civilization/pirates.ts';
-import { fleetSize, HOLD, KEPT, SHIELD_K, shieldRegen, shieldShot, STEAL, type Shield } from '../../src/evolution/civilization/rules.ts';
+import { CHASE_S, fleetSize, HOLD, KEPT, PIRATE_CLASS, SHIELD_K, shieldRegen, shieldShot, STEAL, type Shield } from '../../src/evolution/civilization/rules.ts';
 import type { Foe } from '../../src/evolution/civilization/ships.ts';
 
 const models = { pirates: book() };
@@ -103,7 +103,7 @@ const models = { pirates: book() };
     assert.ok(ok && Math.min(...counts) === 1 && Math.max(...counts) === 14, 'every group: 1–14 ships, a hauler, a marauder only from 10');
   }
 
-  // 2. Keep-out: your world + 4 moons (slots 2.4–5.4 R, 0.12 R, 1.1–1.6 R/s) + five 1–5% rocks 12 R out; fleets of 8 for 120 s,
+  // 2. Keep-out: your world + 4 moons (slots 2.4–6.15 R, 0.12 R, 1.1–1.6 R/s) + five 1–5% rocks 12 R out; fleets of 8 for 120 s,
   // an attack on you due from 30 s: no body deaths, no ship within 2 sr of a body ≥ 0.3 R, no hauler inside your moon system's keep-out.
   for (const fps of [30, 120]) {
     let near = Infinity, haul = Infinity, deaths = 0, raids = 0, rounds = 0, hits = 0, raidT = 0;
@@ -362,6 +362,91 @@ const models = { pirates: book() };
     }
     console.log(`frame rate: 6 seeds, same states at 30 and 120 fps (${states[30][1]}), first crack ${cracks[30][1].toFixed(2)} vs ${cracks[120][1].toFixed(2)} s, worst gap ${(100 * worst).toFixed(1)}%`);
     assert.ok(worst <= 0.15, `the first crack at about the same time: ${worst}`);
+  }
+
+  // 10. A moving player: every ship, every frame, at most TOPS × its class speed in space and |Δv|/dt ≤ GEE × its thrust.
+  // (a) You charge the nearest raider at 5, 20 and 100 R/s for 10 s (fleets of 5 and 12 with a marauder); (b) a fighter
+  // closes nose-on on a raider (it jinks); (c) one closes on a hauler (it flees); (d) work on a rock drifting 1 R/s across the view;
+  // (e) a raid, then you leave at 20 R/s: they fall behind and go (`leave`) within CHASE_S. Slip off the nose read in space,
+  // the frame flown in (a), (b), (c), (e); (d) is left out: slow ships round a moving rock slip up to ~41° there, as before the top.
+  {
+    const tops = { raider: P_TOP, hauler: H_TOP, marauder: M_TOP }, TURNS_OF = { raider: P_TURN, hauler: H_TURN, marauder: M_TURN }, moving = { moving: book() };
+    let fast = 0, jolt = 0;
+    const meter = (w: W, dt: number, slip: boolean) => {
+      const fl = w.pirates.fleet, prev = new Map(alive(w).map((s) => [s, { vx: s.vx, vy: s.vy, h: s.heading }]));
+      return () => {
+        if (!fl) return;
+        for (const s of alive(w)) {
+          const p = prev.get(s), cs = PIRATE_CLASS[s.kind].speed * fl.v * R, top = tops[s.kind] * cs;
+          if (!p) continue;
+          fast = Math.max(fast, Math.hypot(s.vx, s.vy) / top);
+          jolt = Math.max(jolt, Math.hypot(s.vx - p.vx, s.vy - p.vy) / dt / (GEE * P_ACC * cs));
+          if (slip) watch(moving.moving, s, p.h, dt, TURNS_OF[s.kind]);
+        }
+      };
+    };
+    const fly = (w: W, dt: number, me: { vx: number; vy: number }, more?: () => void, slip = true) => {
+      const m = meter(w, dt, slip);
+      w.frame(dt, () => {
+        [w.me.motion.x, w.me.motion.y, w.me.motion.vx, w.me.motion.vy] = [w.me.motion.x + me.vx * dt, w.me.motion.y + me.vy * dt, me.vx, me.vy];
+        [w.ctx.cam.x, w.ctx.cam.y] = [w.me.motion.x, w.me.motion.y];
+        more?.();
+      });
+      m();
+    };
+    const rows: string[] = [];
+    for (const v of [5, 20, 100]) for (const u of [0.55, 0.9]) for (const seed of [1, 2]) {
+      const w = world(seed), dt = 1 / 60;
+      w.pirates.launch(u);
+      for (let t = 0; t < 1; t += dt) w.frame(dt);
+      for (let t = 0; t < 10 && alive(w).length; t += dt) {
+        const m = w.me.motion, a = alive(w), s = a.find((q) => q.kind === 'raider') ?? a[0], d = Math.hypot(s.x - m.x, s.y - m.y) || 1;
+        fly(w, dt, { vx: ((s.x - m.x) / d) * v * R, vy: ((s.y - m.y) / d) * v * R });
+      }
+      if (seed === 1) rows.push(`charge ${v} R/s at ${w.pirates.fleet?.n0 ?? '?'} ships: ${w.pirates.deaths.body} rammed`);
+    }
+    for (const kind of ['raider', 'hauler'] as const) for (const fps of [30, 120]) {
+      const w = world(3), dt = 1 / fps;
+      w.pirates.launch(U(5));
+      for (let t = 0; t < 3; t += dt) w.frame(dt);
+      const s = alive(w).find((q) => q.kind === kind)!, sp = Math.hypot(s.vx, s.vy) || 1, ux = s.vx / sp, uy = s.vy / sp;
+      const f = { x: s.x - ux * 3 * R, y: s.y - uy * 3 * R, vx: s.vx + ux * 3 * R, vy: s.vy + uy * 3 * R, kill() {} };
+      w.ctx.mine = [f];
+      let evaded = false;
+      for (let t = 0; t < 4; t += dt) {
+        fly(w, dt, { vx: 0, vy: 0 }, () => void ((f.x += f.vx * dt), (f.y += f.vy * dt)));
+        evaded ||= s.jk.t > 0 || s.flee > 0;
+      }
+      assert.ok(evaded, `a ${kind} evades a fighter on its tail`);
+    }
+    for (const fps of [30, 120]) {
+      const w = world(4, { still: true }), dt = 1 / fps;
+      w.bodies.push(w.mk(-12 * R, 12 * R, R, 0, 0.04, { rock: 0.4, metal: 0.4, ice: 0.2 }));
+      w.pirates.launch(U(8));
+      for (let t = 0; t < 30 && w.pirates.fleet; t += dt) {
+        fly(w, dt, { vx: 0, vy: 0 }, undefined, false); // a still field: the rock only drifts
+      }
+      if (fps === 120) rows.push(`a rock drifting 1 R/s: ${w.pirates.stats.cracked} cracks, ${w.pirates.stats.rounds} rounds, ${w.pirates.deaths.body} body deaths`);
+    }
+    for (const seed of [1, 2, 3]) {
+      const w = world(seed, { civ: true }), dt = 1 / 60;
+      w.pirates.launch(U(8));
+      let t = 0;
+      for (; t < 60 && w.pirates.fleet?.state !== 'raid'; t += dt) w.pirates.attack(), w.frame(dt);
+      for (let k = 0; k < 3 / dt; k++) w.pirates.attack(), w.frame(dt);
+      const fl = w.pirates.fleet!, h0 = w.pirates.stats.hits;
+      assert.equal(fl.state, 'raid', `a raid starts (seed ${seed})`);
+      let gone = -1;
+      for (let u = 0; u < CHASE_S + 1 && gone < 0; u += dt) {
+        fly(w, dt, { vx: 20 * R, vy: 0 });
+        if (!w.pirates.fleet || fl.state === 'leave') gone = u;
+      }
+      rows.push(`raid, you leave at 20 R/s (seed ${seed}): ${w.pirates.stats.hits - h0} rounds on you after, leaving after ${gone.toFixed(1)} s`);
+      assert.ok(gone >= 0 && gone <= CHASE_S, `a raid falls behind and goes within CHASE_S when you leave at 20 R/s: ${gone}`);
+    }
+    console.log(`moving player: ${rows.join('; ')}; ship speed ≤ ${fast.toFixed(4)} × its top, |Δv|/dt ≤ ${jolt.toFixed(4)} × GEE × its thrust`);
+    assert.ok(fast <= 1 + 1e-6 && jolt <= 1 + 1e-6, `tops and thrust kept: ${fast}, ${jolt}`);
+    report(moving);
   }
 
   // Cost: pirates.update for 14 ships among 400 bodies (0.001–0.05 of you, belt-like), 60 fps, 10 s.

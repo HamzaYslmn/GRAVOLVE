@@ -27,13 +27,13 @@ function fieldTip(w: WorldState, comp: Comp) {
   const f = fieldParts(w.mass, comp, w.diff), weak = w.scores.magnet > 0 ? 'Weak magnetic field' : 'No magnetic field';
   if (f.metal <= f.sunk && f.metal <= f.size) return `${weak}: needs more iron · eat metal rocks (${Math.round(FIELD_METAL * 100)}% sunk metal is full)`;
   if (f.sunk <= f.size) return `${weak}: your iron hasn't sunk · melt your world through with a big, fast impact`;
-  return `${weak}: a bigger world keeps its core churning · grow`;
+  return `${weak}: a bigger world keeps its core churning · grow, or eat more metal`;
 }
 
 /** One line about what limits life most: what's wrong and what the player can do (life speed = weakest of three × field). */
 function tip(w: WorldState, comp: Comp) {
   if (w.envelope) return w.name === 'Brown dwarf' ? 'A failed star: the gas line ends here' : 'Gas world: no surface for life · grow toward a brown dwarf';
-  if (!w.civ && radioLife(comp.radio ?? 0) < 0.6) return 'Very radioactive: life is slow · eat plain rock to thin it';
+  if (!w.civ && radioLife(comp.radio ?? 0) < 0.6) return 'High rad: life is slow · eat plain rock to thin it';
   const s = w.scores, worst = Math.min(s.water, s.temp, s.air);
   if (w.life === 0 && w.lifeSpeed > 0 && worst >= 0.6) return ''; // all well: no tip; else the lever below
   if (s.magnet <= 0) return fieldTip(w, comp); // no field: life cannot start at all

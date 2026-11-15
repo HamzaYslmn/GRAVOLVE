@@ -13,6 +13,10 @@
   --ui-family: 'Oxanium', 'Segoe UI', system-ui, sans-serif;
   --ui-font: 500 12px/1.4 var(--ui-family);
   --ui-cut: 10px; /* cut corners */
+  --safe-t: env(safe-area-inset-top, 0px); /* phone notches */
+  --safe-r: env(safe-area-inset-right, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
 }
 
 /* The shared panel: dark glass with two cut corners and two bright corner brackets in the panel's
@@ -47,6 +51,13 @@ body {
   background: var(--space);
   color: var(--ui-text);
   font: 12px/1.4 ui-monospace, Consolas, monospace;
+  /* Touch: no text selection, callout, tap flash, pinch zoom or pull-to-refresh; panels still scroll. */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: pan-x pan-y;
+  overscroll-behavior: none;
 }
 
 [hidden] {
@@ -69,3 +80,4 @@ canvas {
   pointer-events: none;
   text-shadow: 0 0 4px #000;
 }
+@media (max-width: 640px) { #hud { left: calc(8px + var(--safe-l)); transform: none; } } /* phones: top left, clear of the target card */

@@ -1,8 +1,8 @@
 /* Settings: gear button and panel (settings.ts); both use the shared .ui-panel look. */
 #settings {
   position: fixed;
-  top: 8px;
-  right: 8px;
+  top: calc(8px + var(--safe-t));
+  right: calc(8px + var(--safe-r));
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -38,6 +38,10 @@
   gap: 10px;
   padding: 12px;
   min-width: 190px;
+  box-sizing: border-box;
+  max-height: calc(100vh - 62px); /* older WebViews without dvh */
+  max-height: calc(100dvh - 62px - var(--safe-t) - var(--safe-b));
+  overflow-y: auto;
   font: var(--ui-font);
   color: var(--ui-text);
   accent-color: var(--ui-accent);
@@ -69,3 +73,14 @@
 #settings-panel .howto summary { cursor: pointer; color: var(--ui-accent); letter-spacing: 0.08em; text-transform: uppercase; font-size: 11px; }
 #settings-panel .howto ul { margin: 6px 0 0; padding-left: 16px; display: grid; gap: 4px; font-size: 11px; line-height: 1.35; color: var(--ui-muted); }
 #settings-panel .howto b { color: var(--ui-text); }
+
+/* Short screens: the panel scrolls, so its corner brackets would scroll with it. */
+@media (max-height: 700px) { #settings-panel::before, #settings-panel::after { display: none; } }
+
+/* Touch: finger-sized controls. */
+@media (pointer: coarse) {
+  #settings-panel select, #settings-panel label.check { min-height: 40px; }
+  #settings-panel input[type=checkbox] { width: 20px; height: 20px; margin: 0; }
+  #settings-panel #volume { height: 40px; margin: 0; }
+  #settings-panel .howto summary { padding: 13px 0; }
+}

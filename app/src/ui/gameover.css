@@ -3,8 +3,12 @@
   position: fixed;
   inset: 0;
   margin: auto;
-  width: min(360px, calc(100vw - 32px));
+  box-sizing: border-box;
+  width: min(408px, calc(100vw - 16px - var(--safe-l) - var(--safe-r)));
   height: fit-content;
+  max-height: calc(100vh - 16px);
+  max-height: calc(100dvh - 16px - var(--safe-t) - var(--safe-b));
+  grid-template-rows: repeat(4, auto) minmax(0, 1fr); /* the dl (5th child, gameover.ts) takes the squeeze; else buttons fall off at 360×640 */
   padding: 24px;
   display: grid;
   gap: 12px;
@@ -37,6 +41,10 @@
   grid-template-columns: auto auto;
   gap: 4px 16px;
   margin: 4px 0;
+  overflow-y: auto; /* the dl scrolls, not the card: its corner brackets would scroll away */
+  min-height: 0;
+  scrollbar-width: thin;
+  padding: 0 10px; /* room for a phone's overlay scrollbar beside the numbers */
 }
 
 #gameover dt {
@@ -110,3 +118,24 @@
 #gameover .progress b { color: var(--ui-text); }
 #gameover dd em { font-style: normal; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #6cf0a0; }
 #gameover .buttons { display: flex; gap: 10px; }
+
+/* Phones. Portrait: clear of the gear. Landscape: the stats beside the rest. */
+@media (max-width: 640px) and (orientation: portrait) {
+  /* under the gear and DBG, above the debug map's corner */
+  #gameover { top: calc(56px + var(--safe-t)); bottom: calc(116px + var(--safe-b)); max-height: calc(100vh - 172px); max-height: calc(100dvh - 172px - var(--safe-t) - var(--safe-b)); }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  /* right: the strip of the gear, DBG and the debug map stays clear */
+  #gameover { right: calc(116px + var(--safe-r)); width: min(640px, calc(100vw - 132px - var(--safe-l) - var(--safe-r))); grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: repeat(6, auto) minmax(0, 1fr); gap: 6px 18px; padding: 12px 18px; }
+  #gameover > * { grid-column: 1; }
+  #gameover dl { grid-column: 2; grid-row: 1 / -1; align-self: center; max-height: 100%; margin: 0; padding: 0 6px 0 0; }
+  #gameover h1 { font-size: 22px; }
+  #gameover small { display: none; }
+}
+@media (max-height: 340px) and (orientation: landscape) {
+  #gameover .lesson, #gameover .ach-pips { display: none; }
+}
+@media (pointer: coarse) {
+  #gameover small { display: none; } /* key hints mean nothing on touch */
+  #gameover .buttons button { min-height: 44px; }
+}

@@ -3,9 +3,10 @@ import type { Vec } from './entity';
 
 // Player input: a direction vector (length <= 1) from the keyboard (WASD / arrows) or an on-screen
 // touch joystick that appears where the finger lands, plus two verbs:
-//   Fire    - left mouse at the cursor, Space at the HUD target, a tap or a second finger on touch;
+//   Fire    - left mouse at the cursor, Space at the HUD target, a tap or a quick tap of a second finger on touch;
 //   Command - right mouse on a body, E (at the cursor), a long press (LONG_S) on touch. A short Command is a tap
 //             (`command()`, sent on release); kept down past HOLD_S it is a hold (`hold()`), e.g. absorbing a moon.
+// Two fingers moving apart or together zoom (a pinch, sent to the camera as a wheel event); steering pauses, you coast.
 // Points are kept in screen pixels and turned into world points when read (`toWorld`, from the camera), so a still
 // cursor keeps aiming at what is under it while the camera moves. Verbs wait at most STALE_S for a reader.
 
@@ -26,6 +27,7 @@ const TAP_S = 0.25; // a touch shorter than this that never left the deadzone is
 const LONG_S = 0.5; // a touch held still this long is a Command
 const HOLD_S = 0.4; // a Command kept down this long is a hold
 const STALE_S = 0.3; // an unread verb is dropped after this
+const PINCH_PX = 8; // a second finger that travels this far while the finger gap changes this much starts a pinch
 
 type Pt = { x: number; y: number }; // screen px relative to the canvas
 /** A verb's target: a world point, or 'target' (Space: the HUD target) / 'cursor' (E with no point under it). */
@@ -83,7 +85,10 @@ export function createInput(surface: HTMLElement, toWorld: (sx: number, sy: numb
   base.innerHTML = '<div id="joystick-knob"></div>';
   document.body.appendChild(base);
   const knob = base.firstElementChild as HTMLDivElement;
-  let touch: { id: number; ox: number; oy: number; at: Pt; t: number; moved: boolean; cmd: boolean } | null = null;
+  let touch: { id: number; ox: number; oy: number; x: number; y: number; at: Pt; t: number; moved: boolean; cmd: boolean } | null = null;
+  let second: { id: number; ox: number; oy: number; x: number; y: number; at: Pt; t: number; moved: boolean; d: number } | null = null; // quick tap: Fire; a drag: pinch
+  let pinch = false; // latched until every finger lifts: no steering, no tap, no long press
+  const gap = () => Math.max(1, Math.hypot(second!.x - touch!.x, second!.y - touch!.y));
   const joy: Vec = { x: 0, y: 0 };
 
   surface.addEventListener('pointerdown', (e) => {
@@ -95,15 +100,20 @@ export function createInput(surface: HTMLElement, toWorld: (sx: number, sy: numb
     }
     if (e.pointerType !== 'touch') return;
     lastKind = 'touch';
-    if (touch) return void (fire = { at: local(e), t: now() }); // a second finger fires where it lands
-    const t = { id: e.pointerId, ox: e.clientX, oy: e.clientY, at: local(e), t: now(), moved: false, cmd: false };
+    if (touch) {
+      // A second finger: fires on a quick release, or pinches (a third finger is ignored).
+      if (!second) (second = { id: e.pointerId, ox: e.clientX, oy: e.clientY, x: e.clientX, y: e.clientY, at: local(e), t: now(), moved: false, d: 0 }), (second.d = gap());
+      return;
+    }
+    const t = { id: e.pointerId, ox: e.clientX, oy: e.clientY, x: e.clientX, y: e.clientY, at: local(e), t: now(), moved: false, cmd: false };
     touch = t;
+    if (second) second.d = gap(); // a finger landing again while the other pinch finger stays down
     base.style.left = `${e.clientX}px`;
     base.style.top = `${e.clientY}px`;
     knob.style.transform = '';
-    setTimeout(() => touch === t && !t.cmd && (base.hidden = false), JOY_SHOW_S * 1000);
+    setTimeout(() => touch === t && !t.cmd && !pinch && (base.hidden = false), JOY_SHOW_S * 1000);
     setTimeout(() => {
-      if (touch !== t || t.moved) return; // long press, still: a Command at that point (the joystick steps aside)
+      if (touch !== t || t.moved || second || pinch) return; // long press, still: a Command at that point (the joystick steps aside)
       t.cmd = true;
       base.hidden = true;
       joy.x = joy.y = 0;
@@ -111,7 +121,26 @@ export function createInput(surface: HTMLElement, toWorld: (sx: number, sy: numb
     }, LONG_S * 1000);
   });
   surface.addEventListener('pointermove', (e) => {
-    if (e.pointerId !== touch?.id || touch.cmd) return;
+    if (e.pointerId === second?.id) [second.x, second.y] = [e.clientX, e.clientY];
+    else if (e.pointerId === touch?.id) [touch.x, touch.y] = [e.clientX, e.clientY];
+    else return;
+    if (touch && second && !touch.cmd) {
+      const d = gap();
+      if (Math.hypot(second.x - second.ox, second.y - second.oy) > PINCH_PX) second.moved = true;
+      // Both the second finger's own travel and the gap change: a steering thumb alone never pinches.
+      if (!pinch && second.moved && Math.abs(d - second.d) > PINCH_PX) {
+        pinch = true;
+        second.d = d;
+        joy.x = joy.y = 0;
+        base.hidden = true; // steering steps aside: you coast
+      }
+      if (pinch) {
+        // ponytail: the camera zooms on wheel events (camera.ts: wheel *= exp(-deltaY * 0.001)), so a pinch is sent as one; a camera.zoomBy(f) is the upgrade.
+        surface.dispatchEvent(new WheelEvent('wheel', { deltaY: -1000 * Math.log(d / second.d), cancelable: true }));
+        second.d = d;
+      }
+    }
+    if (pinch || e.pointerId !== touch?.id || touch.cmd) return;
     let dx = e.clientX - touch.ox, dy = e.clientY - touch.oy;
     const len = Math.hypot(dx, dy);
     if (len > DEADZONE * JOY_RADIUS) (touch.moved = true), (base.hidden = false);
@@ -124,12 +153,17 @@ export function createInput(surface: HTMLElement, toWorld: (sx: number, sy: numb
   });
   const end = (e: PointerEvent) => {
     if (e.pointerType === 'mouse') return; // the right button's release is heard on the window (it may leave the canvas)
-    if (e.pointerId !== touch?.id) return;
-    if (touch.cmd) commandUp('touch');
-    else if (!touch.moved && now() - touch.t < TAP_S) fire = { at: touch.at, t: now() }; // a quick tap fires there
-    touch = null;
-    joy.x = joy.y = 0;
-    base.hidden = true;
+    if (e.pointerId === second?.id) {
+      if (e.type === 'pointerup' && !pinch && !second.moved && now() - second.t < TAP_S) fire = { at: second.at, t: now() }; // a quick second finger fires there
+      second = null;
+    } else if (e.pointerId === touch?.id) {
+      if (touch.cmd) commandUp('touch');
+      else if (!pinch && !touch.moved && now() - touch.t < TAP_S) fire = { at: touch.at, t: now() }; // a quick tap fires there
+      touch = null;
+      joy.x = joy.y = 0;
+      base.hidden = true;
+    }
+    if (!touch && !second) pinch = false;
   };
   surface.addEventListener('pointerup', end);
   window.addEventListener('pointerup', (e) => e.pointerType === 'mouse' && e.button === 2 && commandUp('mouse'));
@@ -145,7 +179,7 @@ export function createInput(surface: HTMLElement, toWorld: (sx: number, sy: numb
       const len = Math.hypot(x, y);
       out.x = len > 1 ? x / len : x;
       out.y = len > 1 ? y / len : y;
-      out.stick = !!touch && touch.moved && !touch.cmd && !held.size;
+      out.stick = !!touch && touch.moved && !touch.cmd && !pinch && !held.size;
       return out;
     },
     /** The mouse cursor as a world point (null off the canvas or on touch). */

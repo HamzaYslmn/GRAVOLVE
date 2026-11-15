@@ -20,7 +20,7 @@ import { carry, catchPlanet, release, ride, type Planet } from './system';
 import {
   BEAM_COST, BEAM_COVER, beamFed, beamK, beamPower, capacity, CELL, dysonEnergy, GROW, engineAccel, ENGINE_DRAG, FAR_LIGHT, FIRST, FLARE_DOSE, FLARE_MEAN, FLARE_RISE, FLARE_S, FLARE_X, flareK, flux, glare,
   BAND, inBand, layout, linkStep, liquidBand, ORBIT_RATE, orbitGoal, PLANET_R, PANELS, PULL_X, roche, starMu, starPull, SEGMENTS, STAR_CHANCE, starColor, starKelvin, starMass,
-  starName, starRadius, tearRate, warmth,
+  starName, starRadius, sunlight, tearRate, warmth,
 } from './rules';
 
 // Star takeover: created by the planet stage once the civilization has made Star contact. Stars are places: the first
@@ -55,7 +55,7 @@ export type StarState = {
 };
 /** Your star's energy beam (civilization/combat.ts): kelvin a shot delivers now (0: none), its bite (share of your mass), `burn` pays a shot. */
 export type Beam = { k: number; bite: number; off?: string; burn: () => void };
-type Light = { flux: number; warm: number; dyson: number };
+type Light = { flux: number; warm: number; dyson: number; sun: number; at: number };
 
 const FLARE_FALL = 1.2; // s the flare fades after its pulse
 const EAT_S = 0.25; // s between checks for bodies inside a star
@@ -224,11 +224,12 @@ export function createStarStage(layer: Container, me: Body, renderer: Renderer, 
   function visit(s: Star, out: Light, dt: number, zoom: number, pressure: number, rocheX: number) {
     const pm = me.motion, dx = s.m.x - pm.x, dy = s.m.y - pm.y, d = Math.hypot(dx, dy) || 1, cover = s.placed / PANELS;
     let x = d / s.R;
-    // Light: flux (dose; × FLARE_DOSE for a while after an unshielded flare), warmth (climate), Dyson energy.
+    // Light: flux (dose; × FLARE_DOSE for a while after an unshielded flare), warmth (climate), sunlight (solar), Dyson energy.
     flareDose = Math.max(0, flareDose - dt);
     const F = flux(s.glow, cover, x);
     out.flux = x < 10 ? F * (flareDose > 0 ? FLARE_DOSE : 1) : 0;
     out.warm = warmth(s.glow, cover, x) * smoothstep(WARM_X[0], WARM_X[1], x);
+    [out.sun, out.at] = [sunlight(s.glow, cover, x), Math.atan2(dy, dx)]; // starlight on your solar farms, bearing to the star
     out.dyson = s.owned ? dysonEnergy(s.M, cover) : 0;
     lost = Math.max(0, lost - dt);
     if (!s.owned) approach(s, dx, dy, d, x, rocheX, dt);
@@ -411,10 +412,10 @@ export function createStarStage(layer: Container, me: Body, renderer: Renderer, 
     planets,
     /**
      * `aimed`: the HUD has a body target (the star shows in the target panel only without one); `pressure`: your air (atm).
-     * Returns what the planet stage passes on: `flux` (dose), `warm` (kelvin added to the climate), `dyson` (E/s).
+     * Returns what the planet stage passes on: `flux` (dose), `warm` (kelvin added to the climate), `dyson` (E/s), `sun` (sunlight) and `at` (bearing to the star).
      */
     update(dt: number, real: number, zoom: number, aimed: boolean, pressure: number) {
-      const out: Light = { flux: 0, warm: 0, dyson: 0 };
+      const out: Light = { flux: 0, warm: 0, dyson: 0, sun: 0, at: 0 };
       if (!me.m) return out;
       const pm = me.motion, ci = Math.round((pm.x - origin.x) / CELL), cj = Math.round((pm.y - origin.y) / CELL);
       for (let i = ci - 1; i <= ci + 1; i++) for (let j = cj - 1; j <= cj + 1; j++) cell(i, j);

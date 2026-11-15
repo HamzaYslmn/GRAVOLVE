@@ -90,15 +90,15 @@ import { chips, CLEARED, status, type Fleet, type Target } from '../../src/evolu
   assert.ok(late > 4 * early, 'ordering early is the skill: a late kick costs several times more');
 }
 
-// Rockets (ships.ts rockets: ROCKET through the missile pool, guided by guns.ts steer): a rock 15 R out crossing at 3 R/s and
-// pushed sideways at 4 R/s² (pulled, or a ship turning) is hit; the same shot without a seeker is missed. A rocket hears only
-// a hit on its own target.
+// Rockets (ships.ts rockets: ROCKET through the missile pool, guided by guns.ts steer, kicked ROCKET.arc to either side): a
+// rock 9 R out crossing at 3 R/s and pushed sideways at 4 R/s² (pulled, or a ship turning) is hit from both sides; the same
+// shot without a seeker is missed. A rocket hears only a hit on its own target.
 {
-  const R = 1, u = ROCKET.speed * R, life = ((rocketRange(1) + 2) * R) / u + 0.2;
-  const run = (guided: boolean) => {
-    const pool = createMissiles(), target: Disc = { m: 1, r: 0.4, motion: { x: 15, y: -6, vx: 0, vy: 3 } };
+  const R = 1, u = ROCKET.speed * R, life = ((rocketRange(1) + 2) * R) / u + 0.5;
+  const run = (guided: boolean, side = 1) => {
+    const pool = createMissiles(12, () => (side > 0 ? 0 : 0.9)), target: Disc = { m: 1, r: 0.4, motion: { x: 8, y: -4, vx: 0, vy: 3 } };
     let got = false, best = Infinity;
-    const m = pool.launch({ team: 'you', x: 1.05, y: 0, vx: 0, vy: 0, tx: 15, ty: -6, tvx: 0, tvy: 3, u, life, k: 0, blast: ROCKET.blast * R, target, ...(guided ? { seek: () => ({ ...target.motion, r: target.r }), seeker: seeker(ROCKET, R) } : {}), hit: (b: Disc) => void (got ||= b === target), look: 'rocket' })!;
+    const m = pool.launch({ team: 'you', x: 1.05, y: 0, vx: 0, vy: 0, tx: 8, ty: -4, tvx: 0, tvy: 3, u, life, k: 0, blast: ROCKET.blast * R, target, ...(guided ? { seek: () => ({ ...target.motion, r: target.r }), seeker: seeker(ROCKET, R) } : {}), hit: (b: Disc) => void (got ||= b === target), look: 'rocket' })!;
     for (let t = 0, dt = 1 / 60; t < 2 && pool.live.length; t += dt) {
       target.motion.vy += 4 * R * dt;
       target.motion.x += target.motion.vx * dt;
@@ -108,8 +108,8 @@ import { chips, CLEARED, status, type Fleet, type Target } from '../../src/evolu
     }
     return { got, best };
   };
-  const g = run(true), st = run(false);
-  console.log(`rocket (${ROCKET.speed} R/s, turn ${ROCKET.turn} rad/s) at a rock 15 R out pushed sideways at 4 R/s²: guided ${g.got ? 'hit' : 'missed'}, without a seeker ${st.got ? 'hit' : `missed by ${st.best.toFixed(2)} R`}`);
-  assert.ok(g.got && !st.got, 'the seeker follows a target that changes course');
+  const g = [run(true, 1), run(true, -1)], st = run(false);
+  console.log(`rocket (${ROCKET.speed} R/s, turn ${ROCKET.turn} rad/s, kicked ±${ROCKET.arc} rad) at a rock 9 R out pushed sideways at 4 R/s²: guided ${g.map((f) => (f.got ? 'hit' : `missed by ${f.best.toFixed(2)} R`)).join(' / ')} (both sides), without a seeker ${st.got ? 'hit' : `missed by ${st.best.toFixed(2)} R`}`);
+  assert.ok(g.every((f) => f.got) && !st.got, 'the seeker follows a target that changes course, from either side');
 }
 console.log('priority target ok');

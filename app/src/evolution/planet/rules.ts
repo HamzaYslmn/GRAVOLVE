@@ -5,7 +5,7 @@
 import { boilingK, heatOfK, kelvin, LATENT, MELT_K, pressure, waterState, type WaterState } from '../../core/water.ts';
 import { clamp } from '../../core/rng.ts';
 import { matchQuality, matchStep, slotRadius } from '../../core/orbits.ts';
-import { AGE_GOAL, blend, COOL, MOLTEN, START_R, TIERS, type Comp } from '../asteroid/rules.ts';
+import { AGE_GOAL, blend, COOL, MOLTEN, START_R, TIERS, uncapR, type Comp } from '../asteroid/rules.ts';
 
 const clamp01 = (x: number) => clamp(x, 0, 1);
 /** 0 at a, 1 at b (either order), clamped. */
@@ -130,16 +130,17 @@ export function climate(sky: Sky, b: World, dt: number, warm = 0) {
 // ---- Habitability (doc: "Yaşam uygunluğu", four scores 0..1)
 /**
  * Magnetic field 0..1 (doc: metal core + inner heat). Core: sunk metal (Body.diff, grows only while molten) ×
- * the metal share, full at FIELD_METAL. Dynamo: small worlds freeze their core, so it grows from 0 at the
- * planetoid to 1 at a planet (log mass); radioactive rock keeps a core churning.
+ * the metal share, full at FIELD_METAL. Dynamo: small worlds freeze their core, so it grows from 0 at the planetoid
+ * to 1 at a planet (log mass); radioactive rock keeps a core churning, and so does more sunk metal (up to FIELD_BOOST ×).
  */
 export const FIELD_METAL = 0.06;
+const FIELD_BOOST = 2; // sunk metal past FIELD_METAL multiplies a weak dynamo, up to 2× (12%)
 /** The field's three levers, 0..1 each, for the HUD tip: metal share (as if all sunk), how far it sank, size. */
 export const fieldParts = (m: number, comp: Comp, diff: number) => ({
   metal: clamp01((comp.metal ?? 0) / FIELD_METAL), sunk: clamp01(diff), size: clamp01(Math.log10(m / TIERS[7][0]) + 5 * (comp.radio ?? 0)),
 });
 export const magnet = (m: number, comp: Comp, diff: number) =>
-  clamp01(((comp.metal ?? 0) * diff) / FIELD_METAL) * fieldParts(m, comp, diff).size;
+  clamp01(Math.min(FIELD_BOOST, ((comp.metal ?? 0) * diff) / FIELD_METAL) * fieldParts(m, comp, diff).size);
 /** Life speed: the weakest of water / temperature / air (scores 0..1) × (0.5 + 0.5 × field); no field, no life. */
 export const lifeSpeed = (water: number, temp: number, air: number, field: number) =>
   field > 0 ? Math.min(water, temp, air) * (0.5 + 0.5 * field) : 0;
@@ -211,18 +212,21 @@ export function impact(life: Life, kelvin: number): number | 'soft' {
 }
 
 // ---- Moons (planet/moons.ts holds them on core/orbits.ts slots)
-// Slots: min(6, 1 + ⌊2·log10(m / 10^3.5)⌋) = 1 at Planetoid, 2 at 10^4, 3 at 10^4.5, 4 at 10^5.
-export const MOON_SHARE = [0.002, 0.125]; // a body 0.2–12.5% of you can be caught (radius ≤ half yours: moons stay small; = GIANT_HIT)
+// Slots: min(5, 1 + ⌊2·log10(m / 10^3.5)⌋) = 1 at Planetoid, 2 at 10^4, 3 at 10^4.5, 4 at 10^5, 5 at 10^5.5.
+export const MOON_SHARE = [0.002, 0.125]; // by mass: a body 0.2–12.5% of you can be caught (= GIANT_HIT); by size see MOON_R
+export const MOON_R = 0.45; // R: a moon is never wider than this (neighbouring rings, 1.25 R apart, never touch: stretched rocks included)
+/** The most mass a moon (mass `m`, radius `r`) may hold round you (`M`, `R`): MOON_SHARE[1] of you and no wider than MOON_R · R (same shape: its loose radius goes with ∛m). */
+export const moonCap = (m: number, r: number, M: number, R: number) => Math.min(MOON_SHARE[1] * M, m * (uncapR(MOON_R * R) / uncapR(r)) ** 3);
 // Holding Command on a moon grinds it down: FEED of your mass a second streams onto you as dust (no hit, no heat), so
 // a full moon (MOON_SHARE[1]) takes about 8 s and letting go keeps what is left.
 export const FEED = 0.015;
-export const moonSlots = (m: number) => (m < AGE_GOAL ? 0 : Math.min(6, 1 + Math.floor(2 * Math.log10(m / AGE_GOAL) + 1e-9)));
+export const moonSlots = (m: number) => (m < AGE_GOAL ? 0 : Math.min(5, 1 + Math.floor(2 * Math.log10(m / AGE_GOAL) + 1e-9)));
 
 // Capture by match (the old game's capture made a skill, no click): a free body of MOON_SHARE on the catch lane round
 // any free slot (the ring it sits nearest: pickSlot), moving with you within the match window, fills a ring (q = 1 − (v / window)², MATCH_S at a
 // perfect match); out of the lane or the window it drains in MATCH_DRAIN. Full: it is your moon. R = your radius,
 // D = 2R; speeds in world units.
-export const LANE = 0.5; // R: half-width of the lane (half the slot step: lanes just touch)
+export const LANE = 0.5; // R: half-width of the lane (lanes sit 0.25 R apart)
 export const MATCH_V = 1; // D/s: the match window (V_STICK / 8, the old game's ~0.9)...
 export const MATCH_ORBIT = 0.6; // ...or this share of the slot's circular speed if larger (giants)
 export const MATCH_S = 1.5; // s to close the ring at a perfect match

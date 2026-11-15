@@ -31,8 +31,8 @@ import { breakMark, createSlugs, type Mark, type Shielded } from './weapon';
 //   Fire: the mass driver only (nothing before LIFE): a slug flies at the cursor (Space: the HUD target) for SLUG_ORE u of ore and SLUG_E of charge, at most every DRIVER_COOL s. The
 //         cooldown and charge show as the reticle's ring; on touch a thin arc on your halo. From Dyson 20% (star/stage.ts
 //         `beam`) an energy beam replaces the slug: no ore, every BEAM_COOL s, paid in star mass.
-//   Your priority target (civilization/stage.ts order) shows as four turning cyan arcs round its body; a priority world under
-//   siege keeps its siege ring. The rival world your sortie goes for is your priority, else your HUD target, else the nearest.
+//   Your priority target (civilization/stage.ts order) shows as four turning cyan arcs round its body (no siege ring).
+//   The rival world your sortie goes for is your priority, else your HUD target, else the nearest.
 //   Contacts run in the field's `contacts` hook (main.ts), after the field's own collisions: slugs, every ship's rounds
 //   (ctx.shots, guns.ts), every ship touching bodies (yours and rival home patrols graze or wreck; ships away die).
 //   Hits on rival worlds come through `hit` (main.ts onHit), so shields and people react to any body.
@@ -164,7 +164,7 @@ export function createCombat(layer: Container, me: Body, renderer: Renderer, kit
             slugs.fire(me, dir, oreMix(me), STEEL, false);
             [cool, charge, kick.t, kick.a] = [DRIVER_COOL, charge - SLUG_E, KICK_S, Math.atan2(dir.y, dir.x)];
             kit.sfx.play('boom', 0.3, 1.6);
-            news('driver1', 'Mass driver', `Left-click fires an ore slug · ${SLUG_ORE} ore · it strips shields, ships and small moons`);
+            news('driver1', 'Mass driver', `Click or tap fires an ore slug ·${SLUG_ORE} ore · it strips shields, ships and small moons`);
           } else kit.fx.note(at.x, at.y, 'No ore', 1 / zoom);
         } else if (at && !cool && !beamK) kit.fx.note(at.x, at.y, 'Charging', 1 / zoom);
       }
@@ -186,11 +186,8 @@ export function createCombat(layer: Container, me: Body, renderer: Renderer, kit
         }
       }
 
-      // Your siege: a faint continuous cyan circle on the ring your fighters fly round the enemy world (slot hints are dashed).
-      const sg = civ?.sortie;
-      if (sg && me.m) lines.circle(sg.world.motion.x, sg.world.motion.y, sg.ring).stroke({ width: 1.5 / zoom, color: YOU, alpha: 0.18 });
       const pr = civ?.priority, od = pr?.t, ob = od && 'motion' in od ? od : undefined, wait = pr?.wait; // your priority: four cyan arcs turning round it (a ship too; dim and slow while no weapon is ready or reloading), no text
-      if (od && od !== sg?.world && me.m) dashRing(lines, ob ? ob.motion.x : (od as Foe).x, ob ? ob.motion.y : (od as Foe).y, ob ? 1.6 * ob.r : 3 * ctx.shipR(), 4, clock * (wait ? 0.5 : 1.5), 0.45, 1.5 / zoom, YOU, wait ? 0.25 : 0.55);
+      if (od && me.m) dashRing(lines, ob ? ob.motion.x : (od as Foe).x, ob ? ob.motion.y : (od as Foe).y, ob ? 1.6 * ob.r : 3 * ctx.shipR(), 4, clock * (wait ? 0.5 : 1.5), 0.45, 1.5 / zoom, YOU, wait ? 0.25 : 0.55);
       rivals.update(dt, civ);
       pirates.update(dt, civ);
 

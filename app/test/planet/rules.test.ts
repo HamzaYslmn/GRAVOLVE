@@ -4,7 +4,7 @@ import { boil, kelvin, pressure, waterState } from '../../src/core/water.ts';
 import { blend, COOL, G_WORLD, GIANT_HIT, radiusOf, START_R, youPull, type Comp } from '../../src/evolution/asteroid/rules.ts';
 import { slotRadius } from '../../src/core/orbits.ts';
 import {
-  FEED, gripWindow, LANE, matchWindow, MOON_SHARE, beforeClimate, bombardment, climate, climateK, envelope, fieldParts, habitability, impact, lifeSpeed, lifeStep, LIFE_S, magnet, moonSlots, nextGoal, pickSlot, onGasLine, radioLife, SOFT_S, stageOf, tierIndex, tierName,
+  FEED, gripWindow, LANE, matchWindow, moonCap, MOON_R, MOON_SHARE, beforeClimate, bombardment, climate, climateK, envelope, fieldParts, habitability, impact, lifeSpeed, lifeStep, LIFE_S, magnet, moonSlots, nextGoal, pickSlot, onGasLine, radioLife, SOFT_S, stageOf, tierIndex, tierName,
   type Life, type Sky, type World,
 } from '../../src/evolution/planet/rules.ts';
 
@@ -142,8 +142,8 @@ assert.equal(stageOf(life.progress), -1);
 assert.equal(impact(life, 200), 1); // a big hit (≥ 150 K): wiped out
 assert.equal(life.progress, 0);
 assert.equal(impact(life, 400), 0); // nothing left to lose
-// Moon slots: 1 / 2 / 3 / 4 at 10^3.5 / 10^4 / 10^4.5 / 10^5, none before the handover.
-assert.deepEqual([3e3, 10 ** 3.5, 9999, 1e4, 10 ** 4.5, 1e5, 1e9].map(moonSlots), [0, 1, 1, 2, 3, 4, 6]);
+// Moon slots: 1 / 2 / 3 / 4 / 5 at 10^3.5 / 10^4 / 10^4.5 / 10^5 / 10^5.5, none before the handover, never more than 5.
+assert.deepEqual([3e3, 10 ** 3.5, 9999, 1e4, 10 ** 4.5, 1e5, 10 ** 5.5, 1e9].map(moonSlots), [0, 1, 1, 2, 3, 4, 5, 5]);
 // Grinding a moon by hand: a full one in 5–12 s, the smallest in under a second.
 assert.ok(MOON_SHARE[1] / FEED >= 5 && MOON_SHARE[1] / FEED <= 12 && MOON_SHARE[0] / FEED < 1, `moon grind ${(MOON_SHARE[1] / FEED).toFixed(1)} s`);
 console.log(`planet ok: LIFE in ${t} s at ideal conditions; a gentle meal (10 K) costs nothing, 40 K ${SOFT_S} s, 200 K wipes it out`);
@@ -158,6 +158,9 @@ const speed = lifeSpeed(0.7, 0.7, 0.7, field);
 assert.ok(Math.abs(speed - 0.497) < 1e-3);
 const parts = fieldParts(10 ** 4.5, pw, 0.28);
 assert.ok(parts.sunk < parts.metal && parts.sunk < parts.size); // the HUD tip names melting, not size
+// Extra sunk metal makes up for a small world's dynamo (up to 2×); a planet stays capped at 1.
+const rich = { rock: 0.76, metal: 0.12, ice: 0.1, gas: 0.02 };
+assert.ok(Math.abs(magnet(1e4, rich, 1) - 1) < 1e-9 && Math.abs(magnet(1e4, { ...rich, metal: 0.06 }, 1) - 0.5) < 1e-9 && magnet(10 ** 4.5, rich, 1) === 1);
 console.log(`planet ok: sample world field ${field.toFixed(2)}, life speed ${speed.toFixed(2)}: LIFE in ${(LIFE_S / speed).toFixed(0)} s`);
 
 // Gas line: in at 20% gas, out below 15%; Brown dwarf at 10^7 on the line.
@@ -177,15 +180,21 @@ assert.ok(envelope(2e5, { gas: 0.17, rock: 0.83 }, true) && !envelope(2e5, { gas
 console.log('planet ok: gas line sticky 20% in / 15% out (3.5M at 19% stays Mini-Neptune), 13.8M and 21.3M on the line = Brown dwarf');
 
 // Moon slots on screen: the at-rest view's half height (1280×720, main.ts BASE_ZOOM 1.02, player.ts view ∝ (r/16)^0.8) in your
-// radii vs the outer slot + a 12.5% moon; past 10^5.5 moons.ts fit() pulls the camera back (≤ 1.6×).
+// radii vs the outer slot + the widest moon (MOON_R); past 10^5.5 moons.ts fit() pulls the camera back (≤ 1.6×).
 const halfH = (m: number) => { const r = radiusOf(m, ROCKY); return (360 / 1.02) * (r / START_R) ** 0.8 / r; };
-const outer = (m: number) => slotRadius(1, moonSlots(m) - 1) + Math.cbrt(0.125);
+const outer = (m: number) => slotRadius(1, moonSlots(m) - 1) + MOON_R;
 for (const m of [10 ** 3.5, 1e4, 10 ** 4.5, 1e5, 10 ** 5.5]) assert.ok(outer(m) < halfH(m), `outer slot ${outer(m).toFixed(1)} R vs view ${halfH(m).toFixed(1)} R at ${m}`);
 // "Moon-size" = the giant-impact line.
 assert.equal(MOON_SHARE[1], GIANT_HIT);
 // Catch lanes (R = 1): neighbouring lanes never overlap; the inner lane's inner edge clears contact with a 12.5% moon (radius 0.5 R).
-for (let k = 0; k < 5; k++) assert.ok(slotRadius(1, k) + LANE <= slotRadius(1, k + 1) - LANE + 1e-9, `lanes ${k} and ${k + 1} overlap`);
+for (let k = 0; k < 4; k++) assert.ok(slotRadius(1, k) + LANE <= slotRadius(1, k + 1) - LANE + 1e-9, `lanes ${k} and ${k + 1} overlap`);
 assert.ok(slotRadius(1, 0) - LANE > 1 + Math.cbrt(MOON_SHARE[1]), 'the inner lane clears contact');
+// Moon size: two of the widest moons on neighbouring rings never touch, even stretched 1/0.75 (body.ts asDebris); moonCap holds
+// a moon to MOON_R whatever its make-up (a metallic 12.5% moon of a small world already fits: it keeps the full share).
+for (let k = 0; k < 4; k++) assert.ok(slotRadius(1, k + 1) - slotRadius(1, k) >= (2 * MOON_R) / 0.75, `rings ${k} and ${k + 1} too close for MOON_R`);
+const MOON_COMPS: Comp[] = [ROCKY, { ice: 0.7, rock: 0.15, gas: 0.15 }, { gas: 0.5, ice: 0.3, rock: 0.2 }, { metal: 0.7, rock: 0.3 }];
+const widest = [1e4, 1e6, 1e7].map((M) => { const R = radiusOf(M, ROCKY); return MOON_COMPS.map((c) => { const m = MOON_SHARE[1] * M, cap = moonCap(m, radiusOf(m, c), M, R); assert.ok(radiusOf(cap, c) <= MOON_R * R * 1.001, `moon of ${M} too wide`); return cap / M; }); });
+assert.equal(widest[0][3], MOON_SHARE[1]);
 // Match window: 1 D/s (2 R/s) on small worlds, wider on giants (MATCH_ORBIT of the slot's circular speed); the grip covers escape speed.
 const circAt = (m: number) => { const r = radiusOf(m, ROCKY); return { r, circ: Math.sqrt((G_WORLD * youPull(m, r)) / slotRadius(r, 0)) }; };
 const small = circAt(10 ** 3.5), huge = circAt(1e7);
@@ -198,6 +207,6 @@ assert.equal(pickSlot(slotRadius(1, 2) - 0.1, 1, 4, 0b100), 1);
 assert.equal(pickSlot(slotRadius(1, 1), 1, 4, 0b1111), -1);
 assert.equal(pickSlot(slotRadius(1, 0), 1, 0, 0), -1);
 assert.equal(pickSlot(20, 1, 2, 0), 1);
-{ const mid = slotRadius(1, 1) + 0.5; assert.equal(pickSlot(mid + 0.05, 1, 4, 0, 1), 1); assert.equal(pickSlot(mid + 0.1, 1, 4, 0, 1), 2); assert.equal(pickSlot(mid + 0.05, 1, 4, 0), 2); }
+{ const mid = slotRadius(1, 1) + 0.625; assert.equal(pickSlot(mid + 0.05, 1, 4, 0, 1), 1); assert.equal(pickSlot(mid + 0.1, 1, 4, 0, 1), 2); assert.equal(pickSlot(mid + 0.05, 1, 4, 0), 2); }
 for (const w of [small, huge]) assert.ok(gripWindow(w.r, w.circ) >= Math.SQRT2 * w.circ && gripWindow(w.r, w.circ) >= 2 * matchWindow(w.r, w.circ));
-console.log(`planet ok: outer slot vs view half height ${[10 ** 3.5, 1e4, 10 ** 4.5, 1e5, 10 ** 5.5, 1e6].map((m) => `${outer(m).toFixed(1)}/${halfH(m).toFixed(1)}`).join(' ')} R; match window ${[10 ** 3.5, 10 ** 5.5, 10 ** 6.5, 1e7].map((m) => { const w = circAt(m); return (matchWindow(w.r, w.circ) / (2 * w.r)).toFixed(2); }).join(' / ')} D/s at 10^3.5 / 10^5.5 / 10^6.5 / 10^7`);
+console.log(`planet ok: outer slot vs view half height ${[10 ** 3.5, 1e4, 10 ** 4.5, 1e5, 10 ** 5.5, 1e6].map((m) => `${outer(m).toFixed(1)}/${halfH(m).toFixed(1)}`).join(' ')} R; match window ${[10 ** 3.5, 10 ** 5.5, 10 ** 6.5, 1e7].map((m) => { const w = circAt(m); return (matchWindow(w.r, w.circ) / (2 * w.r)).toFixed(2); }).join(' / ')} D/s at 10^3.5 / 10^5.5 / 10^6.5 / 10^7; widest moon (stony/icy/gas-rich/metallic) ${widest.map((w) => w.map((s) => `${(100 * s).toFixed(1)}%`).join('/')).join(' · ')} of 10^4 · 10^6 · 10^7`);

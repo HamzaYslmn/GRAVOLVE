@@ -1,5 +1,5 @@
 import { Container, Graphics, ParticleContainer, Sprite, type Renderer } from 'pixi.js';
-import { between, clamp } from '../../core/rng';
+import { between, clamp, smoothstep } from '../../core/rng';
 import { FAR_BOUNDS, type Fx } from '../../render/fx';
 import { drawShip, quads, shipUnit, techPage, YOU, type Put, type TechPage } from '../../render/tech';
 import { drop, mixRgb, type Body } from '../asteroid/body';
@@ -23,9 +23,9 @@ import type { CivState } from './stage';
 //                 gauge, a thin line with ticks pointing in (moon slots are broken cyan circles), always while miners
 //                 work, brighter while a big body is near
 //   ships         probes, fighters and frigates on patrol (their rounds and your rockets: combat.ts)
-//   star contact  a slow, warm pulse ring
-// Draw calls: one ParticleContainer (tech page) for ships, lights, ore and the lattice's cells; the additive veils,
-// ripples and rings share its source, so they batch.
+//   solar farms   from tier 2 panel fields on the ground (solarFarms): they turn with the surface, open blue in daylight
+// Draw calls: one ParticleContainer (tech page) for ships, lights, ore and the lattice's cells; the additive veils
+// and ripples share its source, so they batch.
 
 const WARM = 0xffd27a;
 const MAX_PARTS = 460;
@@ -44,7 +44,6 @@ const LAND = 0.25; // R: a shuttle this close to its spot has landed
 const WIDE = -3; // ship radii off each keep-out (nav.ts PAD 5: a 2 radii pad)
 const TICKS = 48; // on the reach gauge
 const GOLD = 0xffc04a; // the reach: ore gold, more saturated than WARM so it keeps its hue when faint
-const PULSE = [4.5, 0.32]; // star contact's ring: s it grows and fades over, its brightest alpha
 const RIPPLE_S = 0.5; // s a shield ripple fades over
 const HOT_S = 0.25; // s the cells near a hit glow
 
@@ -131,18 +130,56 @@ export function shieldLook(parent: Container, page: TechPage, tint: number, seed
 }
 export type ShieldLook = ReturnType<typeof shieldLook>;
 
+// Solar farm spots on the ground: bearing (rad, in the world's own frame) and distance from the centre (R); the first n are used.
+const FARM = [[0, 0.5], [3.14, 0.62], [1.57, 0.68], [4.71, 0.46], [0.79, 0.6], [3.93, 0.52]];
+
+/**
+ * Solar farms (rules.ts solarWings): panel fields on `me`'s ground, children of its view, so they turn with the surface and
+ * sit under its clouds, limb and shield (farthest corner ≤ 0.78 R while R ≥ 12 px). Each opens on the day side (eased over
+ * 1.5 s): full width, blue by the light, a glint; stowed it is a narrow dark strip. They fade out from 5 to 3 px of radius.
+ */
+function solarFarms(me: Body, page: TechPage) {
+  const root = me.view.addChild(new Container()), W = page.panel.frame.width;
+  const fields = FARM.map(() => ({ f: root.addChild(new Sprite({ texture: page.panel, anchor: 0.5 })), g: root.addChild(new Sprite({ texture: page.dot, anchor: 0.5, tint: 0xfff2d0 })), o: 0 }));
+  return {
+    /** `n` fields in starlight `light` (0–1) from bearing `sunA`; `alpha` the civilization's own fade. */
+    step(dt: number, zoom: number, n: number, light: number, sunA: number, clock: number, alpha: number) {
+      if (root.destroyed) return;
+      if (me.view.children.at(-1) !== root) me.view.addChild(root); // city lights and meals append later: stay on top of them
+      root.alpha = alpha * smoothstep(3, 5, me.r * zoom);
+      root.visible = n > 0 && root.alpha > 0.01;
+      if (!root.visible) return;
+      const R = me.r / me.k, px = 1 / (zoom * me.k); // the view's own units: its radius, one screen pixel
+      fields.forEach((q, i) => {
+        const [a, d] = FARM[i], x = Math.cos(a) * d * R, y = Math.sin(a) * d * R;
+        q.f.visible = i < n;
+        q.o += ((light > 0.02 && i < n ? smoothstep(-0.15, 0.35, Math.cos(a + me.view.rotation - sunA)) : 0) - q.o) * Math.min(1, dt / 1.5);
+        const o = q.o, w = Math.max(0.3 * R, 2.6 * px) * (0.45 + 0.55 * o), h = Math.max(0.17 * R * Math.sqrt(1 - d * d), 1.5 * px);
+        [q.f.x, q.f.y, q.f.rotation, q.f.alpha] = [x, y, a + Math.PI / 2, 0.75 + 0.25 * o];
+        q.f.scale.set(w / W, h / W);
+        q.f.tint = mixRgb(0x1b2f52, 0x6cc4ff, Math.min(1, (0.5 + 0.5 * light) * o), false); // light blue: reads on seas and ice
+        q.g.alpha = 0.9 * light * o * (0.6 + 0.4 * Math.sin(clock * 1.3 + i * 1.7));
+        q.g.visible = i < n && q.g.alpha > 0.004;
+        [q.g.x, q.g.y] = [x, y];
+        q.g.scale.set(Math.max(0.1 * R, 2 * px) / page.dot.frame.width);
+      });
+    },
+    destroy: () => void (root.destroyed || root.destroy({ children: true })),
+  };
+}
+
 export function createCivView(layer: Container, me: Body, renderer: Renderer, fx: Fx) {
   const page = techPage(renderer);
   const root = new Container();
   const shield = shieldLook(root, page, YOU, 7);
-  const rings: { s: Sprite; t: number }[] = [];
   const pc = new ParticleContainer({ texture: page.source, boundsArea: FAR_BOUNDS, dynamicProperties: { position: true, rotation: true, vertex: true, color: true, uvs: true } });
   const gauge = new Graphics();
   root.addChild(gauge, pc);
   layer.addChild(root);
   const quad = quads(pc, MAX_PARTS), put = quad.put;
   const flights: Shuttle[] = [], bases = new Set<Body>(), work = new Map<Body, number>();
-  let clock = 0, pulseT = 0, trafficT = 0, flick = 1, flickGoal = 1, flickT = 0, shown = 0, hint = 0, jolt = 0, built = 0; // jolt: s the lights flicker after a landing; built: the reach gauge's radius in px
+  const farms = solarFarms(me, page);
+  let clock = 0, trafficT = 0, flick = 1, flickGoal = 1, flickT = 0, shown = 0, hint = 0, jolt = 0, built = 0; // jolt: s the lights flicker after a landing; built: the reach gauge's radius in px
 
   /** Ore: the moon's colour, warmed and brightened so it reads against space and the moon. */
   const mixTint = (t: number) => mixRgb(mixRgb(t, WARM, 0.35, false), 0xffffff, 0.25, false);
@@ -184,26 +221,10 @@ export function createCivView(layer: Container, me: Body, renderer: Renderer, fx
       flick += (flickGoal - flick) * Math.min(1, dt * 25);
       if (lights) lights.alpha = Math.min(1, 0.35 + 0.45 * Math.min(1, s.pop / 5) + 0.2 * Math.min(1, s.energy / Math.max(s.need, 1e-6))) * (1 - 0.45 * s.harm) * (shake > 0 ? flick : 1) * shown;
 
+      // Solar farms on the ground (solarFarms): they turn with the surface, open in daylight.
+      farms.step(dt, zoom, s.active ? s.wings : 0, s.light, s.sunA, clock, shown);
       // Shield: the veils and the lattice (shieldLook), under the shuttles and ships.
       shield.step(pm.x, pm.y, R, clock, dt, { level: s.level, s: s.shield }, zoom, put);
-
-      // After star contact a slow warm pulse.
-      if (s.contact && (pulseT -= dt) <= 0) {
-        pulseT = 6;
-        let f = rings.find((q) => q.t >= PULSE[0]);
-        if (!f) {
-          rings.push((f = { s: new Sprite({ texture: page.ring, anchor: 0.5, alpha: 0, blendMode: 'add', tint: WARM }), t: 0 }));
-          root.addChildAt(f.s, shield.veils.length);
-        }
-        f.t = 0;
-      }
-      for (const f of rings) {
-        f.t += dt;
-        const k = Math.min(1, f.t / PULSE[0]);
-        f.s.alpha = PULSE[1] * (1 - k) * Math.min(1, k * 6);
-        f.s.position.set(pm.x, pm.y);
-        f.s.scale.set((R * (1.05 + k * 6)) / (0.85 * (page.ring.frame.width / 2)));
-      }
 
       // The reach: a thin gold line with ticks pointing in, drifting slowly, always while miners work (brighter while a body
       // to link with is near). Built in screen pixels; rebuilt only when its size on screen changes by over 5%.
@@ -367,6 +388,7 @@ export function createCivView(layer: Container, me: Body, renderer: Renderer, fx
     destroy() {
       const lights = cityLights(me);
       if (lights && !lights.destroyed) lights.alpha = 0;
+      farms.destroy();
       root.destroy({ children: true });
     },
   };

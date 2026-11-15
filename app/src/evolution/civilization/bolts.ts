@@ -39,8 +39,8 @@ export function drawBolts(o: BoltsIn) {
     add(dot, s.x - rvx * age, s.y - rvy * age, 0, w * (1 - 0.5 * t), s.gun.tint, 0.9 * (1 - t));
   }
   // Missiles and rockets (BOLT.missile, BOLT.rocket): a flickering flame (the side's tint round a white-yellow jet), long and
-  // full while the motor runs up, a little shorter at cruise, a dim stub once the seeker lets go (the dodge tell; a rocket,
-  // unlocked for most of its short flight, keeps half a flame); a teardrop head in the side's tint round a white core;
+  // full while the motor runs up, a little shorter at cruise, a dim stub once the seeker lets go (it flies
+  // straight from here; a rocket keeps half a flame); a teardrop head in the side's tint round a white core;
   // smoke embers left hanging in the shooter's frame.
   for (const m of missiles.live) {
     const L = BOLT[m.look], F = L.flame!, hw = least(L.glow.k, L.glow.px, u, z), fw = least(F.k, F.px, u, z);

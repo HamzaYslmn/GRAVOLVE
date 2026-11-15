@@ -46,8 +46,8 @@ assert.ok(matchStep(0, 0, 1, 1.5, 0.5) === 0 && matchStep(0.9, 1, 1, 1.5, 0.5) =
 const d = 3 * R, c = circular(MU, d);
 assert.ok(bound(MU, d, 0, 0, 1.4 * c) && !bound(MU, d, 0, 0, 1.42 * c), 'bound below escape speed (√2 × circular)');
 
-// Slots: the first 1.4 R off your surface, 1 R apart (two 12.5% moons, radius ∛0.125 = 0.5 R, never overlap), the sixth at 7.4 R.
+// Slots: the first 1.4 R off your surface, 1.25 R apart (moon sizes: test/planet/rules.test.ts), the fifth at 7.4 R.
 assert.equal(slotRadius(1, 0), 2.4);
-assert.ok(Math.abs(slotRadius(1, 5) - 7.4) < 1e-9);
-assert.ok(slotRadius(1, 1) - slotRadius(1, 0) >= 2 * Math.cbrt(0.125) - 1e-9, 'neighbouring slots fit two 12.5% moons');
+assert.ok(Math.abs(slotRadius(1, 4) - 7.4) < 1e-9);
+assert.ok(Math.abs(slotRadius(1, 1) - slotRadius(1, 0) - 1.25) < 1e-9, 'slots 1.25 R apart');
 console.log(`orbits ok: 30/240 fps match, slot error ${a.worst.toExponential(1)}, circular ${vc.toFixed(1)} u/s at slot 1`);

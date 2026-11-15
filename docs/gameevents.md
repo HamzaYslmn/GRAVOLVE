@@ -70,8 +70,9 @@ planet stage attaches its moons and drives it, so the pirates fly on (2026-11-14
   has one), a marauder from 10 ships (every age), the rest raiders. 1 ship: a lone scavenger hauler (no gun, takes loose
   pieces, leaves). Checked over 1000 launched rolls: 1–14 ships, always a hauler, marauder only from 10 (27% lone
   scavengers, 20% with a marauder over that uniform spread of u). Hulls: raider 1 round, hauler 2, marauder 4; slugs, the
-  beam and any body kill outright. Raider: cruise 4–5.5 R/s, gun 6 R off the target, ±0.25 rad, bursts of 3 at 6/s, 0.9 s
-  apart. Hauler: 0.8 × cruise, holds 100 u (≤ 20 u of it your stolen stock). Marauder: 0.8 ×, turn 1.2 rad/s, gun 9 R,
+  beam and any body kill outright. Raider: cruise 4–5.5 R/s, top 2 × cruise in space, gun 6 R off the target, ±0.25 rad,
+  bursts of 3 at 6/s, 0.9 s apart. Hauler: 0.8 × cruise, top 1.3 × its speed, holds 100 u (≤ 20 u of it your stolen
+  stock). Marauder: 0.8 ×, top 1.6 × its speed, turn 1.2 rad/s, gun 9 R,
   ±0.2 rad, bursts of 5 at 5/s, 1.5 s apart, 3 rock hits a round. Bone hulls, orange flares and rounds.
 - **Lifecycle:** cruise → work (a rock) or raid (a world) → leave. A fleet appears 1.05 camera half-diagonals out, already
   in formation, on a straight lane aimed within 0.4 view half-widths of the view centre (so it crosses the screen); two
@@ -94,8 +95,8 @@ planet stage attaches its moons and drives it, so the pirates fly on (2026-11-14
   of you drifting onto a ship within 4 ship radii has its own drift off that ship brought up to 0.3 R/s by the ship's
   tractor (a faint line; never at the ship's speed, so nothing is pushed ahead of it); pieces spawn ±0.1 rad round their
   even spread (no overlap at birth). Measured (Node, a fake world with gravity, merging and bouncing like the field's:
-  40 runs of 10 ships at five rocks of 1.5–6% 14–17 R out, 60 s): 0 body deaths, 252 cracks, 309 pieces hauled, 102
-  shoves; before the shove 2–4 deaths per 100 such runs.
+  40 runs of 10 ships at five rocks of 1.5–6% 14–17 R out, 60 s): 0 body deaths, 298 cracks, 294 pieces hauled, 2279
+  shoves (2026-11-15, with the tops); before the shove 2–4 deaths per 100 such runs.
 - **Work:** guns crack a rock in clamp(round(3 + 40 × share), 3, 12) hits into 2–5 pieces of 0.25% of you each (80% of
   it, flung out at 0.6–1.2 of its radii a second; the rest is dust); pieces over 0.5% of you are cracked again, 0.1–0.5%
   hauled whole. Cracked pieces are real bodies: you can take them first. Measured (Node, a 5-ship group at a 4% rock,
@@ -120,7 +121,9 @@ planet stage attaches its moons and drives it, so the pirates fly on (2026-11-14
 - **Evasion:** a raider jinks (1.2 rad off its velocity away from the threat's line at 1.25 × speed for 0.6 s, then
   0.8 rad back for 0.4 s, 1.5 s cooldown) when an enemy ship closes on it nose-on within 4 R or an enemy round will pass
   within 5 ship radii in 0.25 s; a hauler drops its line and runs 2 s to the nearest guard. A moving body on course for
-  the formation scatters it for 2 s, each ship across the body's track on its own side. Measured (Node): a fighter
+  the formation scatters it for 2 s, each ship across the body's track on its own side. Sidestep (2026-11-15): a ship
+  ahead of a body faster than its top (you charging) that would need more than its top to keep clear steps across the
+  body's track at its top, on its own side. Measured (Node): a fighter
   closing 3 R behind sets a jink off within 0.03 s; one burst from a fighter run 6 R behind kills a straight raider 67%,
   a jinking one 45% (200 seeded bursts); a 1 R body closing at 2 × cruise kills none of 8, at 4 × it kills all 8.
 - **Leaving:** everyone forms up round the haulers and flies straight out from the view centre (±0.3 rad); gone past 1.3
@@ -130,6 +133,28 @@ planet stage attaches its moons and drives it, so the pirates fly on (2026-11-14
   dodged); slugs and the beam kill any ship; rounds take hull hits. A tractoring hauler is nearly stopped: the moment to
   hit it. A destroyed hauler bursts: 80% of its hold as 1–4 pieces of ≥ 0.1% of you (the field keeps them) and your
   stolen stock × 1.5 ("Loot recovered"). Your defence ships and rival home patrols hunt them.
+- **Outrun and ram** (2026-11-15, the tops; Node, the `pirates.test.ts` fake world without rocks or moons, the camera
+  on you): before, a ship you charged rode beside you at your speed (up to 6.5 × its own) and could not be rammed below
+  ~12 R/s; now none passes its top. You are a 7 R/s² pursuer capped at the speed shown, 5-ship fleets, 40 runs, 25 s;
+  "nearest" chases the nearest ship, "raiders" only raiders. Below 10 R/s only the hauler (top 1.04 × cruise) is caught;
+  the sidestep halves the rams at speed (without it: 190 of 200 at 12 R/s, 146 at 20).
+
+  | You at | 4 | 6 | 8 | 10 | 12 | 15 | 20 R/s |
+  |---|---|---|---|---|---|---|---|
+  | Rammed of 200, nearest, now (haulers + raiders) | 0 | 27 + 0 | 39 + 0 | 40 + 70 | 37 + 70 | 40 + 39 | 20 + 12 |
+  | Rammed of 200, raiders, now (runs of 40) | 0 | 0 | 0 | 122 (34) | 128 (40) | 79 (39) | 53 (31) |
+  | Rammed of 200, nearest, before | 0 | 0 | 0 | 0 | 13 | 37 | 9 |
+
+  | A raid (8 ships, 4 raids), you fly away from it at | 0 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 12 | 15 | 20 R/s |
+  |---|---|---|---|---|---|---|---|---|---|---|---|
+  | Rounds on you, now | 174 | 179 | 11 | 18 | 111 | 181 | 75 | 0 | 0 | 0 | 0 |
+  | Rounds on you, now, flying sideways | 174 | 174 | 0 | 0 | 83 | 202 | 101 | 7 | 0 | 0 | 0 |
+  | Rounds on you, before (away) | 174 | 179 | – | 178 | – | 151 | – | 151 | 147 | 148 | 128 |
+  | They leave after (s), now | 18–28 | 18–28 | 18–28 | 18–28 | 18–28 | 18–20.5 | 18–20.5 | 17–19.5 | 12–13.5 | 9–9.5 | 7 |
+
+  Raids are escaped from 10 R/s (before: never; they left only on the raid timer or the 20 s outpaced leash). The gun-run frame is kept up to the ship's full top
+  (2026-11-15): with a half-top threshold a dead zone at ~5–6 R/s let almost no rounds land (11–18 vs 174 at rest); with
+  the full top the builder's scratch run gave 160 / 161 rounds at 6 R/s, 112 / 51 at 8, 0 / 7 at 10 (away / sideways).
 - **Toasts:** "Pirate fleet" once the fleet is on screen; "Pirate fleet destroyed · Burst haulers spill what they stole".
 - Achievement "Bounty": destroy a pirate fleet ([hudandcontrols.md](hudandcontrols.md)). Flight: [shipsandflight.md](shipsandflight.md) → Pirate flight.
 - Not yet measured in the browser (all numbers above are Node, a fake world with no field gravity or collisions between

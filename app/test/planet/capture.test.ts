@@ -5,8 +5,9 @@ import assert from 'node:assert/strict';
 import { motion, step, type Motion } from '../../src/core/entity.ts';
 import { slotRadius } from '../../src/core/orbits.ts';
 import { rng } from '../../src/core/rng.ts';
-import { COMP, density, G_WORLD, radiusOf, START_R, youPull, type Comp } from '../../src/evolution/asteroid/rules.ts';
-import { catchStep, LANE, MATCH_DRAIN, MATCH_S, matchWindow, MOON_SHARE, moonSlots, pickSlot } from '../../src/evolution/planet/rules.ts';
+import { COMP, density, G_WORLD, pairPull, pullMass, radiusOf, START_R, youPull, type Comp } from '../../src/evolution/asteroid/rules.ts';
+import { catchStep, LANE, MATCH_DRAIN, MATCH_S, matchWindow, moonCap, MOON_SHARE, moonSlots, pickSlot } from '../../src/evolution/planet/rules.ts';
+import { RIVAL_MASS, RIVAL_ROCK } from '../../src/evolution/civilization/rules.ts';
 
 const ROCKY: Comp = { rock: 0.6, metal: 0.15, ice: 0.2, gas: 0.05 };
 /** player.ts thrustOf (that file needs Pixi, so it is restated here): 500 u/s² at the start size, ∝ r^0.4, lighter for dense rock. */
@@ -148,7 +149,8 @@ function parked(m: number, seed: number, any = false, N = 400) {
   }
   return { share: got / entered, landed: landed / entered, entered, fell: landed, N };
 }
-// Natural infall: with every ring free as many land as with the inner one alone (the outer lanes grip only a match).
+// Natural infall: with every ring free about as many land as with the inner one alone (the outer lanes grip only a match;
+// on 1.25 R rings the outer lanes sit farther out, where drifters are slower: up to ~4% fewer land at 10^5–10^5.5).
 const parkedShares: string[] = [];
 for (const m of MASSES) {
   const [inner, all] = [parked(m, 7), parked(m, 7, true)];
@@ -156,6 +158,72 @@ for (const m of MASSES) {
     assert.ok(r.share < 0.2, `parked catch share ${r.share} at 10^${Math.log10(m).toFixed(1)}${any ? ', all lanes free' : ''}`);
     parkedShares.push(`${any ? 'all lanes' : 'inner'} 10^${Math.log10(m).toFixed(1)} ${(100 * r.share).toFixed(1)}% caught, ${r.fell}/${r.N} landed`);
   }
-  assert.ok(Math.abs(all.fell - inner.fell) <= 0.03 * inner.N, `landings at 10^${Math.log10(m).toFixed(1)}: all lanes ${all.fell}, inner ${inner.fell} of ${inner.N}`);
+  assert.ok(Math.abs(all.fell - inner.fell) <= 0.05 * inner.N, `landings at 10^${Math.log10(m).toFixed(1)}: all lanes ${all.fell}, inner ${inner.fell} of ${inner.N}`);
 }
-console.log(`capture ok: pilot caught at ${caught.join(', ')} (30/60/144 fps); fly-bys at 3 and 20 D/s never start; held matched ${MATCH_S} s (outer slot too), outer-ring pilot ${outerCaught.join(', ')}, half window ${(n4 / 60).toFixed(2)} s; blip −20%, drain ${(n6 / 60).toFixed(2)} s; parked ${parkedShares.join('; ')}`);
+// 8 A rival's rock (user 2026-11-15): stolen on its circle by a match, never by sitting still. rivals.ts needs Pixi, so its
+// rock is restated: ROCK_ORBIT rival radii + its own radius off the world, ROCK_W rad/s, turning against the world's orbit
+// round you (−turn); RIVAL_ROCK of the rival, a stony body; the world COMP_WORLD. The rival re-places it every frame (no grip).
+const ROCK_ORBIT = 2.6, ROCK_W = 0.6, COMP_WORLD: Comp = { rock: 0.55, metal: 0.15, ice: 0.25, gas: 0.05 };
+const RATIOS = [RIVAL_MASS.careful[0], 0.8, RIVAL_MASS.hungry[1]], ROCK_MASSES = [10 ** 4.6, 10 ** 5.5, 10 ** 6.5];
+const rival = (w: World, ratio: number) => {
+  const m = ratio * w.m, R = radiusOf(m, COMP_WORLD), rm = RIVAL_ROCK * m, rr = radiusOf(rm, COMP.stony);
+  return { m, R, rm, rr, d: R * ROCK_ORBIT + rr, k: pairPull(youPull(w.m, w.R), w.m, pullMass(m, w.m), m) }; // k: field.ts pair factor
+};
+// 8c Size: the rock passes moons.ts sizeOk (moonCap: an eighth of you, no wider than MOON_R) for every rival up to 10^6.5.
+for (const m of ROCK_MASSES) for (const ratio of RATIOS) {
+  const w = world(m), rv = rival(w, ratio), cap = moonCap(rv.rm, rv.rr, w.m, w.R);
+  assert.ok(rv.rm >= Math.min(MOON_SHARE[0] * w.m, 0.25 * cap) && rv.rm <= 1.01 * cap, `rock of a ×${ratio} rival at 10^${Math.log10(m).toFixed(1)}: ${(rv.rr / w.R).toFixed(2)} R`);
+}
+// 8a Matched: the rival at rest (its engines hold station), you start beside its rock with the rock on a ring (beyond it,
+// or ahead of it on its path; from behind, a fixed offset swings you into the world) at its velocity, and keep it there
+// with your thrust against the rival's pull on you (coasting does not do: the rock curves out of the lane within a
+// second). Every ring, both rock senses: the ring closes, and you never touch the world.
+const stole: string[] = [];
+for (const m of ROCK_MASSES) for (const ratio of RATIOS) {
+  const w = world(m), rv = rival(w, ratio), dt = 1 / 60;
+  let worst = 0, closest = Infinity;
+  for (let k = 0; k < moonSlots(m); k++) for (const spin of [1, -1]) for (const side of [0, spin]) {
+    const sr = slotRadius(w.R, k), om = spin * ROCK_W;
+    let a = 0.3, p = 0, t = 0;
+    const rock = () => ({ x: Math.cos(a) * rv.d, y: Math.sin(a) * rv.d, vx: -Math.sin(a) * om * rv.d, vy: Math.cos(a) * om * rv.d });
+    const u = side ? { x: -Math.sin(a) * side, y: Math.cos(a) * side } : { x: Math.cos(a), y: Math.sin(a) }; // you from the rock (the rival at 0)
+    const r0 = rock(), me = motion(r0.x + u.x * sr, r0.y + u.y * sr, w.a, 0);
+    [me.vx, me.vy] = [r0.vx, r0.vy];
+    for (; t < 6 && p < 1; t += dt) {
+      a += om * dt;
+      const b = rock(), d = Math.hypot(me.x, me.y), g = (G_WORLD * rv.k * rv.m) / Math.max(d, w.R + rv.R) ** 2;
+      [me.vx, me.vy, closest] = [me.vx - (me.x / d) * g * dt, me.vy - (me.y / d) * g * dt, Math.min(closest, d - w.R - rv.R)];
+      const ex = b.x + u.x * sr - me.x, ey = b.y + u.y * sr - me.y, f = 0.25 * w.a, tx = (b.vx + ex / 0.5 - me.vx) / f, ty = (b.vy + ey / 0.5 - me.vy) / f, tl = Math.max(1, Math.hypot(tx, ty));
+      step(me, { x: tx / tl, y: ty / tl }, dt);
+      p = catchStep(p, w.R, w.mu, sr, b.x - me.x, b.y - me.y, b.vx - me.vx, b.vy - me.vy, MOON_SHARE[0], dt, k === 0).p;
+    }
+    assert.ok(p >= 1, `matched beside a ×${ratio} rival's rock at 10^${Math.log10(m).toFixed(1)}, slot ${k}, side ${side}, spin ${spin}: ring ${p.toFixed(2)}`);
+    worst = Math.max(worst, t);
+  }
+  assert.ok(closest > 0, `you touched the rival in the match runs (×${ratio}, 10^${Math.log10(m).toFixed(1)})`);
+  stole.push(`×${ratio} 10^${Math.log10(m).toFixed(1)} ≤${worst.toFixed(2)} s`);
+}
+// 8b Passive: the rival on station r.keep R off you (rivals.ts keepStation: KEEP 8–12, clear of your outer ring by 3 R),
+// circling at the circular speed of the pair's pull, its rock turning −turn: you never fill a ring sitting still. With the
+// rock turning with the world (the old sense) a still player did catch it.
+const passive = (sense: number) => {
+  let most = 0, got = 0, n = 0;
+  for (const m of ROCK_MASSES) for (const ratio of RATIOS) for (const keep0 of [8, 10, 12]) for (const turn of [-1, 1]) for (const a0 of [0, 1.3, 2.6, 3.9, 5.2]) {
+    const w = world(m), rv = rival(w, ratio), slots = moonSlots(m), keep = Math.max(keep0, slotRadius(1, slots - 1) + 3) * w.R, dt = 1 / 30;
+    const W = turn * Math.sqrt((G_WORLD * rv.k * (w.m + rv.m)) / keep ** 3), om = sense * turn * ROCK_W;
+    let th = 0, a = a0, p = 0, best = 0, k = -1;
+    for (let i = 0; i < 60 / dt && p < 1; i++) {
+      [th, a] = [th + W * dt, a + om * dt];
+      const x = Math.cos(th) * keep + Math.cos(a) * rv.d, y = Math.sin(th) * keep + Math.sin(a) * rv.d;
+      const vx = -Math.sin(th) * W * keep - Math.sin(a) * om * rv.d, vy = Math.cos(th) * W * keep + Math.cos(a) * om * rv.d;
+      if (p === 0) k = pickSlot(Math.hypot(x, y), w.R, slots, 0, k);
+      best = Math.max(best, (p = catchStep(p, w.R, w.mu, slotRadius(w.R, k), x, y, vx, vy, MOON_SHARE[0], dt, k === 0).p));
+    }
+    [most, got, n] = [Math.max(most, best), got + (p >= 1 ? 1 : 0), n + 1];
+  }
+  return { most, got, n };
+};
+const still = passive(-1), old = passive(1);
+assert.ok(still.most < 0.3, `a still player against a −turn rock: ring ${still.most.toFixed(2)}`);
+assert.ok(old.got > 0, 'the old sense (rock turning with the world) was caught by sitting still: the test tells them apart');
+console.log(`capture ok: pilot caught at ${caught.join(', ')} (30/60/144 fps); fly-bys at 3 and 20 D/s never start; held matched ${MATCH_S} s (outer slot too), outer-ring pilot ${outerCaught.join(', ')}, half window ${(n4 / 60).toFixed(2)} s; blip −20%, drain ${(n6 / 60).toFixed(2)} s; parked ${parkedShares.join('; ')}; a rival's rock: matched ${stole.join(', ')}; sitting still ring ≤ ${still.most.toFixed(2)} (${still.n} runs; the old sense: ${old.got}/${old.n} caught)`);

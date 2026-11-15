@@ -212,7 +212,7 @@ export function defend(ships: Ship[], me: Body, near: Body[], dt: number, stops:
   const shoot = (s: Ship, a: { x: number; y: number; vx: number; vy: number; body?: Body }, held: boolean, h: number) => {
     const arms = frag ? FLEET[s.kind] : undefined;
     if (arms && s.cool > 0) return;
-    const p = pull(s.g, h, held, arms ? arms.rounds : BURST, RATE, GAP);
+    const p = pull(s.g, h, held, arms ? arms.rounds : BURST, arms?.rate ?? RATE, GAP);
     if (p && shots.fire(guns[s.kind], s.g, p === 1, pm.x + s.x, pm.y + s.y, pm.vx + s.vx, pm.vy + s.vy, s.heading, pm.x + a.x, pm.y + a.y, pm.vx + a.vx, pm.vy + a.vy, a.body) && arms && (s.shot = (s.shot ?? 0) + 1) >= arms.rounds * arms.bursts) [s.shot, s.cool] = [0, arms.cool];
   };
 
@@ -336,8 +336,8 @@ export const newRack = (): Rack => ({ load: 0 });
 /**
  * Rockets from your surface (rules.ts ROCKET), guided (guns.ts steer): once reloaded (`rate` × dt: the energy fed), at
  * your `order` (the priority: a body or an enemy ship; stage.ts passes it only while orders.ts says rockets take it); `pay`
- * spends the ore (false: no launch). One leaves from the point under the target with the tier's aim error (rocketSpread) and
- * flies just past the range; a hit on its body goes to `hit` (stage.ts: cut or chip), at a ship its blast does the work.
+ * spends the ore (false: no launch). One leaves from the point under the target with the tier's aim error (rocketSpread),
+ * kicked ROCKET.arc to one side (guns.ts), and flies just past the range; a hit on its body goes to `hit` (stage.ts: cut or chip), at a ship its blast does the work.
  * `foes`: the enemy ships still flying (its seeker lets go of one that is gone).
  */
 export function rockets(rack: Rack, me: Body, order: Body | Foe | undefined, dt: number, T: number, rate: number, pay: () => boolean, hit: (b: Body, x: number, y: number) => void, missiles: Missiles | undefined, foes: () => readonly Foe[], fx: Fx) {
@@ -347,7 +347,7 @@ export function rockets(rack: Rack, me: Body, order: Body | Foe | undefined, dt:
   const seek: Seek = b ? () => (b.m ? { ...b.motion, r: b.r } : undefined) : () => (foes().includes(f) ? { x: f.x, y: f.y, vx: f.vx ?? 0, vy: f.vy ?? 0 } : undefined), t = seek();
   if (!t || !pay()) return;
   const a = Math.atan2(t.y - pm.y, t.x - pm.x), u = ROCKET.speed * R, x = pm.x + Math.cos(a) * R * 1.05, y = pm.y + Math.sin(a) * R * 1.05;
-  missiles.launch({ team: 'you', x, y, vx: pm.vx, vy: pm.vy, tx: t.x, ty: t.y, tvx: t.vx, tvy: t.vy, u, life: ((rocketRange(T) + 2) * R) / u + 0.2, k: 0, blast: ROCKET.blast * R, fan: (2 * Math.random() - 1) * rocketSpread(T), target: order, own: ownOf(me), seek, seeker: seeker(ROCKET, R), hit: b && hit, look: 'rocket' });
+  missiles.launch({ team: 'you', x, y, vx: pm.vx, vy: pm.vy, tx: t.x, ty: t.y, tvx: t.vx, tvy: t.vy, u, life: ((rocketRange(T) + 2) * R) / u + 0.5, k: 0, blast: ROCKET.blast * R, fan: (2 * Math.random() - 1) * rocketSpread(T), target: order, own: ownOf(me), seek, seeker: seeker(ROCKET, R), hit: b && hit, look: 'rocket' });
   rack.load = 0;
   fx.flash(x, y, R * 0.25, 6, R * 0.5);
   sfx()?.play('launch', 0.35, 1.3);

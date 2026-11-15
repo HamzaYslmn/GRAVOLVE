@@ -26,10 +26,10 @@ backwards; sideways slip bleeds off over 0.08 s (`GRIP`). Arcade, not Newtonian.
 | Your + rival fighters | home R | 12 R/s² | 3 rad/s | patrol 3, home ≤ 6, attack run 5.5 R/s |
 | Frigate | R | 8 R/s² | 2.2 rad/s | patrol 2.4 R/s |
 | Miner shuttles | R | 8 R/s² | 3 rad/s | 3 R/s; brakes at 0.75 × retro = 2.4 R/s² |
-| Pirate raiders | your R | 4 × cruise | 2.2 rad/s | cruise 4–5.5 R/s |
-| Pirate haulers | your R | 4 × their speed | 1.6 rad/s | 0.8 × cruise |
-| Pirate marauder | your R | 4 × its speed | 1.2 rad/s | 0.8 × cruise |
-| Rival ships away | your R | 4 × cruise | 2.2 rad/s (frigate 1.8) | 5 R/s |
+| Pirate raiders | your R | 4 × cruise | 2.2 rad/s | cruise 4–5.5 R/s; top (space) 2 × cruise |
+| Pirate haulers | your R | 4 × their speed | 1.6 rad/s | 0.8 × cruise; top (space) 1.3 × their speed |
+| Pirate marauder | your R | 4 × its speed | 1.2 rad/s | 0.8 × cruise; top (space) 1.6 × its speed |
+| Rival ships away | your R | 4 × cruise | 2.2 rad/s (frigate 1.8) | 5 R/s; top (space): wave fighters 2 ×, probes 1.5 ×; homing, massing, batteries, miners 2 × over their body's speed |
 | Colony fleets | R★ | 2 R★/s² | 3 rad/s | 2 R★/s |
 
 | Piece | What it does |
@@ -114,7 +114,7 @@ The circuit crosses your first moon slots (2.4, 3.4 and 4.4 R from your centre, 
 
 ### Rockets
 
-- Your world launches guided rockets from its surface (`rockets` in `ships.ts`, the missile pool and `guns.ts` `steer`; numbers in [civilizationgameplay.md](civilizationgameplay.md#rockets)): from tier 1, only at your priority target within 8 + 2T radii, one a reload, 0.3 × cruise off the pad up to 26 R/s on top of you, the seeker on for 0.6 s at most and off within 0.25 s of the target, reload 5 s. A hit breaks a 1–25% body into up to 8 pieces your air can take, chips a bigger one or a rival's rock, kills ships within 0.3 R.
+- Your world launches guided rockets from its surface (`rockets` in `ships.ts`, the missile pool and `guns.ts` `steer`; numbers in [civilizationgameplay.md](civilizationgameplay.md#rockets)): from tier 1, only at your priority target within 8 + 2T radii, one a reload, kicked 0.8 rad to alternating sides (less from nearer than 6 R), 0.3 × cruise off the pad up to 12 R/s on top of you (slower than a round), homing up to 2.8 s and until 0.1 s from the target with a lazy turn (the aim error closed at 6 / the time to go: it arcs in, 0.75 R off the line from 10 R), reload 8 s. A hit breaks a 1–25% body into up to 8 pieces your air can take, chips a bigger one or a rival's rock, kills ships within 0.3 R.
 
 ### Guns (every faction)
 
@@ -128,13 +128,13 @@ round with a flash; only the body it was aimed at gets the gun's effect.
 
 | Gun | Range | Arc | Round speed, life | Pattern | Aim error a burst | Effect |
 |---|---|---|---|---|---|---|
-| Fighter (yours, rival patrols) | 9 R off the surface | ±0.2 rad | 22 R/s, 0.68 s | bursts of 6 at 10/s, 0.6 s apart (yours: at most 2 a run, then 3 s cool; probes 1 burst of 4, 4 s) | ±0.04 rad | first hit breaks a small body (yours: into food, only unsafe ones); a big one gets 1/6 of the kick |
-| Frigate lance (yours, rivals') | its target; a world from its post (yours: on the siege ring) | ±0.1 rad | 22 R/s, 2.7 s | 3 heavy bolts 0.15 s apart every 8 s; on a world after a 1.5 s nose glow, only on a clear line | ±0.01 rad | a rock: first hit breaks it into ≤ 8 pieces; a world: 6 K a bolt (`weaponHit`); any ship it meets dies |
-| Missile (silos) | the enemy world | any | 14 of the shooter's radii/s (guided), 2.6 s | a salvo of 1–3 fanned ±0.08 rad every 12 s, 1 s after a lance salvo | none; seeker 0.5 rad/s, off within 0.6 s of the target | 12 K on the world (`weaponHit`), enemy ships within 0.6 R die; a round (it is 0.18 × a ship's size to rounds: one burst stops about half), slug or beam kills it |
-| Rocket (your surface) | your priority within 8 + 2T R | any | 26 R/s on top of you (guided) | one every 5 s | 0.08·(6 − T)/5 rad at launch; seeker 0.8 rad/s, off within 0.25 s | breaks ≤ 25% into ≤ 8 pieces, chips bigger, ships within 0.3 R die |
+| Fighter (yours, rival patrols) | 9 R off the surface | ±0.2 rad | 22 R/s, 0.68 s | bursts of 6 at 10/s, 0.6 s apart (yours: 2 bursts of 8 at 16/s a run, then 1.5 s cool; probes 1 burst of 3 at 4/s, 5 s) | ±0.04 rad | first hit breaks a small body (yours: into food, only unsafe ones); a big one gets 1/6 of the kick |
+| Frigate lance (yours, rivals') | its target; a world from its post (yours: on the siege ring) | ±0.1 rad | 22 R/s, 2.7 s | 3 heavy bolts (7.5 K) 0.15 s apart every 10 s; on a world after a 1.5 s nose glow, only on a clear line | ±0.01 rad | a rock: first hit breaks it into ≤ 8 pieces; a world: 6 K a bolt (`weaponHit`); any ship it meets dies |
+| Missile (silos) | the enemy world | any | 11 of your radii/s, both sides (guided), 3 s | a salvo of 1–4 (rivals by temper) fanned ±0.08 rad every 20 s, 1 s after a lance salvo | kicked ±0.9 rad (less from nearer than 5.5 R), sides alternating; seeker closes its error at 4 / the time to go, at most 0.9 rad/s at cruise (9.9 R/s² sideways), on for the whole flight, off 0.15 s from the target | 20 K on the world (`weaponHit`), enemy ships within 0.6 R die; a round (it is 0.12 × a ship's size to rounds: a fighter's bursts stop 41%), slug or beam kills it |
+| Rocket (your surface) | your priority within 8 + 2T R | any | 12 R/s on top of you (guided) | one every 8 s | 0.08·(6 − T)/5 rad at launch, kicked ±0.8 rad (alternating); seeker closes its error at 6 / the time to go, at most 1.4 rad/s at cruise, for 2.8 s, off 0.1 s out | breaks ≤ 25% into ≤ 8 pieces, chips bigger, ships within 0.3 R die |
 | Pirate raider | 6 R off the surface | ±0.25 rad | 20 R/s, 0.5 s | bursts of 3 at 6/s, 0.9 s apart, while closing | ±0.06 rad | a rock they work: a hit (it cracks at its count); your shield `PIRATE_K`, then stock, then a chip; a rival's shield, then stock |
 | Pirate marauder | 9 R off the surface | ±0.2 rad | 20 R/s, 0.62 s | bursts of 5 at 5/s, 1.5 s apart, while closing | ±0.04 rad | as a raider; 3 hits on a rock |
-| Rival wave fighter | 8 R | ±0.25 rad | 22 R/s, 0.68 s | 3 a run at 6/s | ±0.06 rad | your frigate first (`pick`), ships, miners, else your world: 0.3 K on your shield, then 0.2 u of ore (`weaponHit`) |
+| Rival wave fighter | 8 R | ±0.25 rad | 22 R/s, 0.68 s | 3 a run at 6/s | ±0.06 rad | your frigate first (`pick`), ships, miners, else your world: 0.2 K on your shield, then 0.2 u of ore (`weaponHit`) |
 
 - A run's burst reloads after 1.5 s without the gun bearing (`pull`).
 - Look (2026-11-14, user: "much more visible, larger"): every bolt is drawn on one additive layer over the ships
@@ -179,7 +179,10 @@ round with a flash; only the body it was aimed at gets the gun's effect.
   strafing runs at you (`strafe`, straight on past) and chase on a leash (≤ 1.5× cruise). Its frigates are batteries:
   they keep a circuit at 1.9–2.1 rival radii round their own world and, reloaded, slow with the nose on you to lance
   (Guns). Probes make strafing runs round you between your outer moon slot + 1.5 and + 4 R. A rival frigate takes 2
-  hits. What they do: [aliencivilizations.md](aliencivilizations.md).
+  hits. Tops in space as pirates (`flight.ts` `rivalTop`, 2026-11-15): wave fighters out 10 R/s, probes 7.5; a ship
+  working a body (homing, massing, a battery, a miner at its rock) 10 R/s on top of that body's speed; |Δv| ≤ GEE ×
+  thrust for all, and a frame faster than the top (you charging a probe) is not flown in. What they do:
+  [aliencivilizations.md](aliencivilizations.md).
 
 ### Miner shuttles
 
@@ -207,6 +210,18 @@ Redesigned 2026-11-14 (Decisions). Speeds are in your radii (R), so they scale w
 
 - **Cruise** 4–5.5 R/s per fleet; main thrust = a ship's speed × 4 /s; raiders turn 2.2 rad/s at cruise, haulers
   1.6 rad/s and the marauder 1.2 rad/s at 0.8 × cruise.
+- **Top speed in space** (2026-11-15; user: a pirate "suddenly starts accelerating alongside me … an unrealistically
+  high speed"): every ship away has a top in world space, raider 2 ×, marauder 1.6 ×, hauler 1.3 × its speed (`P_TOP`,
+  `M_TOP`, `H_TOP`; the flag 1.5 × cruise), and its velocity changes by at most `GEE` 2 × its main thrust a second, turns
+  included (`thrust`'s `top`): `want` is cut to the top, above it a ship only slows. Before, steering round you and the
+  raid routes asked for your velocity + their own, so a ship you charged rode beside you at your speed (measured: 3.8 →
+  32 R/s, parked 0.6 R off your surface until rammed). Frame rule: a frame faster than the ship's top (you on the
+  move) is not flown in, the ship flies in space; slow rocks keep their frame. Sidestep (`clear`'s `top`): a ship that
+  would need more than its top to keep clear of a faster body it sits ahead of steps across that body's track at its
+  top, on the side it is on. Raider at 5.5 R/s cruise: 0 → cruise 0.25 s, 0 → 95% top 0.82 s, an 85° turn at its top
+  1.12 s (hauler 0.38 / 0.75 / 1.29 s, marauder 0.28 / 0.77 / 1.53 s). Home ships (yours, rivals' patrols, your miners) have
+  no top. Rival ships away got theirs the same day (Rival ships away from home; measured before → after: a wave ship
+  14–17 → 10 R/s, velocity change up to 32 × → 2 × thrust; a probe 13–16 → 7.5 R/s).
 - **Formation:** a virtual lead (the flag) flies the fleet's course (`thrust` at 0.8 rad/s toward the lane's end, or onto
   the stand-off point at ≤ 1.5 × cruise) and `clear`s every body with the formation's half-width added to each keep-out;
   each ship `follow`s its fixed slot on the flag (5 ship radii back and 4 out a row; marauder or a raider at the point,
@@ -227,7 +242,7 @@ Redesigned 2026-11-14 (Decisions). Speeds are in your radii (R), so they scale w
   ~4.6–5.4 R at you, ~4.3 R at a 4% rock) the run swings out 0.5 rad off straight out from the target on its own side
   (`strafe`'s `swing`; prey ships: straight on past them), back in past 3.5 R further out. The target's own keep-out
   (and the rocks and pieces the fleet works) bends a run only inside its turn-out; the 2nd and 3rd ship of a wing come
-  in 0.1 rad off the 1st one's line. Frame: the target body's velocity.
+  in 0.1 rad off the 1st one's line. Frame: the target body's velocity while it is under the ship's top.
 - **Jink** (`menace` + `startJink` + `jinkStep`): 1.2 rad off its velocity away from the threat's line at 1.25 ×
   cruise for 0.6 s, then 0.8 rad back for 0.4 s, 1.5 s cooldown; threats: an enemy ship within 4 R closing nose-on
   (±0.35 rad), or an enemy round passing within 5 ship radii in the next 0.25 s.
@@ -305,6 +320,12 @@ stay dangerous. Plan: Fable (2026-11-14); what was built, measured in `nav.test.
   in 30 s at 4 R/s and 18 at 5.5 R/s, 1.1–7.6 R out, 7–9 gun windows a ship in 25 s; leaving at 20 R/s you are dropped
   after 8.4 s, at 5 R/s they keep up (farthest ship 7.0–7.2 R); `swept` catches a 120 R/s pass at 30 fps (a point test
   misses it), a pass 1 R off is clear.
+- **Rival ships away** (`flight.test.ts`, a hand copy of rivals.ts's loop, `rivalTop`, 30/120 fps and dt 0.1): every
+  ship every sub-step ≤ max(top, its last speed), |Δv| ≤ 1.000 × GEE × thrust. You still or drifting 3 R/s: wave ships
+  ≤ 9.2 R/s; charging the nearest at 7 R/s² to 12: 10.00 R/s, 3 of 6 rammed (2 at dt 0.1); fleeing at 12: the wave
+  turns home after 17 s; a probe ≤ 7.5 R/s (also while a wave masses, you at 9), 9 s within 8 R of you drifting 5 R/s,
+  docked 21.4 s; a miner lands on a 6 R/s rock in 1.8 s, docks 10.3–10.5 s; homing from 40 R to a world following you at
+  8 R/s, all docked by 8.4 s.
 - **Steering** (`scan` + `clear`, raiders and haulers at 4 and 5.5 R/s cruise, 30/60/120 fps): head-on 0/84 hits
   (closest 8.6 ship radii), turn-in at a body beside the course 0/84 (1.9), goal inside a body 0/336 (6.0), a second
   body 0/84 (2.3), a belt (one body per 18 R², 0.001–0.05 of you) 0/84 (3.4). A denser belt of 1–5% rocks (one per
@@ -433,7 +454,7 @@ Rivals and you both use them (in your own palette); pirates have no tendency (sc
 |---|---|---|
 | Fighter | your defence ships: 2 at LIFE, patrol, strike, dogfight, break bodies ≤ 2% of you into pieces your air burns up; rival home patrols and war-wave escorts | Built ([F], [J]) |
 | Miner | your shuttles on round trips to moons and roaming sites (≤ 2 a site, count from metal); rival miners strip free rocks | Built ([G], [J]) |
-| Frigate | yours: 0 below tier 3, 1 at tiers 3–4, 2 at 5–6, a 3-bolt heavy laser salvo at 2–25% bodies every 8 s, then the enemy world when engaged; rivals': 0/1/1/2 at L1–4, a battery at home lancing your world, takes 2 hits | Built ([F], [J]) |
+| Frigate | yours: 0 below tier 3, 1 at tiers 3–4, 2 at 5–6, a 3-bolt heavy laser salvo at 2–25% bodies every 10 s, then the enemy world when engaged; rivals': 0/1/1/2 at L1–4, a battery at home lancing your world, takes 2 hits | Built ([F], [J]) |
 | Carrier | carries fighters (capital); escorts the colony ship | Built as the colony ship's escort [L] (it carries no fighters) |
 | Colonizer | carries life | Built [L]: 60 ore + 40 volatiles + 1 bn people ([stargameplay.md](stargameplay.md#colonies-and-terraforming-l)) |
 | Probe | yours: the light patrol class, cap = tier, lasers break ≤ 0.5% bodies (built 2026-11-14); rivals': circle you 10 s [J] | Built |
@@ -442,8 +463,8 @@ Rivals and you both use them (in your own palette); pirates have no tendency (sc
 | Marauder | pirate capital in fleets of 10+ | Built (2026-11-14): 4 hulls, a heavy gun ([gameevents.md](gameevents.md) → Pirates) |
 
 - Every class flies the one flight model above; roles differ only in route and weapon. No guided missiles that cannot be
-  dodged (concept 8): rounds are aimed once and fly straight (Guns); missiles and rockets steer only briefly and let go
-  before they arrive (the flame dims), so a timed sidestep beats them (2026-11-15).
+  dodged (concept 8): rounds are aimed once and fly straight (Guns); missiles and rockets home nearly all the way but turn
+  only so hard, so distance and an early burn across their path beat them, close in they land (2026-11-15).
 
 ### Art still to do
 

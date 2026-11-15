@@ -88,15 +88,14 @@ for (const r of [20, 40, 75, 150]) {
   assert.equal(shapeOf(r, COMP.stony, 0, 1), 0);
 }
 
-// Baking: a debris piece bakes from ROUND_M at any radius; the jag never overrides `rough` unless molten.
-const r1200 = radiusOf(1200, COMP.metallic);
-assert.ok(r1200 < 0.5 * roundR(COMP.metallic), 'the 1200 metallic piece is under half its round-off radius');
-assert.ok(bakes(1200, r1200, COMP.metallic, 0, 0, 0), 'a debris piece bakes (jag 0)');
-assert.ok(bakes(1200, r1200, COMP.metallic, 0, 0, 1), 'a debris piece bakes (jag 1)');
-assert.ok(!bakes(1200, r1200, COMP.metallic), 'without a jag it stays a rock');
-assert.ok(!bakes(900, radiusOf(900, COMP.metallic), COMP.metallic, 0, 0, 1), 'nothing under ROUND_M bakes');
-assert.ok(!bakes(1200, r1200, COMP.metallic, 0, 1, 1), 'rough wins while solid');
-assert.ok(bakes(1200, r1200, COMP.metallic, 0.3, 1, 1), 'molten bakes anything');
+// Baking: a debris piece bakes from ROUND_M; the jag never overrides `rough` unless molten. Asteroid tiers never bake.
+const r4k = radiusOf(4000, COMP.metallic);
+assert.ok(bakes(4000, r4k, COMP.metallic, 0, 0, 0), 'a debris piece bakes (jag 0)');
+assert.ok(bakes(4000, r4k, COMP.metallic, 0, 0, 1), 'a debris piece bakes (jag 1)');
+assert.ok(!bakes(3000, radiusOf(3000, COMP.metallic), COMP.metallic, 0, 0, 1), 'nothing under ROUND_M bakes');
+assert.ok(!bakes(3000, radiusOf(3000, COMP.icy), COMP.icy), 'an icy giant asteroid stays a rock');
+assert.ok(!bakes(4000, r4k, COMP.metallic, 0, 1, 1), 'rough wins while solid');
+assert.ok(bakes(4000, r4k, COMP.metallic, 0.3, 1, 1), 'molten bakes anything');
 
 // Burst placement (body.ts burst, rules.ts burstRing): no two pieces of a shattered body touch at birth (siblings that
 // overlap merge at once) nor in their first second flying out along their rays.

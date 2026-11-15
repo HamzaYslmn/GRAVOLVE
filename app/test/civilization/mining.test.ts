@@ -5,13 +5,13 @@
 import assert from 'node:assert/strict';
 import { assign, BIG, clusters, DEBRIS_N, inReach, LINK_HOLD, minerCap, PER_SITE, reach, scores, type Needs, type Site } from '../../src/evolution/civilization/mining.ts';
 
-const SLOTS = 6, R = reach(SLOTS), calm: Needs = { fleetShort: false, energyShort: false };
+const SLOTS = 5, R = reach(SLOTS), calm: Needs = { fleetShort: false, energyShort: false };
 const rock = { rock: 1 }, icy = { ice: 0.8, rock: 0.2 };
 const site = (id: number, d: number, o: Partial<Site> = {}): Site => ({ id, d, share: 0.02, comp: rock, kind: 'moon', danger: 0, ...o });
 /** Sites the given miners (all idle) go to. */
 const pick = (sites: Site[], n = calm, miners = 1) => assign(new Array(miners).fill(undefined), scores(sites, n, SLOTS));
 
-assert.ok(Math.abs(R - 13.4) < 1e-9, `reach with 6 slots: outer slot 7.4 R + 6 R = ${R}`);
+assert.ok(Math.abs(R - 13.4) < 1e-9, `reach with 5 slots: outer slot 7.4 R + 6 R = ${R}`);
 assert.ok(Math.abs(reach(1) - 8.4) < 1e-9 && reach(0) === reach(1)); // one slot: 2.4 + 6
 
 // Of two equal sites, the nearer wins.

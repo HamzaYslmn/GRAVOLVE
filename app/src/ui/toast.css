@@ -9,7 +9,9 @@
   gap: 2px;
   opacity: 0;
   text-align: center;
-  white-space: nowrap;
+  width: max-content;
+  max-width: calc(100vw - 24px);
+  white-space: normal;
   pointer-events: none;
 }
 
@@ -27,6 +29,13 @@
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--ui-muted);
+}
+
+/* Phones: smaller, wrapping, lower. */
+@media (max-width: 640px), (max-height: 500px) {
+  #game-hud .toast { top: 22%; max-width: min(calc(100vw - 24px), 440px); }
+  #game-hud .toast b { font-size: 18px; letter-spacing: 0.14em; }
+  #game-hud .toast span { font-size: 11px; letter-spacing: 0.08em; }
 }
 
 #game-hud .toast.show { animation: toast 3.2s ease-out forwards; }

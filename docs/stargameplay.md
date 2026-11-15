@@ -68,7 +68,7 @@ reach = your outer moon slot + 0.5 r):
 | Ring k | your orbit + reach + 0.4 + 0.35·k R★: rings always clear your moons |
 | Catch zone | ring 0 to ring 0 + 1 R★ |
 
-Moon slots are compressed too (2.4 + 1.0·k your radii, moons ≤ 12.5% of you: planetgameplay.md). Computed, orbit at its
+Moon slots are compressed too (2.4 + 1.25·k your radii, at most 5, moons ≤ 12.5% of you and ≤ 0.45 R wide: planetgameplay.md). Computed, orbit at its
 floor (orbit / ring 0 / system edge / short half-view at the 2.5× cap, world units): 1e5 round a red dwarf 2,094 / 3,507 /
 3,907 / 6,262, sun 2,241 / 3,702 / 4,803, blue giant 2,661 / 4,256 / 6,638 (six rings overflow; four fit); 1e6 round a red
 dwarf 3,782 / 6,883 / 7,283 / 10,464, sun 3,929 / 7,078 / 8,179, blue giant 4,349 / 7,632 / 10,015.
@@ -80,7 +80,8 @@ all of it (fly past sideways).
 
 - **Approach is physics:** light = M^0.6 (fun first; M^3.5 made blue giants 1,450×), dimmed ≤ 80% by Dyson. Light is
   compressed with the system: flux 2.3·light/x² into the dose (x in R★; ignored past 10 R★); warmth 50·√light/x K (fades
-  out between 12 and 8 R★). Roche 1.3–1.6 R★ strips ≤ 15%/s; touching kills. Computed by `rules.test.ts`: Roche rock
+  out between 12 and 8 R★); sunlight 3·light/x on your solar farms (1 at 3 R★ from a sun, 1/x with no floor, Dyson shade
+  included; civilizationgameplay.md → Energy and dose). Roche 1.3–1.6 R★ strips ≤ 15%/s; touching kills. Computed by `rules.test.ts`: Roche rock
   1.51 / metal 1.30 / ice 1.60 R★; dose (field 0.6, 1 atm) at 2 / 3 / 4 R★: red dwarf 0.31 / 0.23 / 0.21, sun 0.41 / 0.28
   / 0.23, blue giant 1.02 / 0.55 / 0.38 (only a blue giant burns, at the band's inner edge); warmth at 2 R★: red 19 K, sun
   25 K, blue 47 K.
@@ -126,7 +127,7 @@ all of it (fly past sideways).
   3.0, 3.6 / 3.6.
 - Measured (manual ticks, red dwarf): at 1e5, before the layout clamp, the orbit sat at 5.66 R★ with a 52.1 s lap (2π√(d³/μ★) = 51.9 s); a rock
   placed on the far side at circular speed stayed within 5.15–5.66 R★ for a lap; one placed 0.35 rad ahead swung 4.6–6.7
-  R★ (your world's own pull) but kept pace (±0.19 rad over 60 s). At 1e6 (6 slots) round a red dwarf with both planets:
+  R★ (your world's own pull) but kept pace (±0.19 rad over 60 s). At 1e6 (5 slots) round a red dwarf with both planets:
   orbit 5.2 R★, lap 44.9 s; your outer moon slot's edge stayed ≥ 686 u (0.85 R★) off the surface and both planets ≥ 242 u
   clear of it for a whole lap; star, world and both planets on screen in every frame (zoom 0.0352, short half-view
   10,227 u).
@@ -356,7 +357,7 @@ Concept points 3, 4 and 5 (the user's words: `vision.md` → Concept), read from
   gravity", "no need to make the distances realistic … a little closer than usual. Otherwise, the star system won't fit
   on the screen. same for planet moons, sizes etc", "star isnt pull a star"): planets capped at 500 u, stars absolute
   (800·(M/0.4)^0.15 u, 1 sun = 6e7), one gravity from mass for everything including star on star (12 s lap floor), the
-  compressed `layout` above, moons ≤ 12.5% on 2.4 + 1.0k slots, capacity 6, light 50 / 2.3 / 9.
+  compressed `layout` above, moons ≤ 12.5% on 2.4 + 1.25k slots, capacity 5, light 50 / 2.3 / 9.
 - **The way to Age III is not designed yet;** debug "Star contact" opens it (user, 2026-11-13, when the ten-step tech
   ladder went). Replaced by automatic contact ([D], from concept 3).
 - **Star visuals:** "The sizes, brightness, radiation, and halo effects of stars must be visually improved. The current

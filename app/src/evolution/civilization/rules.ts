@@ -3,11 +3,11 @@
 // catch (miners use them up for fuel, for what your world lacks and for ships).
 //   - Stock units: 1 u = 10⁻⁴ of your mass, so every cost scales with you.
 //   - Population (billions): logistic toward a capacity from habitability and size, capped by energy.
-//   - Energy (E/s, a flow): inner heat plus reactors burning the fuel stock (plus Dyson light later).
+//   - Energy (E/s, a flow): inner heat, reactors burning the fuel stock, solar farms by starlight (free, more by tier), Dyson later.
 //   - Dose: the radioactive rock in your world plus outside radiation the magnetic field and air hold back. Above 1 people die.
-//   - Stocks: fuel (mined radioactive ore), ore (mined metal) and volatiles (mined water), from moons, free bodies and beaten rival worlds.
+//   - Stocks: fuel (mined radioactive ore), ore (mined metal) and volatiles (mined water), from moons, free bodies and beaten rival worlds, and slowly your own world.
 //   - Tier: grows as the people double; miners work faster with it.
-import { BURN_MAX, impactHeat, MOLTEN, reachGround, SPECK, V_STICK, worldHeat, type Comp } from '../asteroid/rules.ts';
+import { BURN_MAX, impactHeat, MOLTEN, reachGround, SPECK, worldHeat, type Comp } from '../asteroid/rules.ts';
 import { clamp } from '../../core/rng.ts';
 import { K_PER_HEAT } from '../../core/water.ts';
 import { PLANET_M } from '../planet/rules.ts';
@@ -39,10 +39,12 @@ export function popStep(P: number, K: number, dose: number, dt: number, fall = D
 // Miners' radioactive ore goes straight to the fuel stock; a green rock you eat raises the share, and your people dig it
 // out into fuel (refine). Dose goes by concentration, never by carried mass: a big world full of plain rock is as safe as a
 // small one. Inner heat and reactors grow with size like the population capacity (∝ m^⅓): inner heat alone feeds about
-// half a habitable world's people, the reactors take you past that while their fuel lasts.
+// half a habitable world's people, the reactors take you past that while their fuel lasts. A metal core holds more heat:
+// inner heat ×0.75 with no metal, ×1 at GEO_METAL, ×1.25 from twice that.
 export const NEED = 0.1; // E/s per bn
 export const GEO = 0.5; // E/s from inner heat at Planet mass (feeds 5 bn)
-export const geo = (m: number) => GEO * size(m);
+export const GEO_METAL = 0.1; // metal share at which inner heat is GEO (the start dust's)
+export const geo = (m: number, metal = GEO_METAL) => GEO * size(m) * clamp(0.75 + (0.25 * metal) / GEO_METAL, 0.75, 1.25);
 export const RADIO_LIMIT = 0.03; // radioactive share that alone reaches the safe dose at tier 1 (single green rocks are 25%)
 // A grown civilization handles its fuel: the safe share rises with the tier, RADIO_LIMIT at tier 1 to RADIO_TOP at TIER_MAX
 // (3 / 4.4 / 6.4 / 9.4 / 13.7 / 20%).
@@ -51,16 +53,21 @@ export const radioLimit = (T: number) => RADIO_LIMIT * (RADIO_TOP / RADIO_LIMIT)
 /** Dose from the radioactive matter in your world: share / the safe share (no field or air helps). */
 export const radioDose = (share: number, limit = RADIO_LIMIT) => Math.max(0, share) / limit;
 export const REACTOR = 1; // E/s the reactors add at Planet mass with fuel in stock (feeds 10 bn more)
-export const FUEL_E = 12; // E·s a unit of fuel gives at Planet mass: a full reactor burns 5 u/min
+export const FUEL_E = 40; // E·s a unit of fuel gives at Planet mass: a full reactor burns 1.5 u/min
 export const FUEL_LOW = 10; // u: under this the reactors throttle down (no cliff)
 export const FUEL_RESERVE = 30; // u: under this miners weigh radioactive ore double
 export const WORK_E = 0.2; // E/s each working industry draws: a build, the rockets on a priority, the shield mending
 const REFINE_S = 180; // s (e-folding): your people dig the radioactive rock in your world into fuel
 export const reactor = (fuel: number, m: number) => REACTOR * size(m) * clamp(fuel / FUEL_LOW, 0, 1);
-/** Fuel (u/s) burnt for what `need` exceeds the free energy `free` (inner heat + Dyson), at most the reactors' power. */
+/** Fuel (u/s) burnt for what `need` exceeds the free energy `free` (inner heat + solar + Dyson), at most the reactors' power. */
 export const fuelBurn = (need: number, free: number, fuel: number, m: number) => Math.min(Math.max(0, need - free), reactor(fuel, m)) / size(m) / FUEL_E;
 /** Share of your mass dug from radioactive rock into fuel in dt (÷ UNIT = u); it leaves plain rock. */
 export const refine = (share: number, dt: number) => Math.max(0, share) * (1 - Math.exp(-dt / REFINE_S));
+export const SOLAR = 0.5; // E/s the solar farms give at Planet mass in full light (as inner heat; half a full reactor)
+/** Solar farm fields (view.ts solarFarms) by tier: 0, 2, 3, 4, 5, 6 at tiers 1–6. */
+export const solarWings = (T: number) => (T >= 2 ? Math.min(TIER_MAX, Math.floor(T)) : 0);
+/** E/s the wings give in starlight `light` (star/rules.ts sunlight, 1 = full) at tier T, mass m: free, always on. */
+export const solar = (light: number, T: number, m: number) => (SOLAR * size(m) * clamp(light, 0, 1) * solarWings(T)) / TIER_MAX;
 const COSMIC = 0.4; // dose on an airless world without a magnetic field
 export const DOSE_SAFE = 1;
 const DOSE_KILL = 0.2 / 60; // share of the people per second per unit of dose over the limit
@@ -70,8 +77,8 @@ export const killRate = (dose: number) => Math.min(KILL_MAX, DOSE_KILL * Math.ma
 export const spaceDose = (magnet: number, p: number, flux = 0) => (COSMIC + flux) * (1 - 0.5 * magnet) * Math.exp(-p / 2);
 /** Surface dose: `rad` (radioDose) plus outside radiation. */
 export const dose = (rad: number, magnet: number, p: number, flux = 0) => rad + spaceDose(magnet, p, flux);
-/** Energy flow: inner heat + reactors (on the fuel stock) + Dyson (star light). */
-export const energy = (fuel: number, m: number, dyson = 0) => geo(m) + reactor(fuel, m) + dyson;
+/** Energy flow: inner heat + reactors (on the fuel stock) + Dyson (star light) + `sun` (solar). */
+export const energy = (fuel: number, m: number, dyson = 0, sun = 0, metal = GEO_METAL) => geo(m, metal) + reactor(fuel, m) + dyson + sun;
 /** Capacity with energy (pass E − the shield's upkeep): people beyond what the energy feeds starve back down. */
 export const fedCapacity = (K: number, E: number) => Math.max(0, Math.min(K, E / NEED));
 
@@ -93,12 +100,14 @@ export type Stocks = { ore: number; vol: number; fuel: number };
 // ---- Fleet: each class its own cap. Probes, the weakest lasers, one per tier; fighters, fast and
 // light, 2 + one per METAL_SHIP u of metal your miners bring in, up to 6; frigates, slow heavy lasers, one from tier 3
 // and two from tier 5. A laser hit breaks a body up to `breaks` of you into at most `pieces` (Breaking below). A probe or
-// fighter run fires at most `bursts` bursts of `rounds`, then the ship breaks off and cools `cool` s. Builds are
+// fighter run fires at most `bursts` bursts of `rounds` at `rate` a second, then the ship breaks off and cools `cool` s.
+// Each class its own feel (user, 2026-11-15): fighters fire fast and light, probes slow and weak; the frigate (ARMS.lance)
+// and rockets (ROCKET) are slow but heavy. Builds are
 // automatic, one at a time (stage.ts); miners have their own cap (mining.ts minerCap).
 export const FRAG = 0.02;
 export const FLEET = {
-  probe: { ore: 2, t: 4, breaks: 0.005, pieces: 3, rounds: 4, bursts: 1, cool: 4 },
-  fighter: { ore: 3, t: 8, breaks: FRAG, pieces: 6, rounds: 6, bursts: 2, cool: 3 },
+  probe: { ore: 2, t: 4, breaks: 0.005, pieces: 3, rounds: 3, bursts: 1, cool: 5, rate: 4 },
+  fighter: { ore: 3, t: 8, breaks: FRAG, pieces: 6, rounds: 8, bursts: 2, cool: 1.5, rate: 16 },
   frigate: { ore: 25, t: 40, breaks: 0.25, pieces: 8 }, // rare and dear (8 fighters' ore): the heavy battery (ARMS.lance)
 };
 export type ShipClass = keyof typeof FLEET;
@@ -110,10 +119,11 @@ export const fleetCap = (k: ShipClass, T: number, metal: number) =>
 
 // ---- Rockets: launched from your surface from tier 1, only at what you ordered an attack on (ships.ts rockets) inside the range,
 // ROCKET.ore each, one every ROCKET.reload s (× the energy fed: slower when the reactors run dry). Guided (guns.ts steer:
-// boost, acc R/s², turn rad/s, cone rad, burn s, blind s), cruise `speed` R/s on top of you: a body of `share` breaks into
-// `pieces`, a bigger one or a rival's rock loses `chip.bite` of your mass and warms `chip.k` K (ships.ts chip); a ship dies
-// in the `blast` (R). The range grows and the launch aim error shrinks with the tier.
-export const ROCKET = { ore: 2, reload: 5, speed: 26, share: [0.01, 0.25], pieces: 8, boost: 0.3, acc: 60, turn: 0.8, cone: 0.5, burn: 0.6, blind: 0.25, blast: 0.3, chip: { bite: 0.0025, k: 40 } }; // from 1%: a hit of ~90 K (asteroid/rules.ts worldHeat)
+// boost, acc R/s², turn rad/s, cone rad, burn s, blind s; arc rad: off the aim line, sides alternating; nav: the aim error
+// is closed at nav / time-to-go, a lazy arc from afar), cruise `speed` R/s on top of you (slower than a round: a rocket is seen coming): a body of `share` breaks into `pieces`, a bigger one or a
+// rival's rock loses `chip.bite` of your mass and warms `chip.k` K (ships.ts chip); a ship dies in the `blast` (R). The
+// range grows and the launch aim error shrinks with the tier.
+export const ROCKET = { ore: 2, reload: 8, speed: 12, share: [0.01, 0.25], pieces: 8, boost: 0.3, acc: 14, turn: 1.4, cone: 1.4, burn: 2.8, blind: 0.1, arc: 0.8, nav: 6, blast: 0.3, chip: { bite: 0.0025, k: 40 } }; // from 1%: a hit of ~90 K (asteroid/rules.ts worldHeat)
 export const rocketRange = (T: number) => 8 + 2 * clamp(T, 1, TIER_MAX); // R off your surface
 export const rocketSpread = (T: number) => (0.08 * (TIER_MAX - clamp(T, 1, TIER_MAX))) / (TIER_MAX - 1); // rad: ±0.6 R at 8 R off you at tier 1
 
@@ -257,6 +267,18 @@ export function lack(s: { water: number; air: number; magnet: number }): Lack | 
   const [score, el] = ([[s.water, 'ice'], [s.air, 'gas'], [s.magnet, 'metal']] as const).reduce((a, b) => (b[0] < a[0] ? b : a));
   return score < LACK ? el : undefined;
 }
+// ---- Home extraction (user, 2026-11-15): with nothing to mine, your people still dig their own world: HOME_RATE × tier of
+// its metal share a second into ore (a share over HOME_RICH counts as that) and of its water into volatiles while under
+// HOME_VOL u (all that shield levels cost); never the element your world lacks. The dug share stays as plain rock (as refine).
+export const HOME_RATE = 5e-6, HOME_RICH = 0.2, HOME_VOL = 20;
+/** One step at tier T: `ore`, `vol` as shares of your mass (÷ UNIT = u) and your composition after (sum unchanged). */
+export function homeDig(c: Comp, T: number, dt: number, vol = 0, need?: Lack) {
+  const k = HOME_RATE * T * dt, dig = (e: 'metal' | 'ice', on: boolean) => (on ? clamp(c[e] ?? 0, 0, HOME_RICH) * k : 0);
+  const ore = dig('metal', need !== 'metal'), wat = dig('ice', need !== 'ice' && vol < HOME_VOL), comp: Comp = { ...c, rock: (c.rock ?? 0) + ore + wat };
+  if (ore) comp.metal = (c.metal ?? 0) - ore;
+  if (wat) comp.ice = (c.ice ?? 0) - wat;
+  return { ore, vol: wat, comp };
+}
 
 // ---- City lights in quarters of coverage (sphere.ts bakes 4 levels), full at LIGHTS_FULL bn.
 const LIGHTS_FULL = 5;
@@ -314,6 +336,7 @@ export function intercept(px: number, py: number, wx: number, wy: number, u: num
 // circles their world, a passive guard. Beaten when their people fall to BEATEN: their world lies open.
 export const RIVAL_MASS = { careful: [0.5, 0.7], raider: [0.7, 1], hungry: [0.9, 1.08] }; // × your mass: no rival eats you on a touch (1.15×)
 export const RIVAL_LEAD = { careful: 0, hungry: 1, raider: 2 };
+export const SALVO_LEAD = { careful: 0, hungry: 2, raider: 1 }; // missiles a silo salvo adds by temper: a Careful rival rarely beats you, a Hungry or Raider one can
 export const RIVAL_LOADED = 2;
 export const RIVAL_FIRST = 3; // view widths travelled after your civilization starts
 export const RIVAL_TRAVEL = 8;
@@ -333,9 +356,9 @@ export const FRIGATE_STOCK = 4;
 export const FRIGATE_S = 60;
 /** Fighters in a rival war wave (its frigates go too). */
 export const waveFighters = (L: number) => clamp(Math.round(L), 1, 3);
-/** Missiles a silo fires a salvo: yours by tier (1/2/3 from tiers 1/3/5), a rival's by level. */
+/** Missiles a silo fires a salvo: yours by tier (1/2/3 from tiers 1/3/5), a rival's by level + its temper's SALVO_LEAD. */
 export const salvo = (T: number) => (T >= 5 ? 3 : T >= 3 ? 2 : 1);
-export const rivalSalvo = (L: number) => clamp(Math.round(L), 1, 3);
+export const rivalSalvo = (L: number, lead = 0) => clamp(Math.round(L) + lead, 1, 4);
 
 // ---- Planetary combat (docs/civilizationgameplay.md "Battles"), the same rules both sides. Every weapon hit lands on the
 // shield first (shieldShot: no minimum; it takes what it holds down to its floor, then stops mending SHIELD_STUN s). Through
@@ -344,11 +367,11 @@ export const rivalSalvo = (L: number) => clamp(Math.round(L), 1, 3);
 // RIVAL_HIT_MAX of the people. Weapon fire never sets life back or heats a crust.
 // Speeds `u` in the shooter's world radii/s on top of it, `life` s, `k` K a hit; `run`/`cycle`: s per firing cycle (balance).
 export const ARMS = {
-  round: { k: 0.3, u: 22, life: 0.68, run: 6.5, hit: 0.75 }, // a fighter's (flight.ts SHOT_V, SHOT_S; FLEET rounds × bursts a run): 15 R reach, slow enough to follow
+  round: { k: 0.2, u: 22, life: 0.68, run: 5, hit: 0.75 }, // a fighter's (flight.ts SHOT_V, SHOT_S; FLEET rounds × bursts a run): 15 R reach, slow enough to follow
   probe: { k: 0.15 },
   wave: { range: 8, arc: 0.25, rounds: 3, rate: 6, spread: 0.06 }, // a rival wave fighter's strafing gun (round speed and life)
-  lance: { k: 6, u: 22, life: 2.7, salvo: 3, reload: 8, glow: 1.5, gap: 0.15, arc: 0.1, spread: 0.01, hull: 3, rivalHull: 2, hit: 0.9 },
-  missile: { k: 12, u: 14, life: 2.6, blast: 0.6, reload: 12, ore: 4, glow: 1.5, fan: 0.08, after: 1, max: 12, boost: 0.3, acc: 30, turn: 0.5, cone: 0.6, burn: 1.6, blind: 0.6, size: 0.18 }, // guided like ROCKET; max: missiles and rockets in flight; size: × a ship's hit radius, for rounds
+  lance: { k: 7.5, u: 22, life: 2.7, salvo: 3, reload: 10, glow: 1.5, gap: 0.15, arc: 0.1, spread: 0.01, hull: 3, rivalHull: 2, hit: 0.9 },
+  missile: { k: 20, u: 11, life: 3, blast: 0.6, reload: 20, ore: 4, glow: 1.5, fan: 0.08, after: 1, max: 12, boost: 0.22, acc: 8, turn: 0.9, cone: 1.4, burn: 3, blind: 0.15, arc: 0.9, nav: 4, size: 0.12 }, // guided like ROCKET; max: missiles and rockets in flight; size: × a ship's hit radius, for rounds
 };
 export const BURN_U = 0.2;
 export const BURN_WAVE = 20;

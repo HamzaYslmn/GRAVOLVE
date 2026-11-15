@@ -8,6 +8,7 @@
   background: rgb(120 150 255 / 0.08);
   border: 2px solid rgb(150 175 255 / 0.3);
   pointer-events: none;
+  z-index: 4; /* above the HUD cards, under the reticle (5) and settings (10) */
 }
 
 #joystick-knob {

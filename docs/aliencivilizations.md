@@ -76,18 +76,18 @@ body on course that closes faster than the stick speed and weighs ≤ 2× the mo
   loaded, at the quietest of six spots 1.25–1.6 camera half-diagonals ahead of you, never nearer than 12 of your radii.
   Fleeing never summons the next one at once (2026-11-14): when a rival drops out of reach the next arrival waits a full
   8 view widths from there (running used to bring the next one straight in). Mass by temper (`RIVAL_MASS`): Careful
-  0.5–0.7×, Raider 0.7–1×, Hungry (and unnamed) 0.9–1.08× you, never 1.1× (none eats you on a touch); violet lights and veil, seas and green lowlands, ≤ 4 ships (level + 1), a rock moon (a passive guard on its circle; never thrown, 2026-11-15).
+  0.5–0.7×, Raider 0.7–1×, Hungry (and unnamed) 0.9–1.08× you, never 1.1× (none eats you on a touch); violet lights and veil, seas and green lowlands, ≤ 4 ships (level + 1), a rock moon (a passive guard on its circle, turning against the world's orbit round you; never thrown; you can steal it on its circle mid-fight by a match, a new one grows 30 s later, 2026-11-15: [planetgameplay.md](planetgameplay.md) → Stealing).
 - **Named** [J]: a rival civilization takes the next free named rival of the run's roster (`next(field.roster)`) and is
   named in toasts ("Maru's civilization · Violet lights on a world nearby · they will shoot once they see you"; with no
   free name "Another civilization"). Leaving writes its mass back to the ledger; swallowed, it is gone for the run. Dropped from the list while far away (more than 4 listed, or beaten), it lives on the ledger only and its body leaves the field, so its stored world never comes back as an unmanaged duplicate (fixed 2026-11-14; measured: a beaten Maru left behind 40 view widths was dropped, no orphan world at its old spot on return, and Maru later came back once, from the ledger). Its
   temperament (never shown) sets its thresholds below.
-- **Level** (by temper since 2026-11-14, `rivalLevel(t, yours, RIVAL_LEAD)`): Careful yours − 1, Hungry yours, Raider yours + 1; +1 per 5 min, ≤ yours + 1 (yours = your shield level, at least 1). About one encounter in three starts a level above you (its extra veil shows it). Early danger (user: "early-game encounters should feel more dangerous, sometimes forcing players to escape"): a new civilization (L1 shield, two fighters, 10 ore, no anti-world weapon) cannot beat an L1 or L2 rival and loses if it stays (measured in `ledger.test.ts`'s duel: 0% wins, 100% losses, median 4.7 / 4.1 min), but keeps ≥ 50% of its people for the first minute in every run: time to leave. Fleeing works: from 10 R at 2 R/s² you are past their 30 R reach in 5.3 s (`stationStep`, ≤ 0.6 R/s²). With a frigate (tier 3, L2 shield) you win every duel against L1–L3 in 93–117 s keeping 84–90% of your people; at tier 5 (two frigates, L3) in 40–49 s against L2–L4.
+- **Level** (by temper since 2026-11-14, `rivalLevel(t, yours, RIVAL_LEAD)`): Careful yours − 1, Hungry yours, Raider yours + 1; +1 per 5 min, ≤ yours + 1 (yours = your shield level, at least 1). About one encounter in three starts a level above you (its extra veil shows it). Early danger (user: "early-game encounters should feel more dangerous, sometimes forcing players to escape"): a new civilization (L1 shield, two fighters, 10 ore, no anti-world weapon) never wins a duel (rounds take no people) and by temper (measured, `ledger.test.ts` duel, 2026-11-15, 300 runs a row): a Careful L1 cannot beat it (0% lose: hold); a Hungry L1 beats it if it stays (100%, median 7.6 min); a Raider L2 beats it fast (100%, 4.1 min: run). It keeps ≥ 50% of its people for the first minute in every run: time to leave. Fleeing works: from 10 R at 2 R/s² you are past their 30 R reach in 5.3 s (`stationStep`, ≤ 0.6 R/s²). With a frigate (tier 3, L2 shield) you beat a Careful L1 and a Hungry L2–L3 (100%, 91–131 s, keeping 83–100% of your people), and a Raider L3 is a contest (83% win, 17% lose); at tier 5 (two frigates, L3) in 40–49 s against L2–L4.
 - **Gravity and engines** (2026-11-14, user: "that planet's gravity doesn't affect my planet at all"): a rival world is an
   ordinary gravity body all its life (`WORLD_FLAGS` = `held` + `pulls`; `asteroid/rules.ts` `gravitates`), alive, beaten
   or open. `held` still means hands-off (ships, miners, your capture). Within 30 of your radii its engines (`ledger.ts`
   `stationStep`, ≤ `A_ENG` = 0.6 of your radii/s², after the field's gravity) steer it onto an orbit 8–12 of your radii
   off you: the sideways goal is the pair's circular speed √(a·d), so gravity supplies the turn and the two worlds waltz;
-  it keeps 6 R clear of another rival world and dodges your missiles as you do (`DODGE`: it sees the launch, burns 7 R/s² sideways 0–0.4 s later while one is closing, then brakes back; about 40% land over 8–12 R, most from close in). Beaten: engines off; it stays your gravitating companion. Computed
+  it keeps 6 R clear of another rival world and dodges your missiles as you do (`DODGE`: it sees the launch, 0–0.4 s later builds its own thrust over 0.3 s across the missile's line, up to 5 R/s, then brakes 1.2 s; each missile kicked to alternating sides and arcing in: 58 / 50 / 52 / 72% land from 8 / 12 / 16 / 20 R, a salvo of 2–3 always lands one; its own silo flies in your radii, so its size no longer matters). Beaten: engines off; it stays your gravitating companion. Computed
   (`ledger.test.ts`, you 1e5 and a 0.551× rival from 10 R): alive it holds 10.0 R for 120 s with engines ≤ 0.6 R/s² and
   moves you up to 0.77 R/s (its pull on you at 10 R: 0.041 R/s²); beaten and parked at rest it falls in at 9.9 s (the
   giant-impact rule then applies: it merges and melts you); beaten on its orbit it stays bound and never touches. One plume
@@ -96,9 +96,9 @@ body on course that closes faster than the stick speed and weighs ≤ 2× the mo
   - *Attack:* a war wave is out, or stock ≥ `WAVE_COST` (Hungry 10, Careful 14, Raider 7) × `waveSize(L)` and the odds
     suit its temper (`ODDS`: Careful 1.2, Hungry 0.8, Raider 0.6; odds = its strength ÷ yours, strength = fighters + 5 ×
     frigates + 2 × shield level, `civilization/rules.ts` `strength`).
-  - *Defend:* shield under 50% (Careful 80%, Raider 30%), or no home fleet left. An open world stays here.
-  - *Explore:* you are out of its reach, or it has seen you for under 15 s: one harmless probe circles you for 10 s (at
-    most one per 25 s, only while the world is on screen).
+  - *Defend:* a Careful rival with its shield under 80% (Hungry and Raider keep attacking, 2026-11-15), or no home fleet left. An open world stays here.
+  - *Explore:* you are out of its reach, or it has seen you for under 15 s: one harmless probe circles you for 10 s (top
+    7.5 R/s in space: a faster you leaves it behind; at most one per 25 s, only while the world is on screen).
   - *Gather:* a miner digs the nearest free rock (0.01–3% of its mass) within 8 rival radii for 2 s, takes 30% of it and
     brings home 4 stock. Stock also grows 0.15 × level a second by itself.
 - **War waves** [J] (planetary combat, 2026-11-14; the weapons, roles and numbers are in
@@ -106,18 +106,18 @@ body on course that closes faster than the stick speed and weighs ≤ 2× the mo
   every frigate it has (`rivalFrigates`: 0/1/1/2 at L1–4; a lost one is rebuilt in 60 s for 4 wave ships' worth of
   stock). A wave masses 20 s with its world on screen (the danger is seen, never told): fighters in a V round their world,
   frigates on their battery circuit (1.9–2.1 rival radii), the silo glowing. Out, the fighters make strafing runs at you
-  in wings of three like pirates (chases at ≤ 1.5× cruise, gives up when outrun), a burst of 3 at 6/s a run whenever a
+  in wings of three like pirates (chases at ≤ 1.5× cruise, gives up when outrun, ships ≤ 2× cruise (10 R/s) in space), a burst of 3 at 6/s a run whenever a
   gun bears (±0.25 rad, 22 R/s, 0.68 s), picked your frigate first, then ships and miners within 8 R (`guns.ts` `pick`),
-  else your world: 0.3 K a round on your shield, ore once it is down. The frigates stay home and lance your world (3
-  bolts of 6 K a salvo every 8 s, 1.5 s nose glow, only on a clear line: any body takes a bolt); the silo fires
-  `rivalSalvo(L)` missiles 1 s after a lance salvo. Home at 40% losses, a frigate lost, 35 s, outrun, its own shield under
+  else your world: 0.2 K a round on your shield, ore once it is down. The frigates stay home and lance your world (3
+  bolts of 7.5 K a salvo every 10 s, 1.5 s nose glow, only on a clear line: any body takes a bolt); the silo loads while the wave masses
+  (its glow is the warning) and fires `rivalSalvo(L, SALVO_LEAD)` 20 K missiles 1 s after a lance salvo (Careful +0, Hungry +2, Raider +1, ≤ 4). Home at 40% losses, a frigate lost, 35 s, outrun, a Careful one's shield under
   its Defend threshold, or your people at the raid's floor (one wave kills ≤ 45% of them). Rounds and bolts share one pool
   with every other ship ([shipsandflight.md](shipsandflight.md) → Guns).
 - **Slug volleys** [M]: hold fire 6 s on screen (`T_SEE`), then a slug every 4–6 s (45% aimed true, the rest wide by
   1.5–3 of your radii), in volleys: none while their wave is out, none while
-  your shield is down, and none for 30 s after it is back (`REST_S`). Their rock moon is never thrown (removed 2026-11-15): it only circles their world.
+  your shield is down, and none for 30 s after it is back (`REST_S`). Their rock moon is never thrown (removed 2026-11-15): it only circles their world, where you can steal it by matching it on a free ring of yours (no defeat needed).
 - **Ships:** home patrols break rocks heading for their world, hunt your ships near it and hunt pirate raiders
-  (`rivals.watch`) [M]. Ships away from home (waves, probes, miners) steer round rocks (`scan` + `clear`) and die on any contact; home patrols die
+  (`rivals.watch`) [M]. Ships away from home (waves, probes, miners) steer round rocks (`scan` + `clear`) and die on any contact; top speeds: [shipsandflight.md](shipsandflight.md); home patrols die
   only to a body or you (hit radius 6 ship units). A lost patrol is rebuilt every 20 s, up to `YARD` = 2 fleets'
   worth. Ship flight: [shipsandflight.md](shipsandflight.md).
 - **Damage:** weapon fire goes through `weaponHit` like yours: slugs, rounds, lance bolts, missiles, pirate rounds and the
@@ -134,9 +134,15 @@ body on course that closes faster than the stick speed and weighs ≤ 2× the mo
   pieces of 0.25% of the world each, sprayed out slowly (`rivals.ts` `beat`). The fixed +50 ore / +20 vol spoils are
   gone. The dead world, engines off, stays your gravitating companion until you leave it behind. A world swallowed with
   its people: "A world swallowed".
-- Computed (`ledger.test.ts`, the weapon rules and real waves, 2026-11-14): duel win rate 95–98% across temperaments
-  and levels (median 120 s; was 86–94% with the harmless waves; without sniping their frigate 97–99%: you usually win
-  before a wave is out); a wave of 3 or 4 ships turns home at its 2nd loss, any wave at its frigate's loss. Measured
+- Measured (`ledger.test.ts` duel, 2026-11-15, each rival at the level it meets you; win / lose):
+
+  | You | Careful | Hungry | Raider |
+  |---|---|---|---|
+  | tier 1 (L1, 2 fighters) | L1: 0 / 0% (hold) | L1: 0 / 100%, 7.6 min | L2: 0 / 100%, 4.1 min (run) |
+  | tier 3 (L2, a frigate) | L1: 100 / 0% | L2: 100 / 0%; L3: 100 / 0% | L3: 83 / 17% |
+  | tier 5 (L3, two frigates) | L2: 100 / 0% | L3–L4: 100 / 0% | L4: 100 / 0% |
+
+  Tier 5 breaks any rival in 40–50 s, before a wave leaves (late rivals need another lever). A wave of 3 or 4 ships turns home at its 2nd loss, any wave at its frigate's loss. Measured
   before this change: `rivals.update` 0.06–0.09 ms (not re-measured: no browser).
 - Achievement "Duelist": beat a rival world ([hudandcontrols.md](hudandcontrols.md)).
 
@@ -284,7 +290,7 @@ Mining defeated worlds ([M], concept 9) is built: open worlds are sites at effic
 
 | # | Step | Files | Check |
 |---|---|---|---|
-| 6 | Civilization: built in [J] (stances, waves, defeat by fleet); left: army strength, war decision by defence, rival-vs-rival | `civilization/rivals.ts`, `rivals/ledger.ts` | built: duel check 86–94% wins; a wave masses ≥ 20 s on screen before it leaves |
+| 6 | Civilization: built in [J] (stances, waves, defeat by fleet); left: army strength, war decision by defence, rival-vs-rival | `civilization/rivals.ts`, `rivals/ledger.ts` | built: duel check by temper (2026-11-15): a Careful rival cannot beat a new civilization, a Hungry one beats it if it stays, a Raider fast; with a frigate you win (Raider one level up: 83%); a wave masses ≥ 20 s on screen before it leaves |
 | 7 | Pirates raid rivals: built in [M] (they raid named rival worlds and shoot rival ships); the Marauder capital built in the 2026-11-14 redesign ([gameevents.md](gameevents.md) → Pirates) | `pirates.ts` | built: an 8-raider fleet took out a rival's patrols in 3 of 3 runs (measured) |
 
 Budget for all of it (standing rules): field update ≤ 0.6 ms at rest, ≤ 400 loaded bodies, ships within the 200-ship

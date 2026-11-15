@@ -5,7 +5,7 @@ import type { Body } from '../asteroid/body';
 import type { Ctx } from './combat';
 import { bump, bumps, MISS_V, sparks } from './crash.ts';
 import {
-  approach, BRAKE, circuit, follow, H_TURN, inArc, jink, jinkStep, leash, M_TURN, MAX_DT, P_ACC, P_TURN, ROW, startJink, steps, strafe, thrust, want, type Circler, type Craft, type Jink, type Strafer,
+  approach, BRAKE, circuit, follow, H_TOP, H_TURN, inArc, jink, jinkStep, leash, M_TOP, M_TURN, MAX_DT, P_ACC, P_TOP, P_TURN, ROW, startJink, steps, strafe, thrust, want, type Circler, type Craft, type Jink, type Strafer,
 } from './flight.ts';
 import { menace, nearest, pull, trigger, type Gun, type Trigger } from './guns.ts';
 import { clear, DODGE, free, LOOK, PAD, reachOf, scan, type Disc, type Near } from './nav.ts';
@@ -68,7 +68,7 @@ type Fleet = {
   scatter: number; sb?: Disc; sx: number; sy: number; slots: boolean; jumped: boolean; own: Set<Body>;
 };
 
-const TURNS: Record<Kind, number> = { raider: P_TURN, hauler: H_TURN, marauder: M_TURN };
+const TURNS: Record<Kind, number> = { raider: P_TURN, hauler: H_TURN, marauder: M_TURN }, TOPS: Record<Kind, number> = { raider: P_TOP, hauler: H_TOP, marauder: M_TOP }; // tops × class speed
 const live = (b: Body | undefined, me: Body): b is Body => !!b && b.m > 0 && !b.view.destroyed && (b === me || !!b.view.parent); // gone: eaten, broken, or left with its chunk
 
 export function createPirates(ctx: Ctx, rivals: Rivals, rnd: () => number = Math.random) {
@@ -470,7 +470,7 @@ export function createPirates(ctx: Ctx, rivals: Rivals, rnd: () => number = Math
         [want.x, want.y] = [(dx / d) * fsp, (dy / d) * fsp];
       }
       clear(f, fl.flagNear, fsp);
-      thrust(f, P_ACC * fsp, FLAG_TURN, h);
+      thrust(f, P_ACC * fsp, FLAG_TURN, h, 0, 0, CHASE_V * sp);
       for (const s of alive) fly(fl, s, h, sp, sr, R, stand, guards);
     }
     // Shove: a piece of their own work (cracked by them, loose, or a small rock being cracked) within SHOVE ship radii of a
@@ -567,8 +567,8 @@ export function createPirates(ctx: Ctx, rivals: Rivals, rnd: () => number = Math
         [want.x, want.y] = [want.x + cvx, want.y + cvy];
       } else follow(s, fl.flag, s.back * sr, s.side * sr, AHEAD * sr, 1.3 * ss);
     }
-    clear(s, s.near, ss);
-    thrust(s, P_ACC * ss, TURNS[s.kind], h, fx, fy);
+    clear(s, s.near, ss, 0, TOPS[s.kind] * ss);
+    thrust(s, P_ACC * ss, TURNS[s.kind], h, fx, fy, TOPS[s.kind] * ss);
   }
 
   /** A gun ship's trigger this frame: held while it closes on its target (the inbound leg), in range, the lead point in its arc, nothing else on the line. */

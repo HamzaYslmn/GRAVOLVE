@@ -130,18 +130,18 @@ export function next(list: Entry[], last: Entry | undefined) {
 // ---- Rival civilizations as strategic opponents (civilization/rivals.ts flies them; docs/aliencivilizations.md [J]).
 // The rules a Node check can run. Stances, picked from the world's state and how near you are:
 //   attack   a wave is out (it keeps its course), or stock for one is ready and the odds suit its temper (ODDS)
-//   defend   its shield is under half (DEFEND_SHIELD; a Careful one sooner) or no home fleet is left
+//   defend   a Careful one with its shield under DEFEND_SHIELD, or no home fleet is left
 //   explore  you are far, or it has seen you for under EXPLORE_S s: a probe looks you over, harmless
 //   gather   otherwise: a miner strips free rocks near its world for stock
 // A war wave masses round its world MASS_S s in view before it leaves (the danger is seen, never told), and turns home
 // once it has lost RETREAT of its ships or a frigate, or after WAVE_S s (rivals.ts adds: outrun, its own shield under
-// DEFEND_SHIELD, your people at the raid's floor). Every shot is a bolt aimed once that flies straight (guns.ts aim).
+// DEFEND_SHIELD, your people at the raid's floor). Every shot is a bolt aimed once that flies straight.
 export type Stance = 'explore' | 'gather' | 'defend' | 'attack';
 export const MASS_S = 20;
 export const RETREAT = 0.4;
 export const WAVE_S = 35;
 export const EXPLORE_S = 15;
-export const DEFEND_SHIELD: Record<Temper, number> = { hungry: 0.5, careful: 0.8, raider: 0.3 };
+export const DEFEND_SHIELD: Record<Temper, number> = { hungry: 0, careful: 0.8, raider: 0 }; // only a Careful one turtles
 export const WAVE_COST: Record<Temper, number> = { hungry: 10, careful: 14, raider: 7 }; // stock a wave ship costs
 export const SITE = { ore: 300, vol: 100 }; // per level: what an open world (its defence fleet gone) holds for miners
 export const STOCK_RATE = 0.15; // u/s per level a rival world makes by itself
@@ -180,22 +180,22 @@ export const volley = (wave: boolean, rest: number) => !wave && rest <= 0;
 // ---- A rival world's engines (civilization/rivals.ts). It is an ordinary gravity body all its life (asteroid/rules.ts
 // gravitates: WORLD_FLAGS); its engines thrust at most A_ENG of your radii/s² toward a goal velocity relative to you:
 // easing to its kept distance (≤ CLOSE_V), sideways at the pair's circular speed √(a·d) so gravity supplies the turn (the
-// two worlds waltz), plus `away` (from another rival world, a sidestep: DODGE.a off a missile's line). Beaten: engines off, a free companion.
+// two worlds waltz), plus `away` (from another rival world, a sidestep across a missile's line of sight). Beaten: engines off, a free companion.
 export const WORLD_FLAGS = { held: true, pulls: true } as const;
 export const A_ENG = 0.6; // your radii/s²
-/** Its emergency burn at a missile of yours (your own thrust at its size): `a` R/s² sideways up to `v` R/s, `react` s after it sees the launch, `brake` s after the last one is gone. */
-export const DODGE = { a: 7, v: 4, react: [0, 0.4], brake: 0.6 };
-/** The goal velocity (your radii/s) off the line of a missile at (px, py) from the world, moving at (wx, wy) relative to it: away, on the side the world is on. */
-export function sidestep(px: number, py: number, wx: number, wy: number) {
-  const w = Math.hypot(wx, wy) || 1, s = wx * py - wy * px >= 0 ? 1 : -1;
-  return { x: (-wy / w) * s * DODGE.v, y: (wx / w) * s * DODGE.v };
+/** Its emergency burn at a missile of yours: `a` R/s² (your own thrust near 1e5; the game passes its own, asteroid/player.ts thrustOf) built up over `ramp` s, across the line up to `v` R/s, `react` s after it sees the launch, `brake` s after the last one is gone. */
+export const DODGE = { a: 7, v: 5, react: [0, 0.4], brake: 1.2, ramp: 0.3 };
+/** The goal velocity (your radii/s) across the line of sight to a missile, the world (px, py) off it, the missile moving at (wx, wy) relative to it: the way the world already crosses that line (`lat`, any units), else the side its miss is on. */
+export function sidestep(px: number, py: number, wx: number, wy: number, lat = 0) {
+  const p = Math.hypot(px, py) || 1, s = (lat || wx * py - wy * px) >= 0 ? 1 : -1;
+  return { x: (-py / p) * s * DODGE.v, y: (px / p) * s * DODGE.v };
 }
 type Moving = { x: number; y: number; vx: number; vy: number };
 /** Its sidesteps off the missiles `ms` still closing on a world moving as `w` (one that passed is no threat), summed and held to DODGE.v; `n` how many close. */
-export function evade(w: Moving, ms: readonly Moving[]) {
+export function evade(w: Moving, ms: readonly (Moving & { v0x?: number; v0y?: number })[]) {
   let x = 0, y = 0, n = 0;
   for (const m of ms) {
-    const px = w.x - m.x, py = w.y - m.y, wx = m.vx - w.vx, wy = m.vy - w.vy, s = sidestep(px, py, wx, wy);
+    const px = w.x - m.x, py = w.y - m.y, wx = m.vx - w.vx, wy = m.vy - w.vy, s = sidestep(px, py, wx, wy, px * (w.vy - (m.v0y ?? 0)) - py * (w.vx - (m.v0x ?? 0)));
     if (px * wx + py * wy > 0) [x, y, n] = [x + s.x, y + s.y, n + 1];
   }
   const k = Math.min(1, DODGE.v / (Math.hypot(x, y) || 1));
@@ -208,11 +208,13 @@ const EASE_K = 0.25; // 1/s: speed toward the kept distance per unit of distance
 /**
  * The engines' Δv this step, in your radii and seconds: (ox, oy) the world off you, (vx, vy) its velocity relative to
  * you, `keep` the distance it keeps, `a` the pair's relative pull at d, `turn` ±1 its sense, (ax, ay) extra goal velocity,
- * `cap` its thrust (R/s²: A_ENG cruising, DODGE.a in a dodge and the brake after it).
+ * `cap` its thrust (R/s²: A_ENG cruising, its own in a dodge and the brake after it), `was` its thrust last step (R/s²):
+ * given, thrust along the goal builds by at most cap / DODGE.ramp a second (from zero on a reversal); cutting is instant.
  */
-export function stationStep(ox: number, oy: number, vx: number, vy: number, keep: number, a: number, turn: number, dt: number, beaten: boolean, ax = 0, ay = 0, cap = A_ENG) {
+export function stationStep(ox: number, oy: number, vx: number, vy: number, keep: number, a: number, turn: number, dt: number, beaten: boolean, ax = 0, ay = 0, cap = A_ENG, was?: { x: number; y: number }) {
   if (beaten) return { x: 0, y: 0 };
   const d = Math.hypot(ox, oy) || 1e-9, ux = ox / d, uy = oy / d, u = clamp(EASE_K * (d - keep), -CLOSE_V, CLOSE_V), c = Math.sqrt(Math.max(0, a) * d) * turn;
-  const gx = -ux * u - uy * c + ax - vx, gy = -uy * u + ux * c + ay - vy, g = Math.hypot(gx, gy), m = cap * dt;
+  const gx = -ux * u - uy * c + ax - vx, gy = -uy * u + ux * c + ay - vy, g = Math.hypot(gx, gy);
+  const m = Math.min(cap * dt, was ? (clamp((was.x * gx + was.y * gy) / (g || 1), 0, cap) + (cap / DODGE.ramp) * dt) * dt : Infinity);
   return g > m ? { x: (gx / g) * m, y: (gy / g) * m } : { x: gx, y: gy };
 }

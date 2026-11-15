@@ -82,7 +82,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   a('Mastery', 'tamer', 'Sun tamer', 'Link a star of 4 suns or more', (s) => !!star(s)?.owned && star(s)!.mass >= 4),
 
   a('Discovery', 'catcher', 'Comet catcher', 'Eat a comet', (_, r) => r.cometMeal),
-  a('Discovery', 'green', 'Green glow', 'Eat a radioactive rock', (_, r) => r.greenMeal),
+  a('Discovery', 'green', 'Green glow', 'Eat a green rad rock', (_, r) => r.greenMeal),
   a('Discovery', 'dark', 'Into the dark', '30 s in a void', (_, r) => r.timers.dark >= 30),
   a('Discovery', 'shadow', "In a giant's shadow", '5 s close to a body 20× your mass', (_, r) => r.timers.shadow >= 5),
   a('Discovery', 'four', 'Four elements', 'Rock, metal, water and gas, 10% each', (s) => s.m > 0 && (['rock', 'metal', 'ice', 'gas'] as const).every((k) => share(s.comp, k) >= 0.1)),

@@ -28,11 +28,14 @@ Labels: **measured** = run in the game or in a sim on the real formulas; **compu
 
 - **Two quantities** (user, 2026-11-15: "low radiation levels should still allow life… radiation could become an energy resource for shields, rockets, and ship production… collect radiation sources to maintain their energy supply"): **fuel** (`Stocks.fuel`, u like ore) is what the reactors burn; **radiation** (your world's radioactive share) is the dose. Miners' radioactive ore goes straight to the fuel stock, never onto your world. A green rock you eat raises the share; your people dig it out into fuel (`refine`, e-folding 180 s), leaving plain rock: eating green is the fast, risky refuel, miners the slow, clean one. Radioactive matter never decays.
 - **The dose goes by your radioactive share, never carried mass** (user, 2026-11-14: a 1.1M world at 0.4% read "harmful" when the dose counted carried mass). Size term s = (m/10^4.5)^⅓, the capacity's.
-- **Energy:** inner heat 0.5·s + reactors 1·s × clamp(fuel / 10 u) + Dyson (`rules.ts` `energy(fuel, m, dyson)`, `reactor`). Inner heat alone feeds about half a habitable world's people; the reactors (10 bn more) take you past that while their fuel lasts, throttling down under `FUEL_LOW` 10 u (no cliff).
-  - **Burn** (`fuelBurn`): only for what the need exceeds inner heat + Dyson, at most the reactors' power, 12 E·s a unit at Planet mass (`FUEL_E`): a full reactor burns 5 u/min, and the same u/s at any size for a draw scaled like the world.
+- **Energy:** E = inner heat 0.5·s·k + reactors 1·s × clamp(fuel / 10 u) + solar + Dyson (`rules.ts` `energy(fuel, m, dyson, sun, metal)`, `reactor`, `solar`); k = clamp(0.75 + 0.25 · metal / 10%, 0.75, 1.25) (user 2026-11-15: more metal, more geothermal; capped so fuel stays needed: at Planet mass with an L3 shield and no fuel, 30% metal feeds 3.2 bn in the dark, 8.2 bn at a sun). Inner heat alone feeds about half a habitable world's people; the reactors (10 bn more) take you past that while their fuel lasts, throttling down under `FUEL_LOW` 10 u (no cliff).
+  - **Burn** (`fuelBurn`): only for what the need exceeds inner heat + solar + Dyson, at most the reactors' power, 40 E·s a unit at Planet mass (`FUEL_E`, 12 until 2026-11-15): a full reactor burns 1.5 u/min, and the same u/s at any size for a draw scaled like the world.
+  - **Solar farms** (user, 2026-11-15; panel fields on the ground: What you see): free energy from starlight, counted like inner heat (no fuel, no deploy state, always on). `solar(light, T, m)` = `SOLAR` 0.5 · s · clamp(light, 0, 1) · wings / 6, wings = `solarWings(T)` 0 / 2 / 3 / 4 / 5 / 6 at tiers 1–6; light = `star/rules.ts` `sunlight(glow, cover, x)` = dimmed glow × 3 / x (1 at 3 R★ from a sun, 1/x, no floor, 0 with no star: deep space and before contact). Half a full reactor at best: near a star an empty-fuel world keeps going, never as far as fuel takes it.
+    - Computed (`rules.test.ts`, Planet mass, L3, habitability 1, out of fuel; bn settled from 10 / from P0): no star 2.00 / 2.00 · 30 R★ 2.33 / 2.33 · 12 R★ 2.83 / 2.83 · 6 R★ 4.08 / 4.08 · 3 R★ 7.00 / 6.17 (from P0 it stops at tier 5: 5 wings); with fuel 10. A fed, idle 10 bn world in full light burns 0.45 u/min.
+    - A "Solar farms" toast once the farms give over 5% of the need; your card's Make bar shows their share (the solar segment).
   - **Work draws** (`WORK_E` 0.2 E/s each): a build running, the rockets on a priority, the shield mending.
   - **Fed** = clamp(energy / need) multiplies build speed, the frigate, silo and rocket reload, and the shield's mending rate (its cap stays paid first, `shieldFed`). City lights dim with it (`view.ts`). Out of fuel the people decline at the usual 0.25/min toward what inner heat feeds; nobody dies of it.
-  - Computed (`rules.test.ts`, Planet mass, L3): tiers 1–3 burn nothing idle; tier 4 (1.6 bn) with 2 works 1.8 u/min; tier 6 idle 2.2 / 3.0 / 4.0 u/min at 6.4 / 8 / 10 bn, 5.0 with 2 works. A full tier-6 world (10 bn) on 25 u is fully fed until 4:15, under 80% from 5:07, and settles at 2.03 bn after 30 min (inner heat feeds 2); 25 u more feeds it again at once. At tiers 1–3 a stock burns only while something works.
+  - Computed (`rules.test.ts`, Planet mass, L3, no solar): tiers 1–3 burn nothing idle; tier 4 (1.6 bn) with 2 works 0.54 u/min; tier 6 idle 0.66 / 0.90 / 1.20 u/min at 6.4 / 8 / 10 bn, 1.50 with 2 works. A full tier-6 world (10 bn) on 25 u is fully fed until 14:10, under 80% from 18:57, and settles at 2.00 bn after 90 min (inner heat feeds 2); 25 u more feeds it again at once. At tiers 1–3 a stock burns only while something works.
   - A gorged world (5% radioactive at tier 1) is under the 3% safe share in 92 s with 200 u of fuel (500 u in the end).
   - Dyson energy reaches the civilization as its `dyson` input (`CivInput`, from the star stage): [`stargameplay.md`](stargameplay.md) → Dyson sphere; once it covers the need nothing burns. No moon makes energy.
 - **Need** (shown in the panel) = 0.1 E/s per bn of people + the shield's upkeep + 0.2 E/s per working industry. Star contact and the mass driver's charge use this same need.
@@ -40,14 +43,20 @@ Labels: **measured** = run in the game or in a sim on the real formulas; **compu
   - Code detail: growth is scaled by (1 − (dose − 1)), so it slows from dose 1 and stops at dose 2 (`rules.ts` `popStep`).
   - Measured (rules.test.ts sweep, tier 1, habitability 1 at Planet mass, field 0.6, 1 atm, 10 min, no fuel): 0–2% → 5 bn (dose ≤ 0.84), 2.6% → 4.96 bn (dose 1.04), 3.5% → 4.45 bn, 5% → 0.73 bn. The share is a dose only; energy comes from the fuel stock.
   - Your card shows composition shares under 1% with one decimal, so a trace never reads as 0%.
-  - Toasts name the source: "Too much radioactive rock in your world … stop eating the green, your people dig it out", or near a star "Starlight burns your people · keep farther from the star". Once, while burning with under 2 min of fuel left: "Fuel runs low · green rocks and moons refuel them".
+  - Toasts ("Rad sickness") name the source: "Too much rad rock in your world … stop eating the green, your people dig it out", or near a star "Starlight burns your people · keep farther from the star". Once, 2 min before the reactors dim below the need: "Fuel runs low · green rocks and moons refuel them".
 - **Life:** a little radioactive rock helps life before the civilization (×1.25 at 1%), past 3% it slows it, never below ×0.25: [`planetgameplay.md`](planetgameplay.md) → Habitability (`radioLife`).
 - Hot industry (overdrive: fuel near the safe share sped yards and reloads up to ×2) was replaced by the energy fed (2026-11-15).
 - Concept 3's "radioactive materials are used during stages 1 and 2": built as the fuel stock; the energy need leads to a star (Star contact below).
 
 ### Stocks
 
-- **Stocks** (user, 2026-11-14): fuel is mined radioactive ore (and what your people dig out of eaten green rock, 2026-11-15); ore is mined metal only; volatiles are mined water. Rock never; gas lands on your world instead (Miners on moons). Sources: mined moons and other mining sites, open rival worlds (reserves, through your miners), star lifting. Meals no longer give stock.
+- **Stocks** (user, 2026-11-14): fuel is mined radioactive ore (and what your people dig out of eaten green rock, 2026-11-15); ore is mined metal only; volatiles are mined water. Rock never; gas lands on your world instead (Miners on moons). Sources: mined moons and other mining sites, open rival worlds (reserves, through your miners), star lifting, and home mines. Meals no longer give stock.
+- **Home mines** (user, 2026-11-15: "even when there's nothing to mine, civilizations should slowly extract and use their own planet's natural resources"; `rules.ts` `homeDig`, run every frame while awake in `stage.ts` after the moons): `HOME_RATE` 5·10⁻⁶ × tier of your metal share a second into ore (a share over `HOME_RICH` 0.2 counts as 0.2) and of your water share into volatiles while the stock is under `HOME_VOL` 20 u (all shield levels cost); never the element your world lacks (`lack`). Your mass is unchanged; the dug share becomes plain rock (as `refine`). Home ore does not count toward fleet metal (the fighter and miner caps stay a mining reward). Toast "Home mines" once, when ore comes in with no moons.
+  | 10% metal, 8% water | tier 1 | tier 3 | tier 6 |
+  |---|---|---|---|
+  | ore u/min | 0.30 | 0.90 | 1.80 |
+  | volatiles u/min (under 20 u) | 0.24 | 0.72 | 1.44 |
+  A tenth of a rocky 2% moon at the same tier (computed, `rules.test.ts`); an hour at tier 6 takes metal 10% → 8.98% (field unchanged at Planet mass), sum 1. Measured in game (debug Life world, planet view, tier 3, metal 12.7%, `moons.list` stubbed empty, no miners out; a 10 s window ×6): 1.132 u/min of ore against 1.132 predicted; with metal set to 0, none. Tiers 1 and 6, the 20 u volatiles stop, the lacking element and the toast's once are checked by `rules.test.ts` and the code only.
 - **Metal for the fleet:** a running total of the metal of every mined haul (`metal` in `stage.ts`). It is never spent or stolen; it sets the fighter cap (the probe and frigate caps come from the tier) and the miner cap (Q5).
 - Spent on ships, shield levels, slugs, Dyson segments, colony fleets and terraforming ([`stargameplay.md`](stargameplay.md)).
 - Pirates steal stock from an unshielded world, 1 unit per hit (ore first, ≤ 20 u a hauler); with stock gone too, a hit knocks a little water or air off (≤ 2% a raid); since the 2026-11-14 redesign they also crack rocks and haul the pieces, and their haulers and guards stay outside your moon system: [`gameevents.md`](gameevents.md) → Pirates.
@@ -77,7 +86,7 @@ priority UI (watch and feed).
 - **Score** = share × worth (the need-weighted share of its material) × efficiency × (1 − 0.7·danger) ÷ trip time; 0 when
   mined out. The share term was added with [G]: without it a near moon always beat a big far body. Trip time
   `tripTime(d)` = 2d/3 + 1.4 s (3 R/s and a 1.4 s dig, as the shuttles fly).
-- **Reach** ("outermost ring") = outer moon slot + 6 R: 13.4 R with 6 slots, 8.4 R with 1 (slots compressed 2026-11-14). A linked body ≥ 25% of you
+- **Reach** ("outermost ring") = outer moon slot + 6 R: 13.4 R with 5 slots, 8.4 R with 1 (slots compressed 2026-11-14). A linked body ≥ 25% of you
   (too big to be a moon) holds to 1.15× the reach. Outside it a site scores 0; a danger-1 site scores 0 while any other
   is open.
 - **Assignment** (`assign`, re-scored every 2 s): a miner keeps a site that still scores and has room (≤ 2 a site); idle
@@ -207,7 +216,7 @@ What they do (`ships.ts`); probes are the light class (user, 2026-11-14): their 
   or reloading) the note shows once more whenever the reason changes. Low energy shows as a longer reload.
 - **It ends** (every frame): the target is gone or unloaded, or the world is beaten.
 - **Seen:** four cyan arcs turning round it (1.6 of its radii, a ship 3 ship radii; dim and slow while it waits; a
-  besieged world keeps its siege ring); the cursor glows cyan over anything a tap would take; toasts "Priority target"
+  besieged world too: no siege ring, user 2026-11-15); the cursor glows cyan over anything a tap would take; toasts "Priority target"
   once, and once a calm tip the first time something on course is inside the ring.
 - Stays automatic: point defence against enemy ships and missiles, the shield, orbiting
   moons.
@@ -221,12 +230,12 @@ What they do (`ships.ts`); probes are the light class (user, 2026-11-14): their 
 
 ### Frigate [F]
 
-- Slow heavy lasers (user, 2026-11-14): cap 0 below tier 3, 1 at tiers 3–4, 2 at tiers 5–6 (25 ore, 40 s each; the lance, `ARMS.lance`, and its siege role: Battles). Each flies its own circuit; every 8 s (× the energy fed) it takes your priority when that is a free rock 2–25% of you (`orders.ts`; it never picks one by itself), turns its nose onto the lead point and fires a salvo of 3 heavy laser bolts (`ARMS.lance.salvo`) 0.15 s apart, each aimed once, straight at 22 R/s on top of its velocity, 2.7 s life (30 R/s and 2 s before 2026-11-14: slowed to be seen, reach kept). The first bolt that hits breaks the body into up to 8 pieces by the same cut (Defence ships → Breaking into food). Toast "Frigate strike". No shots at rocks without a priority. Not tried in a test tab since the cut changed (no frigate before tier 3; the cut is shared with rockets, which were).
+- Slow heavy lasers (user, 2026-11-14): cap 0 below tier 3, 1 at tiers 3–4, 2 at tiers 5–6 (25 ore, 40 s each; the lance, `ARMS.lance`, and its siege role: Battles). Each flies its own circuit; every 10 s (× the energy fed) it takes your priority when that is a free rock 2–25% of you (`orders.ts`; it never picks one by itself), turns its nose onto the lead point and fires a salvo of 3 heavy laser bolts (`ARMS.lance.salvo`) 0.15 s apart, each aimed once, straight at 22 R/s on top of its velocity, 2.7 s life (30 R/s and 2 s before 2026-11-14: slowed to be seen, reach kept). The first bolt that hits breaks the body into up to 8 pieces by the same cut (Defence ships → Breaking into food). Toast "Frigate strike". No shots at rocks without a priority. Not tried in a test tab since the cut changed (no frigate before tier 3; the cut is shared with rockets, which were).
 - Kept apart from `civ.ships` (its own cap and stepper), but a ship like any other to the enemy (`combat.ts` `ctx.mine`): hull 3 (`ARMS.lance.hull`), each round or slug takes a point (`ships.ts` `lose`), and at its last point it lances from the far side of you. Bolts are rounds in the shared pool (`guns.ts`). Measured (Node, with the earlier 20 R/s shells): against a 0.3 R body crossing 10 R out at 4 R/s it lined up in 1.48 s on average and every salvo hit (200 trials). At 22 R/s against rocks drifting under gravity (`guns.test.ts`): 900 of 900 bolts hit (as at 30 R/s).
 
 ### Rockets
 
-- Your world launches rockets from its surface from tier 1 (user, 2026-11-14; `ships.ts` `rockets`, `ROCKET` in `rules.ts`): 2 ore each, reload 5 s × the energy fed, only at your priority (orders.ts says when they take it) within `rocketRange(T)` = 8 + 2T radii off your surface. Guided (user, 2026-11-15; `guns.ts` `steer`, the missile pool): they leave at 0.3 × cruise and speed up at 60 R/s² to 26 R/s on top of you (20 R/s unguided before), turn at most 0.8 rad/s onto the lead point, and let go for good after 0.6 s, past 0.5 rad off the nose or within 0.25 s of the target: a rock pushed sideways at 4 R/s² is hit, the same shot without a seeker missed by 0.18 R (`orders.test.ts`). Launch aim error `rocketSpread(T)` = 0.08·(6 − T)/5 rad. Measured 2026-11-15 (debug Life): a 7.9% rock 9 R out cut by the first rocket; a 40% body chipped 0.6% in 8 s and warmed ~50 K; a pirate raider ordered at died in 0.5 s (one fighter and a rocket on it). A new civilization starts with `START_ORE` 10 ore (five rockets) before its miners bring metal in. Measured 2026-11-14 on the debug Life jump: 4 rockets in 3 min, 2 bodies (1.1%, 1.7%) still got through and the 198 K one wiped life (the jump drops a living world into a neighbourhood that normal play clears while molten). A hit breaks the body into up to 8 pieces by the same cut as the frigate (toast "Rocket hit"). Drawn as amber teardrops with a flame (Look).
+- Your world launches rockets from its surface from tier 1 (user, 2026-11-14; `ships.ts` `rockets`, `ROCKET` in `rules.ts`): 2 ore each, reload 8 s × the energy fed (slow but heavy, 2026-11-15), only at your priority (orders.ts says when they take it) within `rocketRange(T)` = 8 + 2T radii off your surface. Guided (user, 2026-11-15; `guns.ts` `steer`, the missile pool): each leaves kicked 0.8 rad (46°) to one side of the aim line (less from nearer than 6 R, half a second of cruise), the side after the last one's (a random first side), at 0.3 × cruise and speeds up at 14 R/s² to 12 R/s on top of you (a round is 22 R/s: a rocket is seen coming; 26 R/s at 60 R/s² before 2026-11-15, user: "almost as fast as lasers"), closes its aim error on the lead point lazily, at nav 6 / the time to go (the missile's 4 would miss a rock pushed sideways at 4 R/s² by 0.25 R), at most 1.4 rad/s at cruise (a lateral-acceleration limit, 17 R/s² sideways): it arcs in, 0.04 / 0.32 / 0.75 R off the line at 3 / 6 / 10 R (scratch sim and browser alike), and lets go for good after 2.8 s, past 1.4 rad off the nose or within 0.1 s of the target (homing nearly all the way): a rock 9 R out pushed sideways at 4 R/s² is hit from either side, the same shot without a seeker missed by 0.21 R (`orders.test.ts`). Life: the range + 2 R at cruise + 0.5 s. Time to a still rock (scratch sim): 0.78 / 0.95 / 1.12 / 1.47 s at 8 / 10 / 12 / 16 R from your centre (a round: 0.36–0.73 s). Launch aim error `rocketSpread(T)` = 0.08·(6 − T)/5 rad. Measured 2026-11-15 (debug Life): a 7.9% rock 9 R out cut by the first rocket; a 40% body chipped 0.6% in 8 s and warmed ~50 K; a pirate raider ordered at died in 0.5 s (one fighter and a rocket on it). A new civilization starts with `START_ORE` 10 ore (five rockets) before its miners bring metal in. Measured 2026-11-14 on the debug Life jump: 4 rockets in 3 min, 2 bodies (1.1%, 1.7%) still got through and the 198 K one wiped life (the jump drops a living world into a neighbourhood that normal play clears while molten). A hit breaks the body into up to 8 pieces by the same cut as the frigate (toast "Rocket hit"). Drawn as amber teardrops with a flame (Look).
 
 ### Star contact
 
@@ -237,7 +246,8 @@ What they do (`ships.ts`); probes are the light class (user, 2026-11-14): their 
 ### What you see
 
 - City lights: brightness by population (full at 5 bn), dimming and flickering under radiation; the civilization's people on the body, not in a panel.
-- Shield veils, the hex-lattice dome and ripples, miner shuttles with ore pods, lights on moons with a base, defence ships and the frigate with engine plumes (their rounds: `combat.ts`), amber rockets with flames and the faint gold reach gauge (always while miners work); after star contact a slow warm pulse ring (`view.ts`). While your fleet is engaged, a faint continuous cyan circle on the siege ring round the enemy world (`combat.ts`; moon slot hints are dashed, so it reads apart). Your priority target: four turning cyan arcs round its body.
+- Solar farms (`view.ts` `solarFarms`, user 2026-11-15: "it should look as if it's on the surface; of course, it can't pass through the shield"; from tier 2, one field per wing, up to 6): panel fields at fixed spots on the ground (bearing, distance 0.46–0.68 R), Sprites (tech page `panel` cell) in a container that is a child of your world's view, so they turn with the surface and sit under its clouds, limb and shield. Each is 0.3 R wide along the surface (≥ 2.6 px) and 0.17 R·√(1 − d²) deep (foreshortened toward the limb, ≥ 1.5 px); farthest corner ≤ 0.78 R while the radius is ≥ 12 px (the pixel floors reach 0.93 R at 4 px: still inside the disc). Light per field from the star's bearing on the turning surface (eased over 1.5 s): on the day side it opens to full width, light blue (`0x6cc4ff` by (0.5 + 0.5·light)·open) with a flickering warm glint; on the night side, with no star or asleep it stows as a narrow dark strip (`0x1b2f52`, 0.45 wide). The plan's deep blue `0x5aa0f0` vanished on seas and under clouds (checked with magenta stand-ins: geometry right, colour lost). Fade 5 → 3 px of radius on screen. Measured at 1280×720: planet view radius 26.8 px (fields about 8 × 3–4 px open), star orbit 11.9–13.9 px (about 3–4 × 2 px: specks of blue, readable only as colour); 12 Sprites, normal blend, no quads in the ParticleContainer. Fields under cloud are hidden as the ground is.
+- Shield veils, the hex-lattice dome and ripples, miner shuttles with ore pods, lights on moons with a base, defence ships and the frigate with engine plumes (their rounds: `combat.ts`), amber rockets with flames and the faint gold reach gauge (always while miners work). Your priority target: four turning cyan arcs round its body, a besieged world included (the faint cyan circle on the siege ring was removed, user 2026-11-15: "why does such a huge ring appear around my opponent?"; the fighters still fly the ring).
 - +3 draw calls; 200 ships = 1 draw call (measured before the ladder went).
 
 ### Mass driver
@@ -263,9 +273,9 @@ from planets, roles, coordination, cinematic battles. The same rules on both sid
 
 | Weapon | Speed (shooter's radii/s) | Life / range | On a shield | Through an open shield | Counter |
 |---|---|---|---|---|---|
-| Fighter round | 30 | 0.5 s / 15 R | 0.3 K (probe 0.15) | burns 0.2 u of stock, ≤ 20 u a raid, never people | bodies stop it; ships jink |
-| Lance bolt (frigate) | 30 | 2 s / 60 R | 6 K, 3 a salvo, 8 s reload, 1.5 s nose glow | wound | block the line (any body); kill the frigate (hull 3; rival 2) |
-| Missile (silo) | 14, guided | 2.6 s / ~34 R | 12 K, salvo 1/2/3, 12 s reload, 4 ore each | wound; kills enemy ships within 0.6 R | sidestep when its flame dims (seeker off 0.6 s out); one round, slug or beam; any body stops it |
+| Fighter round | 30 | 0.5 s / 15 R | 0.2 K, 2 bursts of 8 at 16/s, 1.5 s cool (probe 0.15 K, 3 at 4/s, 5 s cool) | burns 0.2 u of stock, ≤ 20 u a raid, never people | bodies stop it; ships jink |
+| Lance bolt (frigate) | 30 | 2 s / 60 R | 7.5 K, 3 a salvo, 10 s reload, 1.5 s nose glow | wound | block the line (any body); kill the frigate (hull 3; rival 2) |
+| Missile (silo) | 11, guided, kicked ±0.9 rad | 3 s / ~28 R | 20 K (one landing), salvo 1/2/3 (rivals: level + temper, `SALVO_LEAD`, ≤ 4), 20 s reload, 4 ore each | wound; kills enemy ships within 0.6 R | burn across its path a moment after the launch (it leaves to alternating sides, arcs in and homes the whole flight at 9.9 R/s² sideways: about half land whatever the range; burning straight away from the flash outruns a salvo, a late burn or coasting does not); one round, slug or beam; any body stops it |
 | Slug | 50 D/s | 1.6 s | ~12.6 K | air burns it | dodge |
 
 - **Wound and landings:** heavy fire through an open shield fills a wound; every 20 K (`LANDING` = `HIT_MIN`) lands as
@@ -284,20 +294,21 @@ from planets, roles, coordination, cinematic battles. The same rules on both sid
   your radii past the enemy world's surface (aimed at the middle, 3.4; never nearer than 2.5 R to your centre), counter-
   clockwise in the enemy's frame, spread evenly round it and turning at patrol pace; wingmen follow. Idle ring ships take
   enemy ships within 6 R of the enemy world (missiles first). Every 4 s (`SIEGE.pass`) one free leader takes the strafing
-  turn: it swings 3 R further out (`SIEGE.out`), then makes the usual run in with its wingman, breaks, cools 3 s and
+  turn: it swings 3 R further out (`SIEGE.out`), then makes the usual run in with its wingman, breaks, cools 1.5 s and
   rejoins the ring. Straight from the ring a run never fired (Node: the nose was still coming round when the run broke off
   2.4 R out; 0 rounds); from 3 R further out, one 6-round burst a ship (6.4 R out; measured in Node, the run stepper alone).
   The frigate lances from its post on the ring, on the bearing from the enemy to you (two frigates ±0.5 rad), shifting
   round the ring while a body blocks the line; at its last hull point it falls back to 5 R off you on the far side. The
   silo fires `salvo(T)` missiles (tiers 1/3/5: 1/2/3) 1 s after each lance salvo while ore ≥ `RESERVE` = 20 u (kept for
-  slugs), and no longer stops when a fighter dies. Seen: the faint cyan siege circle and the enemy's shield rings.
+  slugs), and no longer stops when a fighter dies. Seen: the fighters circling and the enemy's shield rings (no siege circle drawn since 2026-11-15).
   Checked in Node (`nav.test.ts`): from your world to a 0.89 R world 10 R off drifting 0.5 R/s, the ring band reached in
   2.4 s, held for the next 20 s, never nearer than 3.27 R to its surface, 1.6 turns in 30 s, the same at 30/60/120 fps.
   Not yet tried in a test tab (the measured failure it answers: debug Life jump, tier 1, 2 fighters + 1 probe, an L2 rival
   10 R off: the sortie started with a wing of 1, was recalled at the first loss 2.8 s in, all three ships died by 7.8 s,
   ship-frames on runs at the world 90 against 1043 at enemy ships).
-- **Sustained K/s on a shield** (computed): fighter 0.42 (12 rounds × 0.3 K × 75% a 6.5 s run), frigate 2.03 (4.9
-  fighters), three fighters 1.25 (less than one frigate), missiles salvo × 12 K per 12 s, your driver 3.1. The siege wing
+- **Sustained K/s on a shield** (computed): fighter 0.48 (16 rounds × 0.2 K × 75% a 5 s run), frigate 2.03 (4.2
+  fighters), three fighters 1.44 (less than one frigate), missiles salvo × 20 K per 20 s, your driver 3.1 (2026-11-15: each
+  class its own feel; before, fighter 0.42, missiles 12 K per 12 s, lance 6 K per 8 s). The siege wing
   strafes in turns, one pair every 4 s: one burst a ship as measured (12 rounds a turn) is 0.68 K/s, under the
   three-fighter 1.25 the table below assumes; if both ships ever fired both bursts (24 rounds) it would be 1.35 K/s, a
   little over it (structural). Ring ships hunting enemy ships add nothing on the shield.
@@ -306,31 +317,58 @@ from planets, roles, coordination, cinematic battles. The same rules on both sid
 
   | Fire | Planned | Measured |
   |---|---|---|
-  | 2 strike fighters | 36 / 72 / 108 | 39 / 75 / 111 |
-  | 3 fighters | 24 / 48 / 72 | 27 / 51 / 75 |
-  | frigate alone | 16 / 36 / 61 | 12 / 36 / 60 |
-  | frigate + 2 fighters | 10 / 21 / 31 | 12 / 20 / 33 |
-  | missiles, all land (salvo = level) | 39 / 39 / 39 | 30 / 30 / 30 |
-  | missiles, ~40% land (a dodging world 8–12 R off) | ~170 | 152 |
+  | 2 strike fighters | 31 / 62 / 94 | 34 / 65 / 95 |
+  | 3 fighters | 21 / 42 / 62 | 24 / 44 / 65 |
+  | frigate alone | 16 / 37 / 63 | 15 / 35 / 55 |
+  | frigate + 2 fighters | 10 / 20 / 30 | 13 / 23 / 33 |
+  | missiles, all land (salvo = level) | 40 / 40 / 40 | 30 / 30 / 30 |
+  | missiles, half land (a dodging world 8–12 R off) | 122 | 110 |
   | your driver | 10 / 19 / 29 | 10 / 18 / 30 |
 
   Volleys land whole, so the measured time can be up to one firing cycle off the mean (frigate L1, missiles).
 - **Ground phase** (computed): from an open shield, 8 landings: a frigate alone ~79 s of fire, frigate + missiles
-  (salvo 2, 60% land) ~50 s; fighters alone never. A lone frigate cannot keep a shield down (its 8 s reload is longer than
+  (salvo 2, half land) ~53 s; fighters alone never. A lone frigate cannot keep a shield down (its 10 s reload is longer than
   the stun: the shield creeps back), fighters can: their light fire keeps a shield from mending.
-- **Missiles** (2026-11-15, guided: `guns.ts` `steer`; `ARMS.missile`: 0.3 × cruise off the pad, 30 R/s² to 14 R/s,
-  turn 0.5 rad/s, cone 0.6 rad, seeker on 1.6 s and off for good within 0.6 s of the target). Computed (`guns.test.ts`, a
-  world of radius R 16 R out): a steady target and one turning back 0.2 s after launch are hit; 6 R/s² sideways from the
-  moment the flame dims misses by 0.26 R, the same 0.3 s late is hit; random sidesteps land 81%. Your thrust is 7.5 R/s²
-  at 10⁵ and 6.3 at 2.2·10⁵ (measured), so a timed dodge works; in the browser 2 of 2 timed dodges got clear, 1 of 2 late
-  ones was hit, holding still 2 of 2 hit. A rival world dodges as you do (2026-11-15, `ledger.ts` `DODGE`, `evade`): it
-  sees the launch, reacts after 0–0.4 s, burns 7 R/s² sideways (your thrust at its size) up to 4 R/s while a missile is
-  still closing, then brakes 0.6 s back onto its station. Computed (`ledger.test.ts`, salvos of 1–3 from your surface):
-  43% land over keep 8–12 R (8 R 85%, 12 R 3%: close in to land them), 100% on its 0.6 R/s² cruise engines alone, back
-  within 0.22 R/s of its orbit 1.5 s after the last one. To rounds a missile is a smaller target than a ship
-  (`ARMS.missile.size` 0.18 × a ship's hit radius): one home fighter burst stops 60% of inbound missiles from 7–11 R
-  (`guns.test.ts`, 400 tries; 99.5% at a ship's radius). One pool of 12 (`ARMS.missile.max`) holds missiles and rockets.
-- **Look:** the lance's nose glow growing 1.5 s (never under 14 px) and a long glowing bolt with a halo; missiles a teardrop head and a long flickering flame that drops to a dim stub when the seeker lets go, a
+- **Missiles** (2026-11-15, homing: `guns.ts` `steer`; `ARMS.missile`; slower and kicked wide the same day, user: "they should
+  travel at a slightly wider angle and move more slowly … the opponent shouldn't be able to dodge every single rocket"; a
+  visible arc and dangerous rival missiles later that day): each leaves the pad kicked 0.9 rad (52°) off the aim line (less
+  from nearer than 5.5 R, half a second of cruise: half the kick from 2.75 R), sides alternating within a salvo (`guns.ts`
+  launch: a random first side when the pool is empty), at 0.22 × cruise, 8 R/s² to 11 R/s (boost visible ~1 s; 8 R/s at
+  10 R/s² before, 14 R/s at 30 R/s² first). While locked the seeker closes its aim error lazily, at nav 4 / the time to go
+  (by the closing speed, never under its own speed), at most 0.9 rad/s at cruise (`turn × u / speed`: 9.9 R/s² sideways;
+  before, it turned at the full rate at once, ~3× the cruise rate at boost speed, and undid the kick in ~0.25 s), so a
+  salvo visibly arcs in from both sides: peak swing off the line to a still world 0.81 / 1.08 / 1.36 / 1.91 / 2.46 R from
+  8 / 10 / 12 / 16 / 20 R (scratch sim). Seeker on 3 s (the whole flight), off for good 0.15 s from the target, cone 1.4 rad,
+  3 s life (~28 R). A still target is never missed (both sides, 1.5–20 R, 30 and 60 fps). Flight to a still world
+  (scratch sim): 1.08 / 1.28 / 1.47 / 1.67 / 1.85 s from 8 / 10 / 12 / 14 / 16 R centre to centre. Computed (`guns.test.ts`,
+  a world of radius R crossing at 1 R/s, both kick sides): from 16 R a steady target is hit (the seeker lets go 0.13 s out),
+  so are one turning back 0.2 s after launch and a launch 0.08 rad off; a held 7.5 R/s² burn from 0.8 s is caught from
+  8 R; from 0.3 s at 10 R, whichever way it burns, one kick side hits and the other misses (by 1.3–2.1 R); random
+  sidesteps land 88% (54% before).
+  A rival world dodges as you do (2026-11-15, `ledger.ts` `DODGE`, `evade`): it sees the launch, reacts after 0–0.4 s,
+  builds its own thrust (`thrustOf`, as yours at its size) over 0.3 s across the missile's line of sight, the way it
+  already crosses it (never flipping), up to 5 R/s while a missile is still closing, then brakes 1.2 s back onto its
+  station. Computed (`ledger.test.ts`, salvos of 1–3 from your surface, at 7 R/s²): 58 / 50 / 52 / 72% land from
+  8 / 12 / 16 / 20 R, 52% over keep 8–12 R (burn 5 R/s²: 64%, 14 R/s²: 50%), 100% on its 0.6 R/s² cruise engines alone,
+  every salvo of 2–3 lands at least one. By salvo (scratch sim, same harness): salvo 1: 60 / 52 / 50 / 50%, salvo 2:
+  61 / 50 / 50 / 72%, salvo 3: 60 / 50 / 49 / 83% from 8 / 12 / 16 / 20 R; a salvo of 2 or 3 lands ≥ 1 every time. Your
+  thrust is 7.3 R/s² at 10⁵, 9.2 at 3·10⁴, 4.9 at 10⁶ (stony, `thrustOf`).
+  A rival's silo flies in your radii (2026-11-15, `rivals.ts` silo; before, speed and seeker scaled by its own radius, so a
+  0.69-radius rival's missiles came at 5.5 of your R/s and a burn escaped them all): its size no longer matters. Its salvo
+  of 2–3 at you (scratch sim, real `createMissiles`, 8–12 R, your 7.3 R/s²; landed / salvos landing one): holding still
+  100 / 100%; burning across from the flash 30 / 61%, from 0.3 s after 50 / 100%; diagonally away from 0.3 s 38 / 49%;
+  straight away from the flash 0%, from 0.3 s 14%; full thrust any way from 0.2–1 s 81 / 91%; reacting ~1 s late or
+  coasting 1–4 R/s, all land. At 4.9 R/s² (10⁶) across from the flash lands 50 / 100%, straight away 26%. Browser (debug
+  Life, 15 missiles a style launched as rivals.ts does, 9–12 R, your 7.4 R/s² by real keys): held still 15 of 15; across
+  at the flash 6 (4 of 6 salvos landed one); across 0.3 s after 8 (6 of 6); diagonally away 0.3 s after 4; straight away
+  at the flash 0; across ~1 s late 15; coasting 3 R/s 15; at 30 fps held still and coasting 10 of 10 each. To rounds a
+  missile is a smaller target than a ship (`ARMS.missile.size` 0.12 × a ship's hit radius): one home fighter firing
+  bursts every 0.6 s stops 41% of inbound missiles from 7–11 R (`guns.test.ts`, 400 tries; 60% at 0.18 with one burst
+  before). One pool of 12 (`ARMS.missile.max`) holds missiles and rockets. Browser (debug Life, your silo of 2 at a
+  0.66-radius L1 rival dodging 8–17 R off, 10 salvos): 9 of 20 landed, none shot down, 9 of 10 salvos landed one; at a
+  still rival the salvo split to both sides, peak swing 0.9–1.05 / 1.7–1.8 / 2.2–2.45 R from 10 / 14 / 18 R (~27 px a
+  radius at the start zoom).
+- **Look:** the lance's nose glow growing 1.5 s (never under 14 px) and a long glowing bolt with a halo; missiles (kicked off the pad to alternating sides, then arcing in) a teardrop head and a long flickering flame that drops to a dim stub once the seeker lets go (0.15 s out, shaken off, or burnt out), a
   surface glow at the launch point first (never under 16 px), a wide flash, tinted light and sparks where they burst (all weapon visuals: [shipsandflight.md](shipsandflight.md) → Guns); a landing flashes, puffs dust and flickers the
   lights; a collapsing shield bursts its veil; a rival's engine plume.
 
@@ -420,7 +458,19 @@ Standing decisions for every stage are in [`README.md`](README.md). The ones tha
 
 ### Decided 2026-11-15
 
+- **Slow burn and solar wings** (user): "keep green rocks, rad same, slow consume, hard to find, but when its empty u can use sun and solar collectors too, (top op the planet, big solar panels like". Fuel lasts 3.3× longer (`FUEL_E` 12 → 40); green rocks, their shares and the dose are unchanged; the solar wings (Energy and dose) keep an empty-fuel world going near a star.
+- **Solar farms on the ground** (user): "It should look as if it's on the surface; of course, it can't pass through the shield." The limb masts went; panel fields lie on the ground and turn with it, opening light blue on the day side (What you see). Built.
+- **Home mines** (user): "Currently, we have to mine other objects to get ore. But even when there's nothing to mine, civilizations should slowly extract and use their own planet's natural resources." Your people dig metal and water out of their own world, slowly (Stocks). Built.
+- **"Rad", never "Radiation"** (user): "do not say radiation btw, rad is enough". Player-visible text says Rad (the card's Rad cell, "Rad sickness", "rad rock", "High rad"); the body-type name Radioactive stays.
+- **Each class its own feel** (user): fighters fire fast and light (16/s, 1.5 s cool), probes slow and weak (4/s, 5 s cool), the frigate (7.5 K × 3 per 10 s), missiles (20 K per 20 s) and rockets (8 s) slow but heavy.
+- **Rivals by temper** (user: "rivals can beat me, some don't"): only a Careful rival turtles; a Hungry or Raider one keeps attacking, and their silo loads while the wave masses, firing `rivalSalvo(L, SALVO_LEAD)` (Careful +0, Hungry +2, Raider +1). Measured duel table in [aliencivilizations.md](aliencivilizations.md).
 - **No rival throw** (user): rivals never launch their rock moon; it only circles their world as a passive guard. Your ships no longer fire at any rock by themselves.
 - **Priority target** (user): a Command tap sets one priority (the same tap clears it), not an immediate attack; each weapon
   takes it first as it comes ready and can hurt and reach it; fighters focus a priority ship over any other enemy; notes
   say honestly why it waits ("Reloading · 2 s", never "no ships" while ships only cool). Built (Priority target).
+- **Missile chases** (user: "Rockets should have some homing capability … close-range shots are harder to dodge, while
+  long-range shots give enemies more time to evade"): missiles and rockets home nearly all the way but turn only so hard
+  (`turn` a lateral-acceleration limit); a rival world builds its thrust over 0.3 s, never in one frame. Built (Missiles).
+- **Rockets that feel like rockets** (user, 2026-11-15: "almost as fast as lasers … the opponent seems to dodge nearly
+  100%"): missiles 11 R/s and rockets 12 R/s (a round 22), each kicked off the aim line to alternating sides and arcing in lazily, so a dodge
+  slips some but not all (about half land at every range). Built (Missiles, Rockets).

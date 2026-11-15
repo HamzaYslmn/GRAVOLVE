@@ -13,7 +13,7 @@ import { assign, BIG, EFFICIENCY, inReach, minerCap, PER_SITE, reach, RESCORE, s
 import { clamp } from '../../core/rng';
 import {
   AIR_HIGH, AIR_LOW, ASLEEP_FALL, buildOrder, buildSpeed, capacity, cityLevel, cutSpread, deflect, dose, DOSE_SAFE, energy, fedCapacity, FLEET, pieceSize, split, fleetCap, mineMix, MINE_RATE, NEED, P0, popHit, popStep,
-  FUEL_RESERVE, fuelBurn, geo, radioDose, radioLimit, refine, ROCKET, WORK_E, shellR, SHIELD_K, SHIELD_LEVELS, shieldCost, shieldFed, shieldHolds, shieldMax, shieldMeet, shieldRegen, shieldShot, START_ORE, START_SHIPS, tier, UNIT, units, upkeep,
+  FUEL_LOW, FUEL_RESERVE, fuelBurn, geo, homeDig, reactor, radioDose, radioLimit, refine, ROCKET, solar, solarWings, WORK_E, shellR, SHIELD_K, SHIELD_LEVELS, shieldCost, shieldFed, shieldHolds, shieldMax, shieldMeet, shieldRegen, shieldShot, START_ORE, START_SHIPS, tier, UNIT, units, upkeep,
   ARMS, SIEGE, siegeWing, sortieStep, weaponHit, type Arm, type Raid,
   type Lack, type Ore, type Shield, type ShipClass, type Sortie, type Stocks,
 } from './rules';
@@ -22,7 +22,7 @@ import { bumps } from './crash';
 import { siegeRing } from './nav';
 import { nearest, type Missiles, type Shots } from './guns';
 import { chip, closing, crashes, defend, dropLost, frigateStep, LOOK_S, newFrigate, newRack, newShip, rockets, siloStep, strike, type Foe, type Frigate, type Ship, type Siege } from './ships';
-import { slots as fleetSlots, type Slot, type SlotKey } from './slots';
+import { slots as fleetSlots, type Power, type Slot, type SlotKey, type Yard } from './slots';
 import { createCivView } from './view';
 import { chips, CLEARED, status, type Fleet, type Target } from './orders';
 
@@ -36,8 +36,9 @@ import { chips, CLEARED, status, type Fleet, type Target } from './orders';
 //     worlds inside the reach (a big one held to LINK_HOLD × it), mined while a shuttle works them; a beaten world comes
 //     down whole, in its own mix. Hits that get through kill people instead of setting life back, except ≥ EXTINCT[1].
 //   - Builds, one at a time: a frigate (from tier 3), fighters, probes, each to its own cap (rules.ts fleetCap), then
-//     shield levels; reactors burn the fuel stock for what inner heat does not cover, and short of it yards, reloads and
-//     mending slow with the energy fed (rules.ts fuelBurn). Your people dig eaten radioactive rock out into fuel (rules.ts refine).
+//     shield levels; reactors burn fuel for what inner heat and the solar farms (rules.ts solar) do not cover; short of it
+//     yards, reloads and mending slow with the energy fed (rules.ts fuelBurn). Your people dig eaten rad rock into fuel (refine);
+//     with nothing to mine they dig their own world (rules.ts homeDig).
 //   - Priority target (`order`: Command on any body, rival world, enemy ship or missile, planet/moons.ts): one at a time,
 //     the same target again clears it; setting it fires nothing. Each weapon keeps its rhythm and, when it next comes free,
 //     takes it first if orders.ts status says it can hurt and reach it (`on`): fighters, probes and the frigate break rocks
@@ -59,12 +60,14 @@ export type CivState = {
   pop: number; trend: number; cap: number; tier: number; // bn; +1 / −1 / 0; capacity with energy; rules.ts tier
   energy: number; need: number; dose: number; rad: number; harm: number; // E/s, E/s (people + shield upkeep), dose (safe ≤ 1), its part from your radioactive rock, 0..1 over the limit
   level: number; shield: number; shieldMax: number; slots: Record<SlotKey, Slot>; miners: number; ore: number; vol: number; // slots: one per fleet class (slots.ts), miners: shuttle cap
-  fuel: number; left: number; // u in stock, s it lasts at this burn (Infinity: none burnt)
+  fuel: number; burn: number; spare: number; // u in stock, u/s burnt, u above what keeps the reactors covering the need
+  power: Power; yard?: Yard; // E/s by source and use (hud.ts bars); what the yards build, or the first job waiting
   contact: boolean; city: number; // star contact made (the people need a sun), city-light coverage (sphere.ts)
+  light: number; sunA: number; wings: number; // starlight on the solar farms (0..1), bearing to the star, farm fields by tier
 };
 /** What the planet stage tells the civilization each frame. */
 export type CivInput = {
-  life: number; rate: number; magnet: number; pressure: number; lack?: Lack; flux?: number; dyson?: number; foes: Foe[]; // lack: planet/stage.ts; flux, dyson: star/stage.ts
+  life: number; rate: number; magnet: number; pressure: number; lack?: Lack; flux?: number; dyson?: number; sun?: number; sunA?: number; foes: Foe[]; // lack: planet/stage.ts; flux, dyson, sun (sunlight), sunA (its bearing): star/stage.ts
   shots: Shots; // the rounds your ships fire (combat.ts ctx.shots)
   sites: { body: Body; site: { ore: number; vol: number }; beaten: boolean }[]; // open rival worlds (combat.rivals.sites())
 };
@@ -77,7 +80,7 @@ const CONTACT_NEED = 0.8; // share of the energy made that the people need when 
 const CONTACT_S = 300; // s into the civilization: contact at the latest
 const SCATTER = 0.5; // radii of a broken body a second: its pieces spread apart but stay on its course (at 2, a third of a 0.9% rock's pieces missed you)
 const LAND_NEWS: Record<Ore, [string, string]> = {
-  radio: ['Miners bring fuel', 'Radioactive ore feeds your reactors'],
+  radio: ['Miners bring fuel', 'Rad ore feeds your reactors'],
   ice: ['Miners bring water', 'Ice from your moons fills the seas'],
   gas: ['Miners bring air', 'Gas from your moons thickens the sky'],
   metal: ['Miners bring iron', 'Metal from your moons strengthens the field'],
@@ -93,8 +96,8 @@ export function createCivilization(layer: Container, me: Body, renderer: Rendere
   const mined = new WeakMap<Body, number>(); // a site's mass when its mining began
   const whole = new WeakMap<Body, number>(); // a beaten world's mass when it began to come down
   let spots = new Map<number, Spot>(), crew: (number | undefined)[] = [], scoreT = 0, roam = false, prio: Body | Foe | undefined; // crew: each miner's site id; roam: a body to link with is near (the ring shows); prio: your priority target
-  let pop = P0, past = P0, trendT = TREND_S, trend = 1, build: { kind: ShipClass | 'shield'; t: number; prog: number } | undefined, gap = 0;
-  let state: CivState | undefined, active = true, contact = false, age = 0, metal = 0, pressure = 0, gasOn = false, work = 0; // metal: u your miners brought in (fighter cap); gasOn: miners bring gas (rules.ts AIR_LOW); work: industries drawing WORK_E
+  let pop = P0, past = P0, trendT = TREND_S, trend = 1, build: { kind: ShipClass | 'shield'; t: number; prog: number; ore: number; vol: number } | undefined, gap = 0;
+  let state: CivState | undefined, active = true, contact = false, age = 0, metal = 0, pressure = 0, gasOn = false, work = [0, 0, 0]; // metal: u your miners brought in (fighter cap); gasOn: miners bring gas (rules.ts AIR_LOW); work: industries drawing WORK_E (yard, mending, rockets)
   let room = 0; // bn of room your colonies add (star/colony.ts)
   // Battles: what combat lends (arm), heavy fire not yet landed, the silo (s loaded, s glowing), your fleet's sortie, s to the next.
   let arms: Arms | undefined, sortie: Siege | undefined;
@@ -228,9 +231,7 @@ export function createCivilization(layer: Container, me: Body, renderer: Rendere
     },
     struck,
     /** Combat lends its missiles and the nearest hostile rival world (combat.ts, each frame). */
-    arm(a: Arms) {
-      arms = a;
-    },
+    arm: (a: Arms) => void (arms = a),
     /** Command on `t` (planet/moons.ts, dev hook civ.order(b)): sets it as your priority target (not ok: a beaten world, a fizzle), the same target again clears it; a note over it says how it stands (orders.ts status). */
     order(t: Body | Foe) {
       const st = t === prio ? { ok: true, note: CLEARED } : status(...look(t));
@@ -268,9 +269,7 @@ export function createCivilization(layer: Container, me: Body, renderer: Rendere
       pop = Math.max(0, pop - left);
     },
     /** Dev hook: star contact now (debug "Star contact"). */
-    contact() {
-      contact = true;
-    },
+    contact: () => void (contact = true),
     /** Miner shuttles in flight as foes (combat.ts: enemy rounds can hit them). */
     miners: () => view.shuttles(),
     /**
@@ -295,18 +294,20 @@ export function createCivilization(layer: Container, me: Body, renderer: Rendere
       if (active && !wasActive) news('civ-back', 'Civilization recovers', 'The survivors rebuild what they knew');
 
       // People, energy and dose.
-      const share = me.comp.radio ?? 0, rad = radioDose(share, radioLimit(tier(pop))), inner = geo(me.m) + (w.dyson ?? 0); // inner: energy that burns no fuel
-      const E = energy(active ? stocks.fuel : 0, me.m, w.dyson ?? 0), d = dose(rad, w.magnet, w.pressure, w.flux ?? 0);
+      const share = me.comp.radio ?? 0, rad = radioDose(share, radioLimit(tier(pop))), sol = active ? solar(w.sun ?? 0, tier(pop), me.m) : 0, inner = geo(me.m, me.comp.metal ?? 0) + sol + (w.dyson ?? 0); // inner: energy that burns no fuel
+      const E = energy(active ? stocks.fuel : 0, me.m, w.dyson ?? 0, sol, me.comp.metal ?? 0), d = dose(rad, w.magnet, w.pressure, w.flux ?? 0);
       const K = active ? fedCapacity(capacity(w.rate, me.m) + room, Math.max(0, E - upkeep(shield.level))) : 0; // the shield is paid first
       pop = popStep(pop, K, d, dt, active ? undefined : ASLEEP_FALL);
-      const need = NEED * pop + upkeep(shield.level) + WORK_E * work, fed = clamp(E / Math.max(need, 1e-9), 0, 1), burn = active ? fuelBurn(need, inner, stocks.fuel, me.m) : 0, dug = active ? refine(share, dt) : 0; // fed: yards, reloads, mending
+      const need = NEED * pop + upkeep(shield.level) + WORK_E * (work[0] + work[1] + work[2]), fed = clamp(E / Math.max(need, 1e-9), 0, 1), burn = active ? fuelBurn(need, inner, stocks.fuel, me.m) : 0, dug = active ? refine(share, dt) : 0;
+      const spare = Math.max(0, stocks.fuel - Math.max(0, FUEL_LOW * (need - inner)) / reactor(FUEL_LOW, me.m)), left = burn > 0 ? spare / burn : Infinity; // fed: yards, reloads, mending; spare: u above what keeps the reactors covering the need; left: s of it at this burn
       stocks.fuel = Math.max(0, stocks.fuel + dug / UNIT - burn * dt);
       if (dug > 0) me.comp = { ...me.comp, radio: share - dug, rock: (me.comp.rock ?? 0) + dug }; // dug-out fuel leaves plain rock
       pressure = w.pressure;
       if ((trendT -= dt) <= 0) [trend, past, trendT] = [pop > past * 1.002 ? 1 : pop < past * 0.998 ? -1 : 0, pop, TREND_S];
-      if (d > DOSE_SAFE && (w.flux ?? 0) > rad) news('starrad', 'Radiation sickness', 'Starlight burns your people · keep farther from the star');
-      else if (d > DOSE_SAFE) news('rad', 'Radiation sickness', 'Too much radioactive rock in your world: people are dying · stop eating the green, your people dig it out');
-      if (burn > 0 && stocks.fuel < 120 * burn) news('fuel-low', 'Fuel runs low', 'Your reactors dim: yards, rockets and the shield slow down · green rocks and moons refuel them');
+      if (d > DOSE_SAFE && (w.flux ?? 0) > rad) news('starrad', 'Rad sickness', 'Starlight burns your people · keep farther from the star');
+      else if (d > DOSE_SAFE) news('rad', 'Rad sickness', 'Too much rad rock in your world: people are dying · stop eating the green, your people dig it out');
+      if (sol > 0.05 * need) news('solar', 'Solar farms', 'Your people spread collectors over the ground · starlight carries part of the load, strongest near a star');
+      if (left < 120) news('fuel-low', 'Fuel runs low', 'Your reactors dim: yards, rockets and the shield slow down · green rocks and moons refuel them');
       // Gas only while the air is thin (rules.ts AIR_LOW / AIR_HIGH), never past the gas line.
       gasOn = (me.comp.gas ?? 0) < GAS_WARN && (w.pressure < AIR_LOW || (gasOn && w.pressure < AIR_HIGH));
       const on: Ore[] = gasOn ? ['radio', 'metal', 'ice', 'gas'] : ['radio', 'metal', 'ice'];
@@ -323,13 +324,12 @@ export function createCivilization(layer: Container, me: Body, renderer: Rendere
       const fleet = {} as Record<ShipClass, [number, number]>;
       for (const k of ['frigate', 'fighter', 'probe'] as const) fleet[k] = [k === 'frigate' ? frigates.length : ships.filter((s) => s.kind === k).length, fleetCap(k, T, metal)];
       gap = Math.max(0, gap - dt);
-      if (!build && !gap && active) {
+      let queued: Yard | undefined; // the first wanted job, for the HUD
+      if (!build && active) {
         const cost = (k: ShipClass | 'shield') => (k === 'shield' ? (shield.level < SHIELD_LEVELS ? shieldCost(shield.level + 1) : undefined) : fleet[k][0] < fleet[k][1] ? { ...FLEET[k], vol: 0 } : undefined);
-        const k = buildOrder(frigates.length).find((c) => { const q = cost(c); return !!q && stocks.vol >= q.vol; }); // it waits for ore
-        if (k && stocks.ore >= cost(k)!.ore) {
-          const q = cost(k)!;
-          [stocks.ore, stocks.vol, build] = [stocks.ore - q.ore, stocks.vol - q.vol, { kind: k, t: q.t, prog: 0 }];
-        }
+        const k = buildOrder(frigates.length).find((c) => { const q = cost(c); return !!q && stocks.vol >= q.vol; }), q = k && cost(k); // it waits for ore
+        if (q && !gap && stocks.ore >= q.ore) [stocks.ore, stocks.vol, build] = [stocks.ore - q.ore, stocks.vol - q.vol, { kind: k!, t: q.t, prog: 0, ore: q.ore, vol: q.vol }];
+        else if (q) queued = { kind: k!, prog: 0, ore: q.ore, vol: q.vol, wait: stocks.ore < q.ore };
       }
       if (build && (build.prog += ((buildSpeed(pop, Math.max(K, 1e-6)) * fed) / build.t) * dt) >= 1) {
         const a = Math.random() * Math.PI * 2;
@@ -348,13 +348,14 @@ export function createCivilization(layer: Container, me: Body, renderer: Rendere
         [build, gap] = [undefined, BUILD_GAP];
       }
 
-      // Mining: every moon, MINE_RATE × tier of its starting mass a second, whatever the shuttles do; a bare moon stays.
+      // Mining: every moon, MINE_RATE × tier of its starting mass a second, whatever the shuttles do; a bare moon stays. Then home mines (rules.ts homeDig).
       if (active) for (const m of list) {
         const b = m.body;
         if (!b.m) continue;
         if (!mined.has(b)) mined.set(b, b.m);
         if (!shave(b, mined.get(b)! * MINE_RATE * T * dt, on, w.lack)) news('minedout', 'Moon mined out', 'Only rock is left · it still guards you, or hold right-click to grind it down');
       }
+      if (active) { const h = homeDig(me.comp, T, dt, stocks.vol, w.lack); me.comp = h.comp; gain(h.ore / UNIT, h.vol / UNIT); if (h.ore > 0 && !list.length) news('home', 'Home mines', 'Your people dig their own world for ore · slow: moons and rocks give far more'); }
 
       // Roaming miners: sites re-scored every RESCORE s; a site that is gone, lost as a moon or out of reach (a link to a
       // big body holds to LINK_HOLD ×) frees its miners at once.
@@ -420,15 +421,15 @@ export function createCivilization(layer: Container, me: Body, renderer: Rendere
       if (active) frigates.forEach((f, i) => frigateStep(f, me, use?.frigate ? (prio as Body) : undefined, dt, fed, frigateHit, w.shots, nav, siege, frigates.length > 1 ? (i ? 0.5 : -0.5) : 0));
       if (active) siloStep(silo, me, siege, arms?.missiles, stocks, frigates, dt, fed, T, (b) => b === me || moons.list().some((m) => m.body === b), fx);
       if (active) rockets(rack, me, use?.rockets ? prio : undefined, dt, T, fed, () => spend(ROCKET.ore), (b, x, y) => (chips(b.m / me.m, free(b)) ? chip(b, me.m, x, y, field()?.events, fx) : rocketHit(b)), arms?.missiles, () => seen.foes, fx);
-      work = +!!build + +(active && shield.s < shieldMax(shield)) + +!!use?.rockets;
+      work = [+!!build, +(active && shield.s < shieldMax(shield)), +!!use?.rockets];
 
       state = {
         active, pop, trend, cap: K, tier: T, energy: E, need, dose: d, rad, harm: clamp(d - DOSE_SAFE, 0, 1),
-        level: shield.level, shield: shield.s, shieldMax: shieldMax(shield), slots: fleetSlots(fleet, ships, frigates, rack.load, stocks.ore, active ? st?.by : undefined), miners: minerCap(metal),
-        ore: stocks.ore, vol: stocks.vol, contact, city: cityLevel(pop), fuel: stocks.fuel, left: burn > 0 ? stocks.fuel / burn : Infinity,
+        level: shield.level, shield: shield.s, shieldMax: shieldMax(shield), slots: fleetSlots(fleet, ships, frigates, rack.load, stocks.ore, active ? st?.by : undefined, silo.load, T), miners: minerCap(metal),
+        ore: stocks.ore, vol: stocks.vol, contact, city: cityLevel(pop), fuel: stocks.fuel, burn, spare, yard: build ? { ...build, wait: false } : queued,
+        power: { geo: geo(me.m, me.comp.metal ?? 0), solar: sol, dyson: w.dyson ?? 0, fuel: Math.min(Math.max(0, need - inner), E - inner), people: NEED * pop, shield: upkeep(shield.level), yard: WORK_E * work[0], mend: WORK_E * work[1], rockets: WORK_E * work[2] }, light: clamp(w.sun ?? 0, 0, 1), sunA: w.sunA ?? 0, wings: solarWings(T),
       };
-      const targets: Body[] = [];
-      for (const id of crew) if (id !== undefined) targets.push(spots.get(id)!.b);
+      const targets = crew.flatMap((id) => (id === undefined ? [] : [spots.get(id)!.b]));
       view.update(dt, zoom, state, list, { targets, reach: rch * me.r, hint: roam }, ships, frigates, nav);
       hud.update(real, state);
     },

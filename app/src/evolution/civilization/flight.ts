@@ -1,11 +1,12 @@
 import { wrap } from '../../core/orbits.ts';
 import { clamp } from '../../core/rng.ts';
-import { ARMS, CHASE_S, intercept, LEASH_S } from './rules.ts';
+import { ARMS, CHASE_S, CHASE_V, intercept, LEASH_S } from './rules.ts';
 import type { Near } from './nav.ts';
 
 // Ship flight for every faction (pure numbers: test/civilization runs it in Node). Nose first, one main engine: steering
 // writes the velocity it wants (`want`); `thrust` eases the nose toward it (≤ `turn` rad/s), burns along it, brakes with a
-// weak retro, never backwards; slip bleeds off over GRIP s. Frames are cut into sub-steps ≤ STEP s (same paths at any fps).
+// weak retro, never backwards; slip bleeds off over GRIP s; pirates and rival ships away have a top speed in space and a
+// thrust limit (`top`). Frames are cut into sub-steps ≤ STEP s (same paths at any fps).
 // Steering round bodies and the home steppers: nav.ts; collisions: crash.ts; rounds and missiles: guns.ts.
 
 /**
@@ -69,10 +70,16 @@ export { wrap };
 /** Sub-steps for a frame of `dt` s; each is min(dt, MAX_DT) / steps long. */
 export const steps = (dt: number) => Math.max(1, Math.ceil(Math.min(dt, MAX_DT) / STEP - 1e-6));
 
-/** Flies one sub-step toward `want`. (fvx, fvy): the frame the nose reads its motion in, when velocities are absolute. */
-export function thrust(c: Craft, acc: number, turn: number, h: number, fvx = 0, fvy = 0) {
+/**
+ * Flies one sub-step toward `want`. (fvx, fvy): the frame the nose reads its motion in, when velocities are absolute.
+ * `top` (ships away): its top speed in space; `want` is cut to it, a frame faster than it is not flown in (the ship
+ * flies in space), and the velocity changes by at most GEE × `acc` a second (above `top` it only slows).
+ */
+export function thrust(c: Craft, acc: number, turn: number, h: number, fvx = 0, fvy = 0, top = Infinity) {
   if (c.hurt) [c.hurt, acc] = [Math.max(0, c.hurt - h), acc * HURT_ACC];
-  const wx = want.x - fvx, wy = want.y - fvy, wsp = Math.hypot(wx, wy);
+  const x0 = c.vx, y0 = c.vy, w0 = Math.hypot(want.x, want.y), k = w0 > top ? top / w0 : 1;
+  if (fvx * fvx + fvy * fvy > top * top) fvx = fvy = 0; // a frame faster than its top is not flown (no riding your velocity)
+  const wx = want.x * k - fvx, wy = want.y * k - fvy, wsp = Math.hypot(wx, wy);
   let err = 0, dh = 0;
   if (wsp > 1e-6) {
     err = wrap(Math.atan2(wy, wx) - c.heading);
@@ -87,6 +94,12 @@ export function thrust(c: Craft, acc: number, turn: number, h: number, fvx = 0, 
   f = Math.max(0, f + a * h); // never backwards
   c.vx = fvx + f * nx - l * ny;
   c.vy = fvy + f * ny + l * nx;
+  if (top < Infinity) {
+    const v = Math.hypot(c.vx, c.vy), lim = Math.max(top, Math.hypot(x0, y0) - RETRO * acc * h);
+    if (v > lim) [c.vx, c.vy] = [(c.vx * lim) / v, (c.vy * lim) / v];
+    const dx = c.vx - x0, dy = c.vy - y0, dv = Math.hypot(dx, dy), am = GEE * acc * h;
+    if (dv > am) [c.vx, c.vy] = [x0 + (dx * am) / dv, y0 + (dy * am) / dv];
+  }
   c.x += c.vx * h;
   c.y += c.vy * h;
   const b = Math.min(1, Math.max(0, a / acc) + (f * Math.abs(dh)) / h / acc); // forward burn plus the turn's share
@@ -218,6 +231,10 @@ export function keepOut(c: Craft, r: number) {
 export const P_TURN = 2.2; // rad/s: raiders, rivals' ships
 export const H_TURN = 1.6; // rad/s: haulers
 export const M_TURN = 1.2; // rad/s: a pirate marauder
+export const P_TOP = 2, H_TOP = 1.3, M_TOP = 1.6; // × class speed: a pirate raider's, hauler's, marauder's top in space
+export const GEE = 2; // × main thrust: the most a ship with a top changes its velocity a second (turns included)
+/** A rival ship away's top in space at cruise `sp`: chasing you, P_TOP × (a probe CHASE_V ×); working a body moving at `body` (homing, massing, a battery, a miner's rock), P_TOP × on top of its speed. */
+export const rivalTop = (sp: number, wave: boolean, body?: { x: number; y: number }) => (body ? Math.hypot(body.x, body.y) + P_TOP * sp : (wave ? P_TOP : CHASE_V) * sp);
 export const RF_TURN = 1.8; // rad/s: a rival frigate
 export const P_ACC = 4; // 1/s: main thrust = cruise × this
 export const RING_IN = 2.5; // R: runs at you turn out inside this, back in past your outer filled moon slot + RING_OUT

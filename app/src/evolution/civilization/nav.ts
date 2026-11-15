@@ -96,8 +96,21 @@ function bend(c: Craft, n: Near, t: number) {
  * Bends `want` round every `scan`ned body (two passes), each carried on by `t` s since the scan. `sp`: its cruise.
  * Threaded: slower while a squeezed body bends it. Unthreaded: slower among two; true when blocked (two bodies still
  * bending in the second pass and the course still into one of them: it then brakes away from the nearest of those).
+ * `top` (pirates): a course faster than its top past a faster body ahead of which it sits steps across that body's track
+ * at its top instead, on the side it is on (it cannot match the body's speed).
  */
-export function clear(c: Craft, near: readonly Near[], sp: number, t = 0) {
+export function clear(c: Craft, near: readonly Near[], sp: number, t = 0, top = Infinity) {
+  const blocked = route(c, near, sp, t);
+  if (top < Infinity && Math.hypot(want.x, want.y) > top) for (let i = near.length - 1; i >= 0; i--) {
+    const m = near[i].b.motion, bv = Math.hypot(m.vx, m.vy), px = c.x - m.x - m.vx * t, py = c.y - m.y - m.vy * t;
+    if (bv <= top || px * m.vx + py * m.vy <= 0) continue;
+    const s = m.vx * py - m.vy * px >= 0 ? top / bv : -top / bv;
+    [want.x, want.y] = [-m.vy * s, m.vx * s];
+    break;
+  }
+  return blocked;
+}
+function route(c: Craft, near: readonly Near[], sp: number, t: number) {
   if (!near.length) return false;
   const thread = near[0].q !== undefined;
   let bent = 0, sq: Near | undefined;

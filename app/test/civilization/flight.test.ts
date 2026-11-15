@@ -4,15 +4,15 @@
 // comes home; rival war waves cross your moon slots in wings, pursuit lets you escape; shuttles reach a moon and come home.
 import assert from 'node:assert/strict';
 import { slotRadius } from '../../src/core/orbits.ts';
-import { book, fighter, fighterGun, q, R, report, seeded, SR, watch } from './fakes.ts';
+import { book, disc, fighter, fighterGun, q, R, report, seeded, SR, watch } from './fakes.ts';
 import {
-  ACC, BURST, chase, formation, GAP, GUN, inArc, leash, lowPass, MAX_DT, OUTER, P_ACC, P_TURN, PATROL_V, pairUp, RATE, RING_IN, RING_OUT, ROW, steps, strafe, thrust, TURN, want, type Craft,
-  type Fighter, type Strafer,
+  ACC, approach, avoid, BRAKE, BURST, chase, circuit, formation, GAP, GEE, GUN, H_TOP, H_TURN, inArc, jink, jinkStep, leash, lowPass, M_TOP, M_TURN, MAX_DT, OUTER, P_ACC, P_TOP, P_TURN, PATROL_V, pairUp, RATE, RF_TURN, RING_IN, RING_OUT, rivalTop, ROW,
+  startJink, steps, strafe, thrust, TURN, want, wrap, type Craft, type Fighter, type Strafer,
 } from '../../src/evolution/civilization/flight.ts';
 import { createShots, pull, SHOTS, trigger } from '../../src/evolution/civilization/guns.ts';
-import { breakOff, breakStep, ferry, guard, runStep } from '../../src/evolution/civilization/nav.ts';
+import { breakOff, breakStep, clear, ferry, guard, runStep, scan } from '../../src/evolution/civilization/nav.ts';
 import { DIG, SPEED } from '../../src/evolution/civilization/mining.ts';
-import { CHASE_V, LEASH, PIRATE_SPEED } from '../../src/evolution/civilization/rules.ts';
+import { CHASE_S, CHASE_V, LEASH, PIRATE_SPEED } from '../../src/evolution/civilization/rules.ts';
 
 const dist = (c: Craft) => Math.hypot(c.x, c.y) / R;
 const models = { patrol: book(), waves: book() };
@@ -126,7 +126,7 @@ function runs(ships: Strafer[], cx: number, cy: number, fv: { x: number; y: numb
   ships.forEach((s, i) => {
     formation(ships, i, 3, cx, cy, fv, SR, R, 1.3 * cruise, keep, route, 0);
     const h0 = s.heading;
-    thrust(s, P_ACC * cruise, P_TURN, h, fv.x, fv.y);
+    thrust(s, P_ACC * cruise, P_TURN, h, fv.x, fv.y, P_TOP * cruise);
     watch(models.waves, s, h0, h, P_TURN, fv.x, fv.y);
   });
 }
@@ -164,6 +164,125 @@ for (const fps of [30, 120]) {
   }
   assert.ok(off.dropped <= 10, `a target leaving at 20 R/s escapes within 10 s: ${off.dropped}`);
   assert.ok(walk.dropped === Infinity && walk.far <= 8, `a target at 5 R/s is kept within 8 R: ${walk.far}`);
+}
+// Rival ships away round a moving you (a hand copy of rivals.ts's ships-away loop: fighters going or massing, frigates on
+// their battery circuit, a probe, a miner, homing), tops from the shared rivalTop. You (R), their world (radius R) and a
+// rock move each frame; a ship touching you dies. Every ship every sub-step: speed ≤ max(top, last), |Δv| ≤ GEE × thrust.
+{
+  type Away = Strafer & { wx: number; wy: number; k: number; sense: number; role: 'fighter' | 'frigate' | 'probe' | 'miner'; t: number; home: boolean; rock?: ReturnType<typeof disc>; dig: number; da: number; dead: boolean; docked: number; landed: number };
+  const OUT_V = 5, MASS_IN = [1.5, 1.7], MASS_OUT = [1.9, 2.1], PROBE_S = 10, DIG_S = 2, DOCK = 1.3; // rivals.ts
+  const sp = OUT_V * R, acc = sp * P_ACC, brake = BRAKE * acc, outer = slotRadius(R, 0);
+  type Opts = { fps: number; T: number; phase: 'go' | 'mass' | 'home'; ships: Away['role'][]; at?: (a: number) => [number, number]; rock?: [number, number, number, number]; you: (me: ReturnType<typeof disc>, ships: Away[], dt: number, t: number) => void; world?: (w: ReturnType<typeof disc>, me: ReturnType<typeof disc>, dt: number, t: number) => void };
+  const stats = { over: 0, jolt: 0 };
+  function away(o: Opts) {
+    const dt = 1 / o.fps, n = steps(dt), h = Math.min(dt, MAX_DT) / n, me = disc(0, 0, R), world = disc(10 * R, 0, R), rock = o.rock ? disc(o.rock[0], o.rock[1], 0.3 * R, o.rock[2], o.rock[3]) : undefined;
+    const bodies = rock ? [me, world, rock] : [me, world], bm = world.motion, pm = me.motion;
+    const ships: Away[] = o.ships.map((role, i) => {
+      const a = Math.PI + (i - o.ships.length / 2) * 0.4, [x, y] = o.at ? o.at(a) : [bm.x + Math.cos(a) * 1.1 * R, bm.y + Math.sin(a) * 1.1 * R];
+      return { role, x, y, vx: bm.vx, vy: bm.vy, heading: a, burn: 0, out: false, wx: 0, wy: 0, k: i * 977, sense: 1, t: 0, home: o.phase === 'home', rock: role === 'miner' ? rock : undefined, dig: 0, da: 0, dead: false, docked: -1, landed: -1 };
+    });
+    let phase = o.phase, homeAt = -1, fastest = 0, probeV = 0, near8 = 0;
+    const c = { x: bm.x, y: bm.y, vx: bm.vx, vy: bm.vy }, fv = { x: bm.vx, y: bm.vy }, lash = { far: 0, slow: 0 };
+    for (let f = 1, t = dt; f <= o.T * o.fps; f++, t += dt) {
+      o.you(me, ships.filter((s) => !s.dead && s.docked < 0), dt, t);
+      o.world?.(world, me, dt, t);
+      for (const b of bodies) [b.motion.x, b.motion.y] = [b.motion.x + b.motion.vx * dt, b.motion.y + b.motion.vy * dt];
+      if (phase === 'go') {
+        const outpaced = chase(c, pm.x, pm.y, pm.vx, pm.vy, CHASE_V * sp, dt);
+        if (leash(lash, Math.hypot(c.x - pm.x, c.y - pm.y), LEASH * HALF_DIAG * R, outpaced, dt)) [phase, homeAt] = ['home', t];
+      }
+      lowPass(fv, c.vx, c.vy, dt);
+      const live = ships.filter((s) => !s.dead && s.docked < 0), massing = phase === 'mass', up = massing || phase === 'go', flying = up ? live.filter((s) => s.role === 'fighter') : [];
+      const wc = massing ? bm : c, wfv = massing ? { x: bm.vx, y: bm.vy } : fv, keep = massing ? R + (2 + ROW[1]) * SR : 1.25 * R + (2 + ROW[1]) * SR;
+      const route = (s: Away) => {
+        const x = s.x - wc.x, y = s.y - wc.y;
+        if (!massing) return strafe(s, x, y, s.vx - wfv.x, s.vy - wfv.y, RING_IN * R, outer + RING_OUT * R, keep, sp);
+        circuit(s, x, y, MASS_IN.map((q) => q * R), MASS_OUT.map((q) => q * R), sp, RF_TURN);
+        avoid(x, y, keep, 2 * R);
+      };
+      const st = live.map((s) => {
+        s.t += dt;
+        if ((s.role === 'probe' && s.t > PROBE_S) || (s.role === 'miner' && !s.rock)) s.home = true;
+        const battery = s.role === 'frigate', wave = s.role === 'fighter', home = battery ? !up : wave ? !flying.length : s.home, digging = !home && !!s.rock && s.dig > 0;
+        const fc = home || battery ? { x: bm.vx, y: bm.vy } : wave ? wfv : s.rock ? { x: s.rock.motion.vx, y: s.rock.motion.vy } : { x: pm.vx, y: pm.vy };
+        return { wave, home, digging, fc, top: rivalTop(sp, wave, home || battery || (wave && massing) || s.rock ? fc : undefined), near: digging ? [] : scan(s, bodies, (b) => b === world || b === s.rock, SR, sp, battery ? RF_TURN : P_TURN) };
+      });
+      for (let k = 0; k < n; k++) live.forEach((s, i) => {
+        const { wave, home, digging, fc, top, near } = st[i], rk = s.rock;
+        if (digging) return;
+        if (home) approach(s, bm.x, bm.y, bm.vx, bm.vy, R, sp, brake);
+        else if (s.role === 'frigate') {
+          const x = s.x - bm.x, y = s.y - bm.y;
+          circuit(s, x, y, MASS_OUT.map((q) => q * R), MASS_OUT.map((q) => q * R), 0.5 * sp, RF_TURN);
+          avoid(x, y, R + (2 + ROW[1]) * SR, 2 * R);
+          [want.x, want.y] = [want.x + bm.vx, want.y + bm.vy];
+        } else if (wave) formation(flying, flying.indexOf(s), massing ? 0 : 3, wc.x, wc.y, wfv, SR, R, 1.3 * sp, keep, route, massing ? 1 : 0);
+        else if (s.role === 'probe') {
+          strafe(s, s.x - pm.x, s.y - pm.y, s.vx - pm.vx, s.vy - pm.vy, outer + 1.5 * R, outer + 4 * R, outer + R, sp);
+          [want.x, want.y] = [want.x + pm.vx, want.y + pm.vy];
+        } else approach(s, rk!.motion.x, rk!.motion.y, rk!.motion.vx, rk!.motion.vy, rk!.r + 2 * SR, sp, brake);
+        clear(s, near, sp, 0, top);
+        const v0 = Math.hypot(s.vx, s.vy), x0 = s.vx, y0 = s.vy;
+        thrust(s, acc, s.role === 'frigate' ? RF_TURN : P_TURN, h, fc.x, fc.y, top);
+        const v = Math.hypot(s.vx, s.vy);
+        stats.over = Math.max(stats.over, v / Math.max(top, v0));
+        stats.jolt = Math.max(stats.jolt, Math.hypot(s.vx - x0, s.vy - y0) / (GEE * acc * h));
+        if (s.role === 'fighter' && phase === 'go') fastest = Math.max(fastest, v / R);
+        if (s.role === 'probe' && !home) probeV = Math.max(probeV, v / R);
+      });
+      for (const s of live) {
+        const home = st[live.indexOf(s)].home, rk = s.rock;
+        if (s.role === 'miner' && !home && rk && (s.dig > 0 || Math.hypot(rk.motion.x - s.x, rk.motion.y - s.y) < rk.r + 3 * SR)) {
+          if (!s.dig) [s.da, s.landed] = [Math.atan2(s.y - rk.motion.y, s.x - rk.motion.x), t];
+          s.dig += dt;
+          [s.x, s.y, s.vx, s.vy] = [rk.motion.x + Math.cos(s.da) * (rk.r + SR), rk.motion.y + Math.sin(s.da) * (rk.r + SR), rk.motion.vx, rk.motion.vy];
+          if (s.dig >= DIG_S) [s.home, s.rock] = [true, undefined];
+        }
+        if (home && Math.hypot(bm.x - s.x, bm.y - s.y) < DOCK * R) s.docked = t;
+        else if (Math.hypot(pm.x - s.x, pm.y - s.y) < R + SR) s.dead = true;
+        if (s.role === 'probe' && !home && Math.hypot(pm.x - s.x, pm.y - s.y) < 8 * R) near8 += dt;
+      }
+    }
+    return { ships, homeAt, fastest, probeV, near8, rammed: ships.filter((s) => s.dead).length };
+  }
+  /** You at `v` R/s along (ux, uy), reached at `a` R/s². */
+  const fly = (v: number, ux: number, uy: number, a = 7) => (me: ReturnType<typeof disc>, _s: Away[], dt: number) => {
+    const m = me.motion, dx = ux * v * R - m.vx, dy = uy * v * R - m.vy, d = Math.hypot(dx, dy), k = d > a * R * dt ? (a * R * dt) / d : 1;
+    [m.vx, m.vy] = [m.vx + dx * k, m.vy + dy * k];
+  };
+  /** You charging the nearest ship at 7 R/s² up to `v` R/s. */
+  const charge = (v: number) => (me: ReturnType<typeof disc>, s: Away[], dt: number, t: number) => {
+    const m = me.motion, n = s.reduce<Away | undefined>((b, x) => (!b || Math.hypot(x.x - m.x, x.y - m.y) < Math.hypot(b.x - m.x, b.y - m.y) ? x : b), undefined);
+    if (n) { const d = Math.hypot(n.x - m.x, n.y - m.y) || 1; fly(v, (n.x - m.x) / d, (n.y - m.y) / d)(me, s, dt, t); }
+  };
+  const six = Array(6).fill('fighter') as Away['role'][], rows: string[] = [];
+  for (const fps of [30, 120]) {
+    const still = away({ fps, T: 25, phase: 'go', ships: six, you: () => {} }), drift = away({ fps, T: 25, phase: 'go', ships: six, you: fly(3, 0, 1) });
+    const ch = away({ fps, T: 25, phase: 'go', ships: six, you: charge(12) }), flee = away({ fps, T: 30, phase: 'go', ships: six, you: fly(12, -1, 0) });
+    const probe = away({ fps, T: 40, phase: 'go', ships: ['probe'], you: fly(5, 0, 1) }), probeCh = away({ fps, T: 20, phase: 'go', ships: ['probe'], you: charge(12) });
+    const miner = away({ fps, T: 30, phase: 'go', ships: ['miner'], rock: [10 * R, 5 * R, 0, 6 * R], you: (me) => void ([me.motion.x, me.motion.y] = [-100 * R, 0]) });
+    let next = 5, leg = 0;
+    const dodge = (w: ReturnType<typeof disc>, _me: unknown, dt: number, t: number) => {
+      if (t >= next) [next, leg] = [next + 5, t];
+      const u = Math.floor(next / 5) % 2 ? 1 : -1, e = t - leg, ac = leg && e < 0.72 ? 7 : leg && e < 1.92 ? -7 * 0.72 / 1.2 : 0;
+      w.motion.vy += u * ac * R * dt;
+    };
+    const mass = away({ fps, T: 30, phase: 'mass', ships: [...six, 'frigate', 'frigate', 'probe'], you: fly(9, 0, 1), world: dodge });
+    const homing = away({ fps, T: 40, phase: 'home', ships: six, at: (a) => [10 * R - Math.cos(a) * 40 * R, -Math.sin(a) * 40 * R], you: fly(8, -1, 0, 20), world: (w, me, dt) => fly(Math.hypot(me.motion.vx, me.motion.vy) / R, -1, 0, 0.6)(w, [], dt, 0) });
+    const minerS = miner.ships[0], probeS = probe.ships[0], dockLast = Math.max(...homing.ships.map((s) => (s.docked < 0 ? Infinity : s.docked)));
+    rows.push(`${fps} fps: wave top ${Math.max(still.fastest, drift.fastest).toFixed(2)} R/s you still / drifting 3, ${ch.fastest.toFixed(2)} you charging 12 (rammed ${ch.rammed} of 6), fleeing 12 home after ${flee.homeAt.toFixed(1)} s; probe ${probe.probeV.toFixed(2)} R/s, ${probe.near8.toFixed(1)} s within 8 R of you at 5 R/s, docked ${probeS.docked.toFixed(1)} s; charged at 12 ${probeCh.probeV.toFixed(2)} R/s, ${probeCh.near8.toFixed(1)} s within 8 R; probe out while massing, you at 9: ${mass.probeV.toFixed(2)} R/s; miner at a 6 R/s rock lands ${minerS.landed.toFixed(2)} s, docks ${minerS.docked.toFixed(2)} s; homing from 40 R to a world following you at 8, all docked by ${dockLast.toFixed(1)} s (${homing.rammed} hit you)`);
+    assert.ok(still.fastest <= 0.8 * P_TOP * OUT_V, `you still: no wave ship near its top: ${still.fastest}`);
+    assert.ok(Math.max(ch.fastest, flee.fastest, drift.fastest) <= P_TOP * OUT_V * (1 + 1e-6), `a wave ship going never passes P_TOP × cruise: ${ch.fastest}`);
+    assert.ok(flee.homeAt > 0 && flee.homeAt <= CHASE_S + 0.1, `fleeing at 12 R/s, the wave turns home within CHASE_S: ${flee.homeAt}`);
+    assert.ok(probe.near8 >= 8 && probeS.docked > 0, `a probe circles you drifting at 5 R/s ≥ 8 s, then docks: ${probe.near8}, ${probeS.docked}`);
+    assert.ok(Math.max(probe.probeV, probeCh.probeV, mass.probeV) <= CHASE_V * OUT_V * (1 + 1e-6), `a probe never passes CHASE_V × cruise: ${probe.probeV}, ${probeCh.probeV}, ${mass.probeV}`);
+    assert.ok(minerS.landed > 0 && minerS.landed <= 3 && minerS.docked > 0 && minerS.docked <= 14, `a miner lands on a 6 R/s rock ≤ 3 s, docks ≤ 14 s: ${minerS.landed}, ${minerS.docked}`);
+    assert.ok(dockLast <= 40, `homing to a world following you, all dock within 40 s: ${dockLast}`);
+  }
+  const low = away({ fps: 10, T: 25, phase: 'go', ships: six, you: charge(12) });
+  rows.push(`10 fps (dt 0.1), you charging 12: wave top ${low.fastest.toFixed(2)} R/s, rammed ${low.rammed} of 6`);
+  console.log(`rival ships away: speed ≤ ${stats.over.toFixed(6)} × max(top, last), |Δv|/dt ≤ ${stats.jolt.toFixed(3)} × GEE × thrust;\n  ${rows.join('\n  ')}`);
+  assert.ok(stats.over <= 1 + 1e-6 && stats.jolt <= 1 + 1e-6, `rival ships away: never over max(top, last), |Δv| ≤ GEE × thrust: ${stats.over}, ${stats.jolt}`);
 }
 {
   report(models);
@@ -204,5 +323,60 @@ for (const fps of [30, 120]) {
     console.log(`shuttle ${fps} fps: out to a 3.2 R moon in ${out.toFixed(2)} s, home in ${home.toFixed(2)} s, never under ${low.toFixed(3)} R`);
     assert.ok(leg === 'dock' && out > 0 && out < LEG_S && home < LEG_S && low >= 1 - 1e-9, `a shuttle reaches its moon and comes home: ${leg}, ${out}, ${home}`);
   }
+}
+// A top speed in space (pirates: `thrust` with `top`). Top omitted: the same path as before (a fixed-seed trace, numbers
+// recorded before `top` existed). With a top, over random courses (≤ 50 × top), random frames (0–40 × top) and jinks, hurt
+// or not, for each class: the speed never rises above max(top, the last), the velocity changes ≤ GEE × thrust a second
+// (turns included), a ship above its top only slows; 0 → 95% of its top within 0.85 s, a raider's 85° turn within 1.15 s.
+{
+  const rnd = seeded(13), c: Craft = { x: 0, y: 0, vx: 0, vy: 0, heading: 0, burn: 0 };
+  let fx = 0, fy = 0;
+  for (let i = 0; i < 2000; i++) {
+    if (i % 50 === 0) [want.x, want.y, fx, fy] = [(rnd() - 0.5) * 20, (rnd() - 0.5) * 20, (rnd() - 0.5) * 10, (rnd() - 0.5) * 10];
+    if (i === 500) c.hurt = 1;
+    thrust(c, 6, 2.2, i % 2 ? 1 / 60 : 1 / 120, fx, fy);
+  }
+  assert.deepEqual([c.x, c.y, c.vx, c.vy, c.heading, c.burn, c.bank], [9.498348877690466, 7.128088593462245, 5.23133153113207, 4.247342962855251, 12.889599594021236, 0.999999998255165, 0.897487693696807], 'top omitted: the same path as before');
+  const classes = { raider: [1, P_TURN, P_TOP], hauler: [0.8, H_TURN, H_TOP], marauder: [0.8, M_TURN, M_TOP] } as const, cruise = PIRATE_SPEED[1] * R;
+  const rows: string[] = [];
+  for (const [kind, [k, turn, tk]] of Object.entries(classes)) {
+    const ss = k * cruise, top = tk * ss, acc = P_ACC * ss, rr = seeded(kind.length);
+    let over = 0, dvMax = 0, rise = 0;
+    for (const fps of [30, 120]) {
+      const h = Math.min(1 / fps, MAX_DT) / steps(1 / fps), c: Craft = { x: 0, y: 0, vx: (rr() - 0.5) * 6 * top, vy: (rr() - 0.5) * 6 * top, heading: rr() * 7, burn: 0 }, jk = jink();
+      for (let i = 0; i < 20000; i++) {
+        if (i % 40 === 0) {
+          [fx, fy] = rr() < 0.3 ? [0, 0] : [(rr() - 0.5) * 80 * top, (rr() - 0.5) * 80 * top].map((x) => x * rr() ** 2) as [number, number];
+          if (rr() < 0.2) c.hurt = rr();
+          if (rr() < 0.3) startJink(c, jk, c.x + rr() - 0.5, c.y + rr() - 0.5, rr() - 0.5, rr() - 0.5);
+          else [want.x, want.y] = [(rr() - 0.5) * 100 * top * rr() ** 2, (rr() - 0.5) * 100 * top * rr() ** 2];
+        }
+        jinkStep(jk, ss, h);
+        const v0 = Math.hypot(c.vx, c.vy), x0 = c.vx, y0 = c.vy;
+        thrust(c, acc, turn, h, fx, fy, top);
+        const v = Math.hypot(c.vx, c.vy);
+        over = Math.max(over, v - Math.max(top, v0));
+        if (v0 > top) rise = Math.max(rise, v - v0);
+        dvMax = Math.max(dvMax, Math.hypot(c.vx - x0, c.vy - y0) / (GEE * acc * h));
+        if (i % 3000 === 0) [c.vx, c.vy] = [(rr() - 0.5) * 8 * top, (rr() - 0.5) * 8 * top]; // knocked above its top now and then
+      }
+    }
+    // From rest along the nose: time to cruise and to 95% of its top; a raider at its top asked 85° off: time until its course is within 0.05 rad.
+    const to = (target: number) => {
+      const c: Craft = { x: 0, y: 0, vx: 0, vy: 0, heading: 0, burn: 0 };
+      let t = 0;
+      for (; Math.hypot(c.vx, c.vy) < target && t < 5; t += 1 / 120) [want.x, want.y] = [top, 0], thrust(c, acc, turn, 1 / 120, 0, 0, top);
+      return t;
+    };
+    const a = 85 * (Math.PI / 180), c = { x: 0, y: 0, vx: top, vy: 0, heading: 0, burn: 0 };
+    let turnT = 0;
+    for (; Math.abs(wrap(Math.atan2(c.vy, c.vx) - a)) > 0.05 && turnT < 5; turnT += 1 / 120) [want.x, want.y] = [Math.cos(a) * top, Math.sin(a) * top], thrust(c, acc, turn, 1 / 120, 0, 0, top);
+    const cr = to(ss), t95 = to(0.95 * top);
+    rows.push(`${kind} (top ${tk} × its speed): over its top ≤ ${(over / R).toExponential(1)} R/s, |Δv| ≤ ${dvMax.toFixed(3)} × GEE × thrust, above its top it rose ≤ ${(rise / R).toExponential(1)}; 0 → its speed ${cr.toFixed(2)} s, 0 → 95% top ${t95.toFixed(2)} s, an 85° turn at its top ${turnT.toFixed(2)} s`);
+    assert.ok(over <= 1e-9 * top && rise <= 1e-9 * top && dvMax <= 1 + 1e-9, `${kind}: never over its top, never faster above it, |Δv| ≤ GEE × thrust: ${over}, ${rise}, ${dvMax}`);
+    assert.ok(t95 <= 0.85, `${kind}: 0 → 95% top within 0.85 s: ${t95}`);
+    if (kind === 'raider') assert.ok(turnT <= 1.15, `a raider turns 85° at its top within 1.15 s: ${turnT}`);
+  }
+  console.log(`top speed (${PIRATE_SPEED[1]} R/s cruise):\n  ${rows.join('\n  ')}`);
 }
 console.log('flight ok');

@@ -21,7 +21,7 @@ import { createSpheres } from './evolution/asteroid/sphere';
 import { createCamera } from './core/camera';
 import { createInput } from './core/input';
 import { bankScore, recordAge, sendBest, showGameOver, type RunStats } from './ui/gameover';
-import { createSettings, flush, load, loadCloud, measureRefreshMs, save, yt } from './ui/settings';
+import { createSettings, DEBUG, flush, load, loadCloud, measureRefreshMs, save, yt } from './ui/settings';
 import { createAchievements, type Snap } from './core/achievements';
 import { createAchievementUi } from './ui/achievements';
 import type { Motion } from './core/entity';
@@ -68,8 +68,8 @@ const gameArea = { halfW: 640, halfH: 360 };
 const kit: Kit = { input, glow, fx, canvas: app.canvas, field: () => field, view: camera.state, area: gameArea, sfx };
 const gameHud = createHud();
 const minimap = createMinimap(); // debug mode: biome map (settings)
-// Debug mode (ui/debug.ts): one-click stage jumps and star helpers; a touched run saves no records.
-const debugUi = createDebug({ me: () => player.body, planet: () => planet, field: () => field, over: () => !!run.cause, touched: () => void (run.debug = true) });
+// Debug mode (ui/debug.ts), localhost dev server only (settings DEBUG): one-click stage jumps and star helpers; a touched run saves no records.
+const debugUi = DEBUG ? createDebug({ me: () => player.body, planet: () => planet, field: () => field, over: () => !!run.cause, touched: () => void (run.debug = true) }) : undefined;
 // Achievements: a snapshot of what already exists about twice a second, plus moments from the hits.
 const ach = createAchievements({ load: () => JSON.parse(load('ach') ?? '{}') ?? {}, save: (v) => save('ach', JSON.stringify(v)) });
 const achUi = createAchievementUi(ach);
@@ -242,7 +242,7 @@ measureRefreshMs().then((ms) => {
     onStats: (show) => (hud.hidden = !show),
     onSound: (on) => (sfx.enabled = on),
     onVolume: (v) => (sfx.volume = v),
-    onDebug: (on) => [minimap.visible, debugUi.visible] = [on, on],
+    onDebug: (on) => void ((minimap.visible = on), debugUi && (debugUi.visible = on)),
     achievements: { label: achUi.label, open: achUi.openGallery },
   });
 });
@@ -269,7 +269,7 @@ function checkAchievements(near: Body[]) {
 }
 
 app.ticker.add((ticker) => {
-  debugUi.step(ticker.deltaMS / 1000);
+  debugUi?.step(ticker.deltaMS / 1000);
   const { width, height } = app.screen;
   let dt = Math.min(ticker.deltaMS / 1000, 1 / 20); // a stall shouldn't teleport the player
   if (frozen > 0) [frozen, dt] = [frozen - dt, 0];

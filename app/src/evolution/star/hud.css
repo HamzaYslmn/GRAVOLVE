@@ -10,4 +10,4 @@
 /* Target card: the star, when there is no body target. */
 #game-hud .target .star-link { display: none; font-size: 12px; letter-spacing: 0.06em; color: var(--accent); }
 #game-hud .target[data-star] .star-link { display: block; }
-#game-hud .target[data-star] :is(.mix, .legend, .chips) { display: none; }
+#game-hud .target[data-star] :is(.mix, .chips) { display: none; }

@@ -9,9 +9,9 @@ import type { Vec } from './entity';
 
 export const SPRING_S = 0.25; // s: the radius closes ~63% of the way to its slot in this time
 // Slot k sits at R · (SLOT_IN + SLOT_STEP · k): the first moon 1.4 R off your surface (clear of your surface),
-// 1 R apart (two 12.5% moons, radius 0.5 R, just touch); 6 slots end at 7.4 R (compressed with the star system).
+// 1.25 R apart (two moons of the widest size, planet/rules.ts MOON_R 0.45 R, pass 0.35 R clear); 5 slots end at 7.4 R.
 const SLOT_IN = 2.4;
-const SLOT_STEP = 1;
+const SLOT_STEP = 1.25;
 const BREAK = Math.SQRT2; // a hit that leaves the moon faster than this × circular speed (escape) frees it
 
 /** angle (rad), dist = current radius, target = the slot radius it springs to, dir = +1 / −1 (sense of travel). */

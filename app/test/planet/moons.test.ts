@@ -23,4 +23,13 @@ assert.ok(!cmd.includes('lasso(') && cmd.includes('orders?.order(') && cmd.inclu
 assert.ok(!moons.includes('NOCIV') && !moons.includes('orderable') && moons.includes("'No fleet yet'"), 'before LIFE a tap only says "No fleet yet"; the priority rules live in civilization/orders.ts');
 // Capture on any free ring (user 2026-11-15): no lowest-free-slot search; the candidate's ring comes from pickSlot.
 assert.ok(!moons.includes('freeSlot') && moons.includes('pickSlot('), 'a moon is caught on any free ring');
-console.log('moons: no Sling, no rival throw, Command orders and grinds, any free ring catches');
+// Moon size (2026-11-15): the catch gate, the growth trim and the too-big gauge all go through rules.ts moonCap (mass and MOON_R).
+assert.ok(moons.includes('moonCap(') && !moons.includes('MOON_SHARE[1]'), 'moon size comes from moonCap');
+// Theft on the circle (user 2026-11-15): a rival's rock is catchable while its world still holds it (the test field.ts uses
+// for "a rival's rock"), the rival lets go of a rock you now own, and the rock turns against the world's orbit round you
+// (capture.test.ts: a still player never matches it). No siege ring round the enemy world.
+assert.ok(moons.includes('guard?.own?.(b) === false'), "a rival's rock on its circle is catchable");
+const rivals = read('evolution/civilization/rivals.ts'), combat = read('evolution/civilization/combat.ts');
+assert.ok(rivals.includes('|| ctx.moons.owns(rock)') && rivals.includes('-r.turn * ROCK_W'), 'the rival gives up a stolen rock; its rock turns against its orbit');
+assert.ok(!combat.includes('sg.ring') && !combat.includes('.circle(sg.'), 'no siege ring');
+console.log("moons: no Sling, no rival throw, Command orders and grinds, any free ring catches, size by moonCap, a rival's rock stolen on its circle, no siege ring");

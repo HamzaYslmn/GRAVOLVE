@@ -150,10 +150,10 @@ type D = Disc;
     const again = ram({ ...craft(-1.5 * R, 0.3 * R, 0.5 * R), hurt: 6 }, [disc(0, 0, 0.3 * R)], 0.5 * R, fps);
     const pebble = ram(craft(0, 0), [disc(2 * R, 0, 0.5 * SR, -5 * R, 0)], 0, fps);
     const crumb = ram(craft(0, 0), [disc(2 * R, 0, 0.2 * SR, -5 * R, 0)], 0, fps);
-    const thrown = ram(craft(0, 0), [disc(10 * R, 0.1 * R, 0.3 * R, -120 * R, 0)], 0, fps, 1);
-    grades[fps] = [head, skim, again, pebble, crumb, thrown].map((r) => r.grade).join(',');
-    console.log(`consequence ${fps} fps: head-on 3 R/s → ${head.grade} (vn ${(head.hit!.vn / R).toFixed(2)} R/s); skim 0.5 R/s → ${skim.grade} at ${skim.t.toFixed(3)} s (vn ${(skim.hit!.vn / R).toFixed(2)}), hurt ${hurt} s, then ${away.graze + away.wreck} more bumps in 4 s steering, ${away.low.toFixed(1)} sr off at closest; hurt again → ${again.grade}; 0.5 sr pebble at 5 R/s → ${pebble.grade}; crumb → ${crumb.grade < 0 ? 'nothing' : crumb.grade}; 120 R/s body at ${fps} fps → ${thrown.grade}`);
-    assert.ok(head.grade === 2 && skim.grade === 1 && hurt > 0 && away.graze + away.wreck === 0 && again.grade === 2 && pebble.grade === 1 && crumb.grade === -1 && thrown.grade === 2, `consequences: ${grades[fps]}, hurt ${hurt}, after ${away.graze + away.wreck}`);
+    const quick = ram(craft(0, 0), [disc(10 * R, 0.1 * R, 0.3 * R, -120 * R, 0)], 0, fps, 1);
+    grades[fps] = [head, skim, again, pebble, crumb, quick].map((r) => r.grade).join(',');
+    console.log(`consequence ${fps} fps: head-on 3 R/s → ${head.grade} (vn ${(head.hit!.vn / R).toFixed(2)} R/s); skim 0.5 R/s → ${skim.grade} at ${skim.t.toFixed(3)} s (vn ${(skim.hit!.vn / R).toFixed(2)}), hurt ${hurt} s, then ${away.graze + away.wreck} more bumps in 4 s steering, ${away.low.toFixed(1)} sr off at closest; hurt again → ${again.grade}; 0.5 sr pebble at 5 R/s → ${pebble.grade}; crumb → ${crumb.grade < 0 ? 'nothing' : crumb.grade}; 120 R/s body at ${fps} fps → ${quick.grade}`);
+    assert.ok(head.grade === 2 && skim.grade === 1 && hurt > 0 && away.graze + away.wreck === 0 && again.grade === 2 && pebble.grade === 1 && crumb.grade === -1 && quick.grade === 2, `consequences: ${grades[fps]}, hurt ${hurt}, after ${away.graze + away.wreck}`);
     if (fps === 120) {
       const s30 = ram(craft(-3 * R, 0.3 * R, 0.5 * R), [disc(0, 0, 0.3 * R)], 0.5 * R, 30);
       assert.equal(grades[30], grades[120], 'same grades at 30 and 120 fps');
@@ -348,4 +348,25 @@ type D = Disc;
   }
   const tight = siegeRing(er, er + 4 * R, R);
   assert.ok(Math.abs(Math.hypot(siegePost(er + 4 * R, 0, tight, 0).x, 0) - SIEGE.clear * R) < 1e-6, 'a close enemy: the ring keeps SIEGE.clear off your centre');
+}
+// The sidestep (`clear` with a top, pirates): a disc at 3 × the craft's top right behind it (the craft inside its
+// keep-out: clearing it means 3 × top) → `want` of length top, square to the disc's velocity, on the craft's side; a disc
+// already past it, or slower than its top, leaves `clear`'s course (asked at 2 × top) as it is without a top.
+{
+  const top = 8 * R, run = (side: number, bx: number, bv: number, ask: number, withTop: boolean) => {
+    const c = craft(0, side * 0.5 * R, 0.5 * top, 0), b = disc(bx, 0, 0.5 * R, bv, 0), keep = b.r + PAD * SR;
+    [want.x, want.y] = [ask * top, 0];
+    clear(c, [{ b, keep, reach: 20 * R, gap: Math.hypot(bx, 0.5 * R) - keep }], top / 2, 0, withTop ? top : undefined);
+    return { x: want.x, y: want.y };
+  };
+  for (const side of [1, -1]) {
+    const w = run(side, -0.7 * R, 3 * top, 0.8, true);
+    assert.ok(Math.abs(Math.hypot(w.x, w.y) - top) < 1e-9 * top && Math.abs(w.x) < 1e-9 * top && Math.sign(w.y) === side, `steps across the fast disc's track on its own side (${side}): ${w.x / R}, ${w.y / R}`);
+  }
+  for (const [bx, bv, what] of [[0.7 * R, 3 * top, 'a disc already past'], [-0.7 * R, 0.8 * top, 'a disc slower than its top']] as const) {
+    const a = run(1, bx, bv, 2, true), b = run(1, bx, bv, 2, false);
+    assert.ok(Math.hypot(b.x, b.y) > top, `${what}: the course asked is over the top (the check bites)`);
+    assert.ok(a.x === b.x && a.y === b.y, `${what} leaves the course alone: ${a.x / R}, ${a.y / R} vs ${b.x / R}, ${b.y / R}`);
+  }
+  console.log('sidestep: a disc at 3 × top behind → top square to its track, on the craft\'s side; past or slower: untouched');
 }

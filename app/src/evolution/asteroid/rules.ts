@@ -44,7 +44,7 @@ export function roundShape(r: number, c: Comp, diff = 0) {
 }
 /** The drawn roundness: roundShape, less a debris piece's jag (Body.jag: 1 a fresh break, flat-faced .. 0 relaxed). */
 export const shapeOf = (r: number, c: Comp, diff = 0, jag = 0) => roundShape(r, c, diff) * (1 - jag);
-export const ROUND_M = 1000; // nothing lighter bakes into a sphere (ice rounds small, but small icy rocks stay atlas rocks)
+export const ROUND_M = 10 ** 3.5; // Planetoid (AGE_GOAL): every asteroid tier, icy ones too, stays an irregular atlas rock (user, 2026-11-15)
 /**
  * Does a body bake into a sphere (sphere.ts)? From ROUND_M up, once past half its round-off radius or molten (diff ≥ 0.3);
  * a debris piece (`jag` set) at any radius. A `rough` body (its count of kept parts: a comet, a small fragment, a rock pile

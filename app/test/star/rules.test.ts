@@ -8,7 +8,7 @@ import { BEAM_BITE, beamLeft, dose } from '../../src/evolution/civilization/rule
 import {
   COLONY, COLONY_HAB, COLONY_LOST, colonyScore, dysonSpeed, heatAt, TERRA_ATM, TERRA_VOL, TERRA_WATER, terraMass, terraNeed, zoneSlot,
   BAND, BEAM_COST, BEAM_COVER, BEAM_MIN, beamFed, beamK, beamPower, capacity, DONE, GROW, layout, PLANET_R, dysonEnergy, engineAccel, flareK, flux, glare, LINK_S, linkStep, liquidBand, luminosity, orbitGoal, lapMu, LAP_MIN, PULL_X, starMu, starPull,
-  roche, SEG_ORE, SEG_S, SEGMENTS, starColor, starKelvin, starMass, starName, starRadius, SUN, tearRate, warmth,
+  roche, SEG_ORE, SEG_S, SEGMENTS, starColor, starKelvin, starMass, starName, starRadius, SUN, sunlight, tearRate, warmth,
 } from '../../src/evolution/star/rules.ts';
 
 const near = (a: number, b: number, eps = 1e-9) => Math.abs(a - b) <= eps;
@@ -81,6 +81,9 @@ console.log('dose (field 0.6, 1 atm) at 2/3/4 R★  red', [2, 3, 4].map((x) => f
 console.log('warmth K at 2/3/4 R★  red', [2, 3, 4].map((x) => f(warmth(redG, 0, x), 0)).join(' / '), ' sun', [2, 3, 4].map((x) => f(warmth(sunG, 0, x), 0)).join(' / '), ' blue', [2, 3, 4].map((x) => f(warmth(blueG, 0, x), 0)).join(' / '));
 // The Dyson sphere dims the dose too (shade from its panels): a sun at 3 R★ under a half sphere is safe-ish.
 assert.ok(doseAt(sunG, 3, 0.5) < doseAt(sunG, 3, 0));
+// Sunlight on your solar wings (civilization/rules.ts solar): 1 at 3 R★ from a sun, 1/x with no floor, glow and Dyson shade scale it.
+assert.ok(near(sunlight(1, 0, 3), 1) && near(sunlight(1, 0, 6), 0.5) && near(sunlight(1, 0, 30), 0.1) && Math.abs(sunlight(redG, 0, 3) - 0.58) < 0.01 && near(sunlight(1, 1, 3), 0.2));
+for (let x = 1; x < 100; x *= 1.1) assert.ok(sunlight(1, 0, x * 1.1) < sunlight(1, 0, x), `sunlight falls at ${x}`);
 
 // Climate vs coverage: the liquid band for a sun at 0 / 25 / 50 / 80 / 100% cover, by pressure.
 // Every edge moves inward as the cover grows; thin-air worlds need the star, thick-air worlds only need distance.

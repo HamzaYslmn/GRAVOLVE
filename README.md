@@ -31,7 +31,7 @@ There is no drag in space: you keep drifting, so push against your motion to bra
 | Grind a moon | hold right click or E | hold |
 | Fire (civilization on) | left click, or Space | tap |
 | Order an attack (civilization on) | right click or E on a body | long press |
-| Zoom in | mouse wheel | |
+| Zoom | mouse wheel | two-finger pinch |
 | Play again | Enter, or R for a new run | button |
 
 ## License

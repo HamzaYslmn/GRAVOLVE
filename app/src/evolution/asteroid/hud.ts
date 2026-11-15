@@ -5,10 +5,10 @@ import type { Body, Hit } from './body';
 import { hold, kelvin, pressure, waterState, type WaterState } from '../../core/water';
 import { toast, toastBusy } from '../../ui/toast';
 import { load, save } from '../../ui/settings';
-import { bar, finder, hex, PERIOD, throttle } from '../../ui/panel';
+import { bar, finder, fit, hex, label, PERIOD, throttle } from '../../ui/panel';
 import type { Biome } from './web';
 import { habOf, type Entry } from '../rivals/ledger';
-import { lifeName, MOON_SHARE } from '../planet/rules';
+import { lifeName, moonCap, MOON_SHARE } from '../planet/rules';
 import { AGE_GOAL, shapeOf, MAX_HEAT, mealsTo, MOLTEN, TAGS, TIERS, V_STICK, type Comp, type Element } from './rules';
 
 // The stage HUD, plain DOM over the canvas: every readout is an icon with a short caption. Two cards and a marker:
@@ -25,7 +25,7 @@ const ELEMENTS: [Element, string, string, string][] = [
   ['rock', 'Rock', '#c9a27a', '<path d="M2 8.2 2.8 4 6 1.6 9.6 3 11 7.2 8.4 10.6H3.6Z"/><path d="M6 4.2 5.1 6.9 7 7.8"/>'],
   ['ice', 'Water', '#6fd3ff', '<path d="M6 1.2C4 4 2.8 5.8 2.8 7.6a3.2 3.2 0 0 0 6.4 0C9.2 5.8 8 4 6 1.2Z"/>'],
   ['gas', 'Gas', '#ffd27a', '<path d="M1.5 3.8c1.5-1.3 3-1.3 4.5 0s3 1.3 4.5 0M1.5 8.2c1.5-1.3 3-1.3 4.5 0s3 1.3 4.5 0"/>'],
-  ['radio', 'RAD', '#8dff6a', '<path class="fill" d="M4.95 4.18L3.3 1.32A5.4 5.4 0 0 1 8.7 1.32L7.05 4.18A2.1 2.1 0 0 0 4.95 4.18ZM8.1 6L11.4 6A5.4 5.4 0 0 1 8.7 10.68L7.05 7.82A2.1 2.1 0 0 0 8.1 6ZM4.95 7.82L3.3 10.68A5.4 5.4 0 0 1 0.6 6L3.9 6A2.1 2.1 0 0 0 4.95 7.82Z"/><circle class="fill" cx="6" cy="6" r="1.1"/>'], // radioactive heavy elements
+  ['radio', 'Rad', '#8dff6a', '<path class="fill" d="M4.95 4.18L3.3 1.32A5.4 5.4 0 0 1 8.7 1.32L7.05 4.18A2.1 2.1 0 0 0 4.95 4.18ZM8.1 6L11.4 6A5.4 5.4 0 0 1 8.7 10.68L7.05 7.82A2.1 2.1 0 0 0 8.1 6ZM4.95 7.82L3.3 10.68A5.4 5.4 0 0 1 0.6 6L3.9 6A2.1 2.1 0 0 0 4.95 7.82Z"/><circle class="fill" cx="6" cy="6" r="1.1"/>'], // radioactive heavy elements
 ];
 // Speed gauge on a log scale (there is no top speed): the eat zone (0..8) keeps ~20% of the width,
 // 256 diameters/s and up pins the needle.
@@ -39,7 +39,7 @@ const ICON = {
   temp: '<path d="M5 7.4V2.2a1 1 0 0 1 2 0v5.2a2.4 2.4 0 1 1-2 0Z"/>',
   air: '<path d="M1.5 4.5h6.2a1.6 1.6 0 1 0-1.6-1.6M1.5 7.5h8a1.6 1.6 0 1 1-1.6 1.6"/>',
   water: '<path d="M6 1.2C4 4 2.8 5.8 2.8 7.6a3.2 3.2 0 0 0 6.4 0C9.2 5.8 8 4 6 1.2Z"/>',
-  magnet: '<path d="M2.8 1.8v4.4a3.2 3.2 0 0 0 6.4 0V1.8M2.8 4h2M7.2 4h2"/>',
+  magnet: '<path d="M1.5 1.5h3v4.5a1.5 1.5 0 0 0 3 0V1.5h3V6a4.5 4.5 0 0 1-9 0Z"/><path class="fill" d="M1.5 1.5h3v2h-3ZM7.5 1.5h3v2h-3Z"/>', // horseshoe magnet, lit poles
   ore: '<path d="M2 4.5 4 2h4l2 2.5L6 10.5Z"/><path d="M2 4.5h8"/>',
   shield: '<path d="M6 1.3 10 3v3c0 2.4-1.7 4.1-4 4.9C3.7 10.1 2 8.4 2 6V3Z"/>',
   people: '<circle cx="6" cy="3.4" r="1.9"/><path d="M2.2 10.8a3.8 3.8 0 0 1 7.6 0"/>',
@@ -49,6 +49,12 @@ const ICON = {
   speed: '<path d="M1.5 8.5a4.5 4.5 0 0 1 9 0"/><path d="M6 8.5 8.4 5"/>',
   orbit: '<circle cx="6" cy="6" r="4.6"/><circle class="fill" cx="10" cy="3.7" r="1.4"/>',
   planet: '<circle cx="6" cy="6" r="4"/>',
+  geo: '<path d="M1.2 10.6 4.6 4.4l1.6 2.2 1.1-1.5 3.5 5.5Z"/><path d="M5.4 3.4c-.7-.7.7-1.3 0-2M7.6 3.4c-.7-.7.7-1.3 0-2"/>',
+  sun: '<circle cx="6" cy="6" r="2.2"/><path d="M6 .9v1.5M6 9.6v1.5M.9 6h1.5M9.6 6h1.5M2.4 2.4l1 1M8.6 8.6l1 1M2.4 9.6l1-1M8.6 3.4l1-1"/>',
+  dyson: '<circle class="fill" cx="6" cy="6" r="1.6"/><path d="M6 1.3a4.7 4.7 0 0 1 4.7 4.7M6 10.7A4.7 4.7 0 0 1 1.3 6"/>',
+  yard: '<path d="M1.5 10.5h9M3 10.5V6l3-2 3 2v4.5M6 4V1.5"/>',
+  mend: '<path d="M6 2v8M2 6h8"/>',
+  rocket: '<path d="M1.5 6h5.5l3-2v4l-3-2M3 4.2 1.5 6 3 7.8"/>',
 };
 export const icon = (k: keyof typeof ICON) => `<svg class="icon" viewBox="0 0 12 12" aria-hidden="true">${ICON[k]}</svg>`;
 /**
@@ -58,20 +64,22 @@ export const icon = (k: keyof typeof ICON) => `<svg class="icon" viewBox="0 0 12
 export const cell = (cls: string, ic: keyof typeof ICON, cap: string, track: 'bar' | 'scale' = 'bar') =>
   `<div class="cell ${cls}">${icon(ic)}<em class="cap">${cap}</em><span class="v"></span>${track === 'bar' ? '<div class="bar"><i></i></div>' : '<div class="scale"><s class="band"></s><i class="needle"></i></div>'}</div>`;
 const WATER: Record<WaterState, string> = { ice: 'Ice', liquid: 'Liquid', steam: 'Steam' };
+const MIX_ME = 234, MIX_TARGET = 174; // px: the composition bar in your card and the target card (CSS widths; phones scale by transform)
 const AIR_HINT_M = 300; // from here the air cell tells where air starts (core/water.ts: from 1.0k mass)
 
 const pct = (f: number) => `${Math.round(f * 100)}%`;
 /** A composition share as text: one decimal under 1%, so a trace never reads as 0%. */
 const share = (f: number) => (f > 0.0005 && f < 0.01 ? `${(f * 100).toFixed(1)}%` : pct(f));
 
-/** A composition as one stacked bar (a segment per element, its name and share on hover). */
-const mixBar = (c: Comp) =>
-  ELEMENTS.map(([e, name, col]) => [name, col, c[e] ?? 0] as const).filter(([, , f]) => f >= 0.005)
-    .map(([name, col, f]) => `<i style="width:${bar(f)};background:${col}" title="${name} ${share(f)}"></i>`).join('');
-/** Its legend: icon and share for each element of 1% or more. */
-const legend = (c: Comp) =>
-  ELEMENTS.filter(([e]) => (c[e] ?? 0) >= 0.01)
-    .map(([e, name, col, svg]) => `<span title="${name}" style="color:${col}"><svg class="icon" viewBox="0 0 12 12" aria-hidden="true">${svg}</svg><em>${share(c[e]!)}</em></span>`).join('');
+/**
+ * A composition as one stacked bar `px` wide, each segment labelled inside as far as it fits (ui/panel.ts fit). Floors:
+ * every element from 1% keeps its icon, Rad from 0.5% its share too (fuel to find); flex shares the rest.
+ */
+const mixBar = (c: Comp, px: number) =>
+  ELEMENTS.filter(([e]) => (c[e] ?? 0) >= 0.005).map(([e, name, col, svg]) => {
+    const f = c[e]!, v = share(f), k = Math.max(fit(f * px, name, v), e === 'radio' ? 2 : f >= 0.01 ? 1 : 0);
+    return `<i style="flex:${f.toFixed(3)} 1 0;min-width:${k > 1 ? Math.ceil(13 + v.length * 5.4) : k ? 13 : 2}px;background:${col}">${k ? `<svg class="icon" viewBox="0 0 12 12" aria-hidden="true">${svg}</svg>` : ''}${label(k, name, v)}</i>`;
+  }).join('');
 
 /** What kind of rock a composition reads as. */
 function rockName(b: Body) {
@@ -117,13 +125,13 @@ export function createHud() {
       <div class="head"><em class="age">Age I</em><b class="name"></b><span class="mass"></span></div>
       <div class="goal"><div class="bar"><i></i></div><div class="label"><span class="to"></span><span class="pips"></span><span class="left"></span></div></div>
       <div class="speed">${icon('speed')}<em class="cap">Speed</em><div class="gauge"><i class="zone stick" style="width:${pct(gx(V_STICK))}"></i><i class="zone messy" style="width:${pct(gx(3 * V_STICK) - gx(V_STICK))}"></i><i class="zone bounce"></i><i class="needle you"></i><i class="needle hit"></i></div><span class="v"></span></div>
-      <div class="mix"></div><div class="legend"></div>
+      <div class="mix"></div>
       <div class="cells rock">${cell('heat', 'temp', 'Temp')}${cell('wet', 'water', 'Water')}${cell('air', 'air', 'Air')}</div>
       <div class="tip"></div>
     </section>
     <section class="panel ui-panel target" hidden><div class="head"><b class="name"></b><span class="ratio"></span></div><div class="sub"></div>
       <span class="moonsize" hidden>Moon-size</span>
-      <div class="mix"></div><div class="legend"></div>
+      <div class="mix"></div>
       <div class="chips" hidden>${RIVAL_CHIPS.map(([k, label, ic]) => `<span data-k="${k}" title="${label}">${icon(ic)}</span>`).join('')}<em class="life"></em></div></section>`;
   document.body.appendChild(root);
   const $ = finder(root), due = throttle(), mark = $('.mark');
@@ -189,8 +197,8 @@ export function createHud() {
       if (aim) [hit.style.left, hit.style.background] = [pct(gx(aim.speed)), hex(aim.color)];
 
       // What you are made of: rebuilt only when the rounded shares change.
-      const m = mixBar(me.comp) + legend(me.comp);
-      if (m !== mine) [mine, $('.me .mix').innerHTML, $('.me .legend').innerHTML] = [m, mixBar(me.comp), legend(me.comp)];
+      const m = mixBar(me.comp, MIX_ME);
+      if (m !== mine) $('.me .mix').innerHTML = mine = m;
 
       if (ageOne) {
         // Head and goal: the tier, the bar to the next one.
@@ -222,18 +230,18 @@ export function createHud() {
       // Target
       const panel = $('.target');
       panel.hidden = !t && !('star' in panel.dataset); // a star shows here when there is no body target (star/hud.ts)
-      // Moon-size (Age II on): lit when it could be your moon, 0.2–12.5% of you (planet/rules.ts MOON_SHARE) and free.
+      // Moon-size (Age II on): lit when it could be your moon (the size gate of a catch) and free.
       const moonsize = $('.target .moonsize');
       moonsize.hidden = !t || !!moon || ageOne;
       if (!t) return;
       const who = moon ? undefined : t.rival?.entry?.name;
       $('.target .name').textContent = who ?? tierOf(t.m)[1];
-      const r = t.m / me.m;
+      const r = t.m / me.m, cap = moonCap(t.m, t.r, me.m, me.r);
       $('.target .ratio').textContent = r < 0.001 ? '×<0.001' : `×${r >= 10 ? Math.round(r) : r.toPrecision(2)}`;
-      moonsize.classList.toggle('on', r >= MOON_SHARE[0] && r <= MOON_SHARE[1] && !t.held && !t.rival);
+      moonsize.classList.toggle('on', t.m >= Math.min(MOON_SHARE[0] * me.m, 0.25 * cap) && t.m <= 1.01 * cap && !t.held && !t.rival); // planet/moons.ts sizeOk's bounds
       $('.target .sub').textContent = moon ? `Moon · ${rockName(t)}` : who ? `${tierOf(t.m)[1]} · ${rockName(t)}` : rockName(t);
-      const tm = mixBar(t.comp) + legend(t.comp);
-      if (tm !== theirs) [theirs, $('.target .mix').innerHTML, $('.target .legend').innerHTML] = [tm, mixBar(t.comp), legend(t.comp)];
+      const tm = mixBar(t.comp, MIX_TARGET);
+      if (tm !== theirs) $('.target .mix').innerHTML = theirs = tm;
       // A named rival forging a world (rivals/ledger.ts): its life conditions and stage, as your card shows yours.
       const e = t.rival?.entry, alive = !!e && t.m >= AGE_GOAL;
       $('.target .chips').hidden = !alive;

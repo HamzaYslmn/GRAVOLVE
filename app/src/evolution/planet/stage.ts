@@ -57,7 +57,7 @@ export function createPlanetStage(layer: Container, me: Body, renderer: Renderer
   const { seen, say: news } = runNews; // the run's (main.ts): Age I's news, moons, combat, civilization and star, latched once
   let line = gasPath(me.comp), age = 0;
   let best = -1, tier = tierName(me.m, me.comp, me.heat, line), state: WorldState | undefined, civ: Civilization | undefined;
-  let star: ReturnType<typeof createStarStage> | undefined, light = { flux: 0, warm: 0, dyson: 0 };
+  let star: ReturnType<typeof createStarStage> | undefined, light = { flux: 0, warm: 0, dyson: 0, sun: 0, at: 0 };
   // The water you brought: the melt-through boils it off and a planetoid keeps little of the steam.
   // Once the surface first cools below boiling, it rains back up to RAIN_BACK of it.
   let brought = me.m * (me.comp.ice ?? 0), boiled = false;
@@ -159,7 +159,7 @@ export function createPlanetStage(layer: Container, me: Body, renderer: Renderer
       if (!civ && stage === 0 && !gassy) civ = createCivilization(layer, me, renderer, kit.fx, moons, hud.panel, news, kit.field);
       if (civ) {
         if (me.guard && !me.guard.own) me.guard.own = (b) => b === me || (!!(b as Body).moon && (moons.owns(b as Body) || !!star?.planets.some((p) => p.b === b))); // these pass your shell and ground; a rival's rock does not (field.ts)
-        civ.update(dt, real, near, zoom, { life: stage, rate: hab.rate, magnet: hab.magnet, pressure: hab.p, lack: lack(hab), foes: combat.foes(), shots: combat.shots, sites: combat.rivals.sites(), flux: light.flux, dyson: light.dyson });
+        civ.update(dt, real, near, zoom, { life: stage, rate: hab.rate, magnet: hab.magnet, pressure: hab.p, lack: lack(hab), foes: combat.foes(), shots: combat.shots, sites: combat.rivals.sites(), flux: light.flux, dyson: light.dyson, sun: light.sun, sunA: light.at });
         state.civ = civ.state;
         // Star contact (the people need a sun) opens Age III (evolution/star).
         if (!star && civ.state?.contact) star = createStarStage(layer, me, renderer, kit, civ, news);

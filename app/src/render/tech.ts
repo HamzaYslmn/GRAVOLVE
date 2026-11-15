@@ -4,7 +4,8 @@ import { ART_H, ART_W, ENGINES, SHIP_ART } from './shipArt';
 
 // The tech page: one mipmapped 1024² texture baked once, so one ParticleContainer draws every ship, satellite and grain.
 // Cells: fleet (baked in colour: tint white), stations, veil (shield shell), ripple (shield hit), ring (radio pulse),
-// dot (satellites, grains, lights), hex (a shield lattice cell); all but the fleet are white art, coloured by tint.
+// dot (satellites, grains, lights), hex (a shield lattice cell), panel (a solar farm field); all but the fleet are white art,
+// coloured by tint.
 
 const PAGE = 1024;
 export const SHIP_PX = 28; // art px across a fleet cell: a fighter ≈ 14 long, a carrier ≈ 24 (classes to scale)
@@ -20,7 +21,7 @@ const FLEET_Y = 512; // the fleet fills the page's lower half, 8 cells a row
 const UNIT = 256; // the bake quad's size; smaller cells draw it scaled down (the shader reads vPos / 256)
 
 const fragment = /* glsl */ `${BAKE_FRAGMENT_HEAD}
-uniform vec4 uCell; // kind (0 station, 1 veil, 2 ripple, 3 ring, 4 dot, 5 hex), -, station seed, -
+uniform vec4 uCell; // kind (0 station, 1 veil, 2 ripple, 3 ring, 4 dot, 5 hex, 6 panel), -, station seed, -
 
 float sdBox(vec2 p, vec2 b) { vec2 d = abs(p) - b; return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0); }
 float hexDist(vec2 p) { p = abs(p); return max(dot(p, normalize(vec2(1.0, 1.732))), p.x); }
@@ -70,6 +71,15 @@ void main() {
     finalColor = vec4(vec3(a), a);
     return;
   }
+  if (kind > 5.5) {
+    // Panel: a filled box (mid grey), a bright frame and a 4 × 2 cell grid, so a blade reads as a solar array.
+    float px = 2.0 / 64.0, sd = sdBox(p, vec2(0.92, 0.86));
+    float a = smoothstep(px, -px, sd), frame = smoothstep(px * 2.5, 0.0, abs(sd + px * 1.5));
+    vec2 f = fract((p + 1.0) * vec2(2.0, 1.0)), g = min(f, 1.0 - f) / vec2(2.0, 1.0);
+    float grid = smoothstep(px * 1.5, 0.0, min(g.x, g.y));
+    finalColor = vec4(vec3(0.7 + 0.3 * max(frame, grid)) * a, a);
+    return;
+  }
   if (kind > 4.5) {
     // Hex: a lattice cell's bright outline (flat sides along x), a faint fill, a little dust; zero toward the cell's edge.
     float h = hexDist(p), u = (h - 0.70) / 0.07;
@@ -86,7 +96,7 @@ void main() {
 type Art = typeof SHIP_ART;
 /** Each faction's ships by class (render/shipArt.ts): one cell, baked in colour. */
 export type Fleet = { [F in keyof Art]: Record<keyof Art[F], Texture> };
-export type TechPage = { source: Texture; fleet: Fleet; stations: Texture[]; veil: Texture; ripple: Texture; ring: Texture; dot: Texture; hex: Texture };
+export type TechPage = { source: Texture; fleet: Fleet; stations: Texture[]; veil: Texture; ripple: Texture; ring: Texture; dot: Texture; hex: Texture; panel: Texture };
 let page: TechPage | undefined;
 
 /** Bakes the page once (kept for the session; every run reuses it). ~25 draws into one texture. */
@@ -107,7 +117,7 @@ export function techPage(renderer: Renderer): TechPage {
     return new Texture({ source: rt.source, frame: new Rectangle(x, y, size, size) });
   };
   const stations = [0, 1, 2, 3].map((s) => cell(s * 64, 0, 64, 0, s + 1));
-  const veil = cell(256, 0, 256, 1), ripple = cell(0, 256, 128, 2), ring = cell(128, 256, 128, 3), dot = cell(256, 256, 64, 4), hex = cell(320, 256, 64, 5);
+  const veil = cell(256, 0, 256, 1), ripple = cell(0, 256, 128, 2), ring = cell(128, 256, 128, 3), dot = cell(256, 256, 64, 4), hex = cell(320, 256, 64, 5), panel = cell(384, 256, 64, 6);
   holder.destroy({ children: true });
   // The fleet: each ship's SVG as Pixi Graphics, drawn into its cell at one scale (so classes stay to scale).
   const art = new Container();
@@ -122,7 +132,7 @@ export function techPage(renderer: Renderer): TechPage {
   renderer.render({ container: art, target: rt, clear: false });
   art.destroy({ children: true });
   rt.source.updateMipmaps();
-  page = { source: new Texture({ source: rt.source }), fleet, stations, veil, ripple, ring, dot, hex };
+  page = { source: new Texture({ source: rt.source }), fleet, stations, veil, ripple, ring, dot, hex, panel };
   return page;
 }
 

@@ -2,7 +2,6 @@ import { clamp } from '../../core/rng.ts';
 import { bearing, SPECK, wrap, type Craft } from './flight.ts';
 import { swept, touch } from './crash.ts';
 import type { Disc } from './nav.ts';
-import { intercept } from './rules.ts';
 
 /** A round in flight: aimed once at launch, then straight (`fly` never steers). */
 type Bolt = { x: number; y: number; vx: number; vy: number; life: number };
@@ -195,16 +194,18 @@ export function menace(c: Craft, ships: readonly { x: number; y: number; vx?: nu
 }
 
 // Missiles and rockets (silos, both sides: rules.ts ARMS.missile; your surface rack: rules.ts ROCKET; one pool, combat.ts):
-// aimed at where the target will be, then guided by `steer` (Seeker): the motor runs it up from `boost` × its cruise speed
-// `u` at `acc`; while locked it turns at most `turn` rad/s onto the lead point, and the lock is lost for good once it is
-// `burn` s old, the lead point is more than `cone` rad off its nose, the target is gone, or it is within `blind` s of the
-// target's surface: from there on it flies straight (the flame dims: the moment to sidestep). Any body stops one (bar its
+// aimed at where the target will be, kicked `arc` rad off that line (less from nearer than NEAR s of cruise; sides
+// alternating within a salvo, a random first side when the pool is empty: a target sidestepping one way meets the one that
+// left on that side), then guided by `steer` (Seeker): the motor runs it up from `boost` × its cruise speed `u` at `acc`;
+// while locked it closes its aim error on the lead point at `nav` / time-to-go (a lazy arc from afar; none: at once), at
+// most `turn` rad/s at cruise (`turn × u / speed`: a lateral-acceleration limit), and the lock is lost for good once it
+// is `burn` s old, the lead point is more than `cone` rad off its nose, the target is gone, or it is `blind` s from its surface (nearly all the way): then it flies straight, flame dimmed. Any body stops one (bar its
 // shooter's `own`); an enemy round, slug or beam kills it (combat.ts lists it as a Hull of ARMS.missile.size × a ship's radius, a Foe and a Mark); where it bursts
 // (a body, or an enemy ship it touches), enemy ships within `blast` die.
 /** A seeker's numbers (`acc` in world units/s²). */
-export type Seeker = { boost: number; acc: number; turn: number; cone: number; burn: number; blind: number };
+export type Seeker = { boost: number; acc: number; turn: number; cone: number; burn: number; blind: number; arc?: number; nav?: number };
 /** A rules.ts row's seeker for a shooter of radius R (its acc in R/s²). */
-export const seeker = (q: Seeker, R: number): Seeker => ({ boost: q.boost, acc: q.acc * R, turn: q.turn, cone: q.cone, burn: q.burn, blind: q.blind });
+export const seeker = (q: Seeker, R: number): Seeker => ({ boost: q.boost, acc: q.acc * R, turn: q.turn, cone: q.cone, burn: q.burn, blind: q.blind, arc: q.arc, nav: q.nav });
 /** Where a missile's target is now (`r`: its radius), or undefined once it is gone. */
 export type Seek = () => { x: number; y: number; vx: number; vy: number; r?: number } | undefined;
 /**
@@ -220,7 +221,7 @@ export type Launch = {
   team: Team; x: number; y: number; vx: number; vy: number; tx: number; ty: number; tvx: number; tvy: number; u: number; life: number; k: number; blast: number;
   fan?: number; target?: unknown; own?: (b: Disc) => boolean; from?: unknown; seek?: Seek; seeker?: Seeker; hit?: Missile['hit']; look?: Missile['look'];
 };
-/** The motor and the seeker for `dt` s: speed up toward cruise along the nose; locked, turn toward the lead point or lose the lock for good. */
+/** The motor and the seeker for `dt` s: speed up toward cruise along the nose; locked, turn toward the lead point (its error × nav × dt / time-to-go, time-to-go by the closing speed, never under its own; at most `turn × u / speed` rad/s) or lose the lock for good. */
 export function steer(m: Missile, dt: number) {
   const s = m.s;
   m.age += dt;
@@ -228,24 +229,28 @@ export function steer(m: Missile, dt: number) {
   const wx = m.vx - m.v0x, wy = m.vy - m.v0y, sp = Math.min(m.u, Math.hypot(wx, wy) + s.acc * dt), t = m.lock ? m.seek?.() : undefined;
   let h = Math.atan2(wy, wx);
   if (m.lock && t && m.age <= s.burn) {
-    const px = t.x - m.x, py = t.y - m.y, off = wrap(bearing(px, py, t.vx - m.v0x, t.vy - m.v0y, m.u) - h);
-    if (Math.abs(off) > s.cone || Math.hypot(px, py) - (t.r ?? 0) < s.blind * sp) m.lock = false;
-    else h += clamp(off, -s.turn * dt, s.turn * dt);
+    const px = t.x - m.x, py = t.y - m.y, D = Math.hypot(px, py) || 1e-9, d = D - (t.r ?? 0), off = wrap(bearing(px, py, t.vx - m.v0x, t.vy - m.v0y, m.u) - h), w = (s.turn * m.u * dt) / sp;
+    const c = Math.max(sp, ((m.vx - t.vx) * px + (m.vy - t.vy) * py) / D); // closing speed
+    if (Math.abs(off) > s.cone || d < s.blind * sp) m.lock = false;
+    else h += clamp(s.nav ? off * Math.min(1, (s.nav * c * dt) / d) : off, -w, w);
   } else m.lock = false;
   [m.vx, m.vy] = [m.v0x + Math.cos(h) * sp, m.v0y + Math.sin(h) * sp];
 }
-export function createMissiles(cap = 12) {
+const NEAR = 0.5; // s of cruise: a target nearer than this gets a proportionally smaller kick
+export function createMissiles(cap = 12, rnd: () => number = Math.random) {
   const live: Missile[] = [];
+  let side = 1;
   return {
     live,
     /** Room for one more? */
     room: () => live.length < cap,
-    /** One launch (Launch); undefined when the pool is full. With a `seek` and a `seeker` it is guided, else it flies straight at `u`. */
+    /** One launch (Launch); undefined when the pool is full. With a `seek` and a `seeker` it is guided (kicked its `arc` to the side after the last one's), else it flies straight at `u`. */
     launch(o: Launch) {
       if (live.length >= cap) return undefined;
-      const a = bearing(o.tx - o.x, o.ty - o.y, o.tvx - o.vx, o.tvy - o.vy, o.u) + (o.fan ?? 0), v = (o.seeker?.boost ?? 1) * o.u;
+      side = live.length ? -side : rnd() < 0.5 ? 1 : -1;
+      const d0 = Math.hypot(o.tx - o.x, o.ty - o.y), a = bearing(o.tx - o.x, o.ty - o.y, o.tvx - o.vx, o.tvy - o.vy, o.u) + (o.fan ?? 0) + side * (o.seeker?.arc ?? 0) * Math.min(1, d0 / (NEAR * o.u)), v = (o.seeker?.boost ?? 1) * o.u;
       const m: Missile = {
-        x: o.x, y: o.y, vx: o.vx + Math.cos(a) * v, vy: o.vy + Math.sin(a) * v, life: o.life, team: o.team, k: o.k, blast: o.blast, d0: Math.hypot(o.tx - o.x, o.ty - o.y), target: o.target, from: o.from,
+        x: o.x, y: o.y, vx: o.vx + Math.cos(a) * v, vy: o.vy + Math.sin(a) * v, life: o.life, team: o.team, k: o.k, blast: o.blast, d0, target: o.target, from: o.from,
         own: o.own, dead: false, kill: () => void (m.dead = true), cls: 'missile', seek: o.seek, s: o.seeker, lock: !!(o.seek && o.seeker), age: 0, u: o.u, v0x: o.vx, v0y: o.vy, hit: o.hit, look: o.look ?? 'missile',
       };
       live.push(m);
