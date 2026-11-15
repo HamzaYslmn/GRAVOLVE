@@ -230,3 +230,5 @@ dist/
 
 # rendered sound previews to listen to, not shipped
 app/sfx-preview/
+
+.vite/
