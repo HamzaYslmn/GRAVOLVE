@@ -48,7 +48,7 @@ export const flux = (glow: number, cover: number, x: number) => (FLUX_K * dimmed
 // (liquid band a sliver) and equilibrium temperature's 1/√x (band the whole map). A sun adds 25 K at 2 R★.
 const WARM_K = 50;
 export const warmth = (glow: number, cover: number, x: number) => (WARM_K * Math.sqrt(dimmed(glow, cover))) / x;
-export const SUN_X = 3; // light on your collectors (civilization/rules.ts solar): 1 = a sun at 3 R★ (fun first: 1/x like warmth, no floor)
+const SUN_X = 3; // light on your collectors (civilization/rules.ts solar): 1 = a sun at 3 R★ (fun first: 1/x like warmth, no floor)
 export const sunlight = (glow: number, cover: number, x: number) => (dimmed(glow, cover) * SUN_X) / x;
 // One gravity: the star pulls you, loose bodies and other stars with starMu(M) / d² (floored at its surface); on you and on
 // loose bodies only out to PULL_X R★. Rocks near a star fall in and burn (stars sweep their space clean).

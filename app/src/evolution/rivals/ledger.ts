@@ -12,7 +12,7 @@ import { waveFighters } from '../civilization/rules.ts';
 // and grows life when its four conditions hold. It eats by plan (`want`): what its weakest condition needs, from the
 // biome that has it, and nothing while it is too hot.
 
-export const ROSTER = 4;
+const ROSTER = 4;
 export type Temper = 'hungry' | 'careful' | 'raider';
 export type Entry = {
   name: string;
@@ -37,13 +37,13 @@ export const BAND = [0.3, 1.5]; // × your mass, always
 const EASE_S = 40; // s for an off-screen rival to close most of the gap to its share
 const START = [0.4, 0.9]; // × your mass at the start of the run
 // What a forging world eats, by its weakest condition: the kind mixes of the biome that has it (web.ts MIX).
-export const MEALS = {
+const MEALS = {
   water: { rock: 0.12, metal: 0.03, ice: 0.75, gas: 0.1 }, // Frost Reach
   air: { rock: 0.12, ice: 0.3, gas: 0.58 }, // Veil Nebula
   field: { rock: 0.25, metal: 0.65, ice: 0.05, gas: 0.05 }, // Iron Graveyard
   rock: { rock: 0.78, metal: 0.08, ice: 0.11, gas: 0.03 }, // Stone Drift
 };
-export type Want = keyof typeof MEALS | 'none';
+type Want = keyof typeof MEALS | 'none';
 const SEAS = 0.3; // water share it aims for (habitability's ideal from 30%)
 const AIR_P = 0.7; // atm (habitability's full air score)
 const GAS_CAP = 0.12; // it never eats gas past this share (the gas line is at 15–20%)
@@ -140,14 +140,12 @@ export type Stance = 'explore' | 'gather' | 'defend' | 'attack';
 export const MASS_S = 20;
 export const RETREAT = 0.4;
 export const WAVE_S = 35;
-export const EXPLORE_S = 15;
+const EXPLORE_S = 15;
 export const DEFEND_SHIELD: Record<Temper, number> = { hungry: 0, careful: 0.8, raider: 0 }; // only a Careful one turtles
 export const WAVE_COST: Record<Temper, number> = { hungry: 10, careful: 14, raider: 7 }; // stock a wave ship costs
 export const SITE = { ore: 300, vol: 100 }; // per level: what an open world (its defence fleet gone) holds for miners
 export const STOCK_RATE = 0.15; // u/s per level a rival world makes by itself
 export const GATHER_U = 4; // u a miner brings home from a free rock
-/** Ships a war wave buys from stock at level L: its fighters (its frigates are built apart: civilization/rules.ts rivalFrigates). */
-export const waveSize = waveFighters;
 /** The least odds (its strength ÷ yours: civilization/rules.ts strength) each temper attacks at. */
 export const ODDS: Record<Temper, number> = { careful: 1.2, hungry: 0.8, raider: 0.6 };
 
@@ -156,7 +154,7 @@ export function stance(w: Mood): Stance {
   if (w.wave) return 'attack';
   if (w.shield < DEFEND_SHIELD[w.temper] || w.fleetShort) return 'defend';
   if (w.far || w.seen < EXPLORE_S) return 'explore';
-  return w.stock >= WAVE_COST[w.temper] * waveSize(w.level) && (w.odds ?? Infinity) >= ODDS[w.temper] ? 'attack' : 'gather';
+  return w.stock >= WAVE_COST[w.temper] * waveFighters(w.level) && (w.odds ?? Infinity) >= ODDS[w.temper] ? 'attack' : 'gather';
 }
 
 /** A war wave: `n0` ships at launch, `alive` now; `f0` frigates at launch, `frig` now. */

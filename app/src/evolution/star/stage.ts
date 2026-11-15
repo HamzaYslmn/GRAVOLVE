@@ -36,7 +36,6 @@ import {
 //   Beam:     from BEAM_COVER, Fire shoots an energy beam (civilization/combat.ts reads `beam`); each shot burns BEAM_COST
 //             of the star's mass.
 
-
 type Star = {
   key: string; m: Motion; M: number; K: number; glow: number; R: number; color: number; name: string;
   link: number; owned: boolean; placed: number; segs: number; build?: { t: number; launched: number }; haulers: Hauler[];
@@ -46,8 +45,7 @@ type Star = {
 /** What the HUD and the planet stage read each frame. */
 export type StarState = {
   name: string; kelvin: number; mass: number; color: number; x: number; // x: your distance in star radii
-  link: number; owned: boolean; cover: number; segs: number; building: number; energy: number;
-  band?: [number, number]; roche: number; flux: number; warm: number; targeted: boolean;
+  link: number; owned: boolean; cover: number; energy: number; band?: [number, number]; warm: number; targeted: boolean;
   wait?: string; // why the Dyson sphere is not building
   fleetWait?: string; // why the next colony fleet waits (colony.ts)
   planets: number; cap: number; colonies: number; // system planets your star carries / can carry, of them colonies
@@ -59,7 +57,6 @@ type Light = { flux: number; warm: number; dyson: number; sun: number; at: numbe
 
 const FLARE_FALL = 1.2; // s the flare fades after its pulse
 const EAT_S = 0.25; // s between checks for bodies inside a star
-const VIEW_FAR = 1; // stars get sprites within their far light of you
 const WARM_X = [12, 8]; // R★: the star's warmth fades in between these (its 1/x tail would warm the whole map)
 const NEAR_X = 8; // R★: the Star panel and the target show within this
 // In orbit your world stays inside this share of the short half-screen (any direction: the system turns as you orbit), so
@@ -75,7 +72,7 @@ export function createStarStage(layer: Container, me: Body, renderer: Renderer, 
   const origin = { x: me.motion.x, y: me.motion.y };
   const stars = new Map<string, Star>(), empty = new Set<string>(); // empty: cells without a star (or whose star was swallowed)
   let own: Star | undefined; // your star
-  let orbit: Orbit | undefined, mu = 0, eatT = 0, flareDose = 0, fate: string | undefined, state: StarState | undefined;
+  let orbit: Orbit | undefined, eatT = 0, flareDose = 0, fate: string | undefined, state: StarState | undefined;
   let half = Infinity; // the camera's short half-view last frame (world units)
   let lost = 0; // s of grace left after losing your star
   const planets: Planet[] = [];
@@ -99,7 +96,6 @@ export function createStarStage(layer: Container, me: Body, renderer: Renderer, 
   function grow(s: Star, M: number) {
     [s.M, s.K] = [M, starKelvin(M)];
     [s.glow, s.R, s.color, s.name] = [glare(M), starRadius(M), starColor(s.K), starName(s.K)];
-    if (s.owned) mu = starMu(M);
     return s;
   }
   // The first star: FIRST away, toward the emptiest of 8 directions (stars sit in the web's quiet stretches).
@@ -139,7 +135,6 @@ export function createStarStage(layer: Container, me: Body, renderer: Renderer, 
     own = s;
     s.link = 1;
     const rx = me.motion.x - s.m.x, ry = me.motion.y - s.m.y, d = Math.hypot(rx, ry);
-    mu = starMu(s.M);
     const [lo, hi] = lay(s).orbit;
     orbit = capture(rx, ry, me.motion.vx - s.m.vx, me.motion.vy - s.m.vy, clamp(d, lo * s.R, hi * s.R));
     kit.fx.flash(s.m.x, s.m.y, s.R * 3, 30, s.R * 2);
@@ -176,7 +171,7 @@ export function createStarStage(layer: Container, me: Body, renderer: Renderer, 
     if (!field) return;
     const reach = PULL_X * s.R, g = starMu(s.M) * dt;
     for (const b of field.bodies) {
-      if (!b.m || b.moon || b.held || b === me) continue;
+      if (!b.m || b.moon || b.held) continue;
       const dx = s.m.x - b.motion.x, dy = s.m.y - b.motion.y, d2 = dx * dx + dy * dy;
       if (d2 > reach * reach) continue;
       const d = Math.sqrt(d2) || 1, a = g / Math.max(d2, s.R * s.R);
@@ -210,7 +205,7 @@ export function createStarStage(layer: Container, me: Body, renderer: Renderer, 
   function views(near: Star | undefined, dt: number) {
     const pm = me.motion;
     for (const s of stars.values()) {
-      const reach = Math.hypot(pm.x - s.m.x, pm.y - s.m.y) < VIEW_FAR * FAR_LIGHT + s.R;
+      const reach = Math.hypot(pm.x - s.m.x, pm.y - s.m.y) < FAR_LIGHT + s.R; // within its far light
       if ((reach || s.owned) && !s.view) s.view = createStarView(world, pg);
       else if (!reach && !s.owned && s.view) {
         s.view.destroy();
@@ -254,7 +249,7 @@ export function createStarStage(layer: Container, me: Body, renderer: Renderer, 
       news('roche', 'Roche limit', 'Tides are tearing your world apart · climb out');
     }
     if (!lost && d < s.R + 0.3 * me.r) fate = `Fell into a ${s.name.toLowerCase()}`;
-    else if (me.m < 0.25 * AGE_GOAL) fate = `Torn apart by a ${s.name.toLowerCase()}'s tides`;
+    else if (tear > 0 && me.m < 0.25 * AGE_GOAL) fate = `Torn apart by a ${s.name.toLowerCase()}'s tides`;
     // The link: automatic in the band; filaments snap when you leave it.
     const was = s.link;
     s.link = linkStep(s.link, x, dt);
@@ -272,18 +267,17 @@ export function createStarStage(layer: Container, me: Body, renderer: Renderer, 
     step(s.m, kit.input.axis(), dt);
     const band = liquidBand(pressure, s.glow, cover);
     const L = lay(s), at = o.target / s.R, goal = band ? orbitGoal(band, L.orbit) : clamp(at, ...L.orbit); // the range moves as your moons grow
-    ride(o, pm, s, mu, goal, ORBIT_RATE, dt);
+    ride(o, pm, s, starMu(s.M), goal, ORBIT_RATE, dt);
     me.view.position.set(pm.x, pm.y);
     colonies.update(dt, zoom, planets, s, cover, at, [L.orbit[0], L.ring(capacity(s.M) - 1, at)], L.reach, kit.field()?.bodies ?? []);
-    carry(planets, s, mu, dt, (k) => L.ring(k, at));
+    carry(planets, s, starMu(s.M), dt, (k) => L.ring(k, at));
     dyson.update(s, pm, colonies.speed, dt); // more living planets build faster (concept 4)
     return o.dist / s.R;
   }
 
   /** Flares: the star brightens and a prominence rises on its limb, then the pulse. */
   function flare(s: Star, dx: number, dy: number, d: number, x: number, cover: number, dt: number) {
-    if (!s.owned && x >= 1.5 * FLARE_X) return;
-    if (s.flareT < 0 && (s.flareNext -= dt) <= 0) [s.flareT, s.flareAt] = [0, Math.atan2(-dy, -dx) + (Math.random() - 0.5) * 2];
+    if (s.flareT < 0 && (s.owned || x < 1.5 * FLARE_X) && (s.flareNext -= dt) <= 0) [s.flareT, s.flareAt] = [0, Math.atan2(-dy, -dx) + (Math.random() - 0.5) * 2];
     if (s.flareT < 0) return;
     const before = s.flareT, pm = me.motion;
     s.flareT += dt;
@@ -318,7 +312,7 @@ export function createStarStage(layer: Container, me: Body, renderer: Renderer, 
     eatT = EAT_S;
     for (const s of stars.values()) if (s.view) eat(s);
     const field = kit.field();
-    if (yours?.owned && orbit && field && catchPlanet(planets, yours, mu, field.bodies, orbit.dir, lay(yours).catch(orbit.target / yours.R))) {
+    if (yours?.owned && orbit && field && catchPlanet(planets, yours, starMu(yours.M), field.bodies, orbit.dir, lay(yours).catch(orbit.target / yours.R))) {
       const b = planets[planets.length - 1].b;
       grow(yours, yours.M * (1 + GROW));
       kit.fx.flash(b.motion.x, b.motion.y, b.r * 3, 8, b.r * 2);
@@ -348,13 +342,12 @@ export function createStarStage(layer: Container, me: Body, renderer: Renderer, 
   }
 
   /** The Star panel and what the planet stage reads. */
-  function report(near: Star | undefined, x: number, out: Light, rocheX: number, aimed: boolean, pressure: number, real: number) {
+  function report(near: Star | undefined, x: number, out: Light, aimed: boolean, pressure: number, real: number) {
     if (!near) return hud.update(real, undefined, false);
     const cover = near.placed / PANELS;
     state = {
-      name: near.name, kelvin: near.K, mass: near.M, color: near.color, x, link: near.link, owned: near.owned, cover, segs: near.segs,
-      building: near.build ? Math.min(1, near.build.t) : 0, energy: near.owned ? dysonEnergy(near.M, cover) : 0,
-      band: liquidBand(pressure, near.glow, cover), roche: rocheX, flux: out.flux, warm: out.warm, targeted: !aimed && x < NEAR_X,
+      name: near.name, kelvin: near.K, mass: near.M, color: near.color, x, link: near.link, owned: near.owned, cover,
+      energy: near.owned ? dysonEnergy(near.M, cover) : 0, band: liquidBand(pressure, near.glow, cover), warm: out.warm, targeted: !aimed && x < NEAR_X,
       wait: near.owned ? dyson.wait : undefined, fleetWait: near.owned ? colonies.wait : undefined, planets: near.owned ? planets.length : 0, cap: capacity(near.M), colonies: colonies.count,
       beamOff: near.owned ? beam.off : undefined,
     };
@@ -381,7 +374,7 @@ export function createStarStage(layer: Container, me: Body, renderer: Renderer, 
       if (!s.owned) return smoothstep(8, 5, x) * (d + 1.15 * s.R);
       // In orbit the camera follows your star (focus): keep your world, its moons and your planets round it on the short screen side.
       const W = kit.canvas.clientWidth || innerWidth, H = kit.canvas.clientHeight || innerHeight;
-      const L = lay(s), edge = planets.length ? (L.ring(planets.length - 1, x) + PLANET_R) * s.R : 0;
+      const L = lay(s), edge = planets.length ? (Math.max(...planets.map((p) => p.goal ?? L.ring(p.ring, x))) + PLANET_R) * s.R : 0;
       return (Math.max(d + L.reach * s.R, edge) / SAFE) * (Math.max(W, H) / Math.min(W, H));
     },
     /** In orbit: the camera follows your star, shifted toward your world only as far as keeps it in view when the system outgrows the zoom-out cap. */
@@ -404,6 +397,7 @@ export function createStarStage(layer: Container, me: Body, renderer: Renderer, 
         if (!own) return 'Link a star first';
         s.segs = Math.min(SEGMENTS, s.segs + Math.ceil(SEGMENTS / 4));
         s.placed = Math.max(s.placed, s.segs * PER_SEG);
+        [s.build, s.haulers.length] = [undefined, 0]; // a segment in flight would land past the sphere
       } else grow(s, Number(cmd));
     },
     /** Stars and your system planets (test hooks); your energy beam (combat.ts). */
@@ -426,7 +420,7 @@ export function createStarStage(layer: Container, me: Body, renderer: Renderer, 
       gravity(dt);
       sweep(yours, dt);
       draw(near, x, dt, zoom);
-      report(near, x, out, rocheX, aimed, pressure, real);
+      report(near, x, out, aimed, pressure, real);
       return out;
     },
     destroy() {

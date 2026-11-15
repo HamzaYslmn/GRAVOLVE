@@ -4,7 +4,7 @@ import type { Motion } from '../../core/entity';
 import { pressure } from '../../core/water';
 import { FAR_BOUNDS, type Fx } from '../../render/fx';
 import { drawShip, quads, shipR, shipUnit, SHIP_PX, techPage, YOU } from '../../render/tech';
-import { absorb, drop, type Body } from '../asteroid/body';
+import { absorb, drop, unmoon, type Body } from '../asteroid/body';
 import { bump, bumps, crash, MISS_V, pebble, smolder, sparks } from '../civilization/crash';
 import { arrive, BRAKE, MAX_DT, steps, thrust, TURN, type Craft } from '../civilization/flight';
 import { clear, HOME_DODGE, LOOK, PAD, reachOf, scan, type Disc } from '../civilization/nav';
@@ -54,11 +54,11 @@ export function createColonies(layer: Container, renderer: Renderer, me: Body, c
     const a = Math.atan2(p.b.motion.y - me.motion.y, p.b.motion.x - me.motion.x);
     trips.push({ p, need, ships: need ? [ship('miner', a, 0)] : [ship('carrier', a, -0.6), ship('colonizer', a, 0.6)] });
   };
-  /** A colony is gone: its people die with it (its share of the room, at most half), the room and Dyson speed drop. */
+  /** A colony is gone: its people die with it (its share of the room, at most half), the room and Dyson speed drop. No title: no toast. */
   function lose(p: Planet, title: string, sub: string) {
     const cs = civ.state, share = cs ? Math.min(0.5, room(p.score ?? 0, p.b.m) / Math.max(cs.cap, 1e-9)) : 0;
     civ.colonies(0, (cs?.pop ?? 0) * share);
-    news(null, title, sub);
+    if (title) news(null, title, sub);
   }
 
   return {
@@ -91,7 +91,7 @@ export function createColonies(layer: Container, renderer: Renderer, me: Body, c
         if (envelope(b.m, b.comp)) { // past the gas line at Super-Earth mass: no ground for a colony
           if (p.life === 'colony') lose(p, 'A colony became a gas world', 'Too much gas buried its ground · it leaves its ring');
           else news(null, 'A gas world', 'Too much gas buried its ground · it leaves its ring');
-          [b.moon, b.motion.drag] = [false, 1e-3];
+          unmoon(b);
           planets.splice(i, 1);
           continue;
         }
@@ -180,11 +180,13 @@ export function createColonies(layer: Container, renderer: Renderer, me: Body, c
       }
       quad.end();
     },
-    /** Your star is gone: every colony goes with its rings. */
+    /** Your star is gone: every colony goes with its rings (one toast), the fleets in flight with it. */
     release(planets: Planet[]) {
-      for (const p of planets) if (p.life === 'colony' && p.b.m) lose(p, 'Colonies adrift', 'Without the star their worlds freeze · their people die');
+      planets.filter((p) => p.life === 'colony' && p.b.m).forEach((p, i) => lose(p, i ? '' : 'Colonies adrift', 'Without the star their worlds freeze · their people die'));
       civ.colonies(0);
-      count = 0;
+      [count, trips.length] = [0, 0];
+      quad.begin();
+      quad.end();
     },
     destroy() {
       trips.length = 0;

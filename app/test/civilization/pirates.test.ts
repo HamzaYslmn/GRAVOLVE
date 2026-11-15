@@ -353,6 +353,27 @@ const models = { pirates: book() };
     assert.ok(stolenNew <= stolenOld + 1e-9, `a shield now protects the store first (${stolenNew} vs ${stolenOld})`);
   }
 
+  // 8c. The last of your stock (0.5 u): the round that takes it fills the hauler and chips nothing; the next one chips.
+  {
+    const w = world(12, { civ: true, stock: 0.5 });
+    w.pirates.launch(U(6));
+    const fl = w.pirates.fleet!, m0 = w.me.m, hold = fl.ships.find((s) => s.kind === 'hauler')!;
+    Object.assign(fl, { target: { b: w.me, kind: 'you', v: 1 }, cap: 1 });
+    fl.gun.onBody!(w.me, R, 0);
+    assert.ok(w.stock.ore === 0 && hold.stolen.ore === 0.5 && fl.chip === 0 && w.me.m === m0, `the last stock goes aboard, no chip: stock ${w.stock.ore}, hauler ${hold.stolen.ore}, chipped ${fl.chip}`);
+    fl.gun.onBody!(w.me, R, 0);
+    assert.ok(fl.chip > 0 && w.me.m < m0, `an empty store: the next round chips water or air (${fl.chip})`);
+  }
+
+  // 8d. A hit-stop frame (dt 0, main.ts) mid-flight: every ship and the flag keep finite burn, bank and heading.
+  {
+    const w = world(5, { moons: 2 }), finite = (c: Craft) => [c.burn, c.bank ?? 0, c.heading, c.x, c.vx].every(Number.isFinite);
+    w.pirates.launch(U(8));
+    for (let f = 0; f < 61; f++) w.frame(f === 30 ? 0 : 1 / 60);
+    const fl = w.pirates.fleet!;
+    assert.ok(fl.ships.every(finite) && finite(fl.flag), 'a dt 0 frame leaves no NaN in burn, bank or heading');
+  }
+
   // 9. Frame rate: the same seed at 30 and 120 fps goes through the same states; the first crack within 15%.
   {
     let worst = 0;

@@ -1,7 +1,7 @@
 import type { Motion } from '../../core/entity';
 import { capture, circular, place, relVelocity, stepOrbit, type Orbit } from '../../core/orbits';
 import { clamp } from '../../core/rng';
-import type { Body } from '../asteroid/body';
+import { unmoon, type Body } from '../asteroid/body';
 import { AGE_GOAL } from '../asteroid/rules';
 import { capacity, lapMu, PLANET_R, RING_RATE } from './rules';
 
@@ -56,5 +56,5 @@ export function ride(o: Orbit, m: Motion, s: Host, mu: number, goal: number, rat
 
 /** The star is gone: its planets fly on as plain bodies. */
 export function release(planets: Planet[]) {
-  for (const { b } of planets.splice(0)) [b.moon, b.motion.drag] = [false, 1e-3];
+  for (const { b } of planets.splice(0)) unmoon(b);
 }

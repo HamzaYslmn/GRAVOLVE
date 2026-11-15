@@ -93,7 +93,7 @@ body on course that closes faster than the stick speed and weighs ≤ 2× the mo
   giant-impact rule then applies: it merges and melts you); beaten on its orbit it stays bound and never touches. One plume
   quad shows its thrust, out when beaten.
 - **Stances** [J] (`stance`, re-picked each second):
-  - *Attack:* a war wave is out, or stock ≥ `WAVE_COST` (Hungry 10, Careful 14, Raider 7) × `waveSize(L)` and the odds
+  - *Attack:* a war wave is out, or stock ≥ `WAVE_COST` (Hungry 10, Careful 14, Raider 7) × `waveFighters(L)` and the odds
     suit its temper (`ODDS`: Careful 1.2, Hungry 0.8, Raider 0.6; odds = its strength ÷ yours, strength = fighters + 5 ×
     frigates + 2 × shield level, `civilization/rules.ts` `strength`).
   - *Defend:* a Careful rival with its shield under 80% (Hungry and Raider keep attacking, 2026-11-15), or no home fleet left. An open world stays here.
@@ -102,7 +102,7 @@ body on course that closes faster than the stick speed and weighs ≤ 2× the mo
   - *Gather:* a miner digs the nearest free rock (0.01–3% of its mass) within 8 rival radii for 2 s, takes 30% of it and
     brings home 4 stock. Stock also grows 0.15 × level a second by itself.
 - **War waves** [J] (planetary combat, 2026-11-14; the weapons, roles and numbers are in
-  [civilizationgameplay.md](civilizationgameplay.md) → Battles): `waveSize(L)` = 1/2/3/3 fighters bought from stock plus
+  [civilizationgameplay.md](civilizationgameplay.md) → Battles): `waveFighters(L)` (civilization/rules.ts) = 1/2/3/3 fighters bought from stock plus
   every frigate it has (`rivalFrigates`: 0/1/1/2 at L1–4; a lost one is rebuilt in 60 s for 4 wave ships' worth of
   stock). A wave masses 20 s with its world on screen (the danger is seen, never told): fighters in a V round their world,
   frigates on their battery circuit (1.9–2.1 rival radii), the silo glowing. Out, the fighters make strafing runs at you

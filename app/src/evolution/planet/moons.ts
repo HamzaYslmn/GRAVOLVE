@@ -6,37 +6,25 @@ import type { Aim, Controls } from '../../core/input';
 import { bound, breaks, capture, circular, place, rate, relVelocity, slotRadius, SPRING_S, stepOrbit, wrap, type Orbit } from '../../core/orbits';
 import { dashRing, type Fx } from '../../render/fx';
 import { YOU } from '../../render/tech';
-import { absorb, drop, keepShape, mixRgb, shed, type Body } from '../asteroid/body';
-import { G_WORLD } from '../asteroid/field';
-import { youPull } from '../asteroid/rules';
-import { APPROACH, catchStep, FEED, LANE, matchWindow, moonCap, MOON_SHARE, moonSlots, pickSlot, STOLEN_S } from './rules';
+import { absorb, drop, keepShape, mixRgb, shed, unmoon, type Body } from '../asteroid/body';
+import { G_WORLD, youPull } from '../asteroid/rules';
+import { APPROACH, catchStep, FEED, LANE, matchWindow, moonCap, MOON, MOON_SHARE, moonSlots, pickSlot, STOLEN_S } from './rules';
 import { clamp } from '../../core/rng';
 import type { Foe } from '../civilization/ships';
 
-// Moons, held on core/orbits.ts slots around you. They are field bodies flagged `moon`: the field still ticks and
-// collides them (through `resolve`, so a moon eats, chips and breaks by the same regimes as anything else), but never
-// stores them with a chunk, never pulls them freely and never lets them touch you. Each frame they are placed on their
-// circle around where you are now, so they follow you at any speed.
-//   Capture by match (the old game's capture made a skill; no click, no automatic catch; rules.ts catchStep): a free body
-//            of MOON_SHARE on the lane round any free slot, moving with you, fills a ring; full, it is your moon
-//            where it is, turning its way, keeping its look (body.ts keepShape). Slow in the lowest free lane (matched in
-//            the others), the grip cancels your pull on it, so a matched body floats. One candidate at a time: the one filling, else the slowest in-size
-//            body near the lane. Caught while orbiting another host, or within STOLEN_S of one letting it go
-//            (markFreed), it is stolen (old game rule).
-//   A moon just orbits its slot; that is the guarding: whatever crosses its path hits it (a real collision). Every moon is
-//            also mined by the civilization (civilization/stage.ts).
-//   Command (a tap) on a moon selects it (the target panel shows it: `inspect`); holding it grinds it down: FEED of your
-//            mass a second streams onto you as dust (no hit, no heat), a grain line and dust show it. A tap on any other body
-//            sets your priority target (`orders`: civilization/stage.ts order; a rival world: the siege), an enemy ship under
-//            the tap first; a small note says how it stands (before LIFE: "No fleet yet"). A hold on it does nothing.
-//   Break: a hit that leaves it faster than √2 × circular speed relative to you, or shatters it.
-// Shown on the orbit, never in a panel: a fading trail, a glow on the side it faces, free slots as faint broken circles
-// (the candidate's ring closes as it matches; a ring and a filling arc on the candidate; a
-// dashed moon-size ring on a matched body too big), a cyan glow under the cursor on a body or ship you can make your priority.
+// Moons on core/orbits.ts slots around you: field bodies flagged `moon` that the field ticks and collides (`resolve`) but
+// never stores, pulls freely or lets touch you; each frame they are placed on their circle round where you are now.
+//   Capture by match (rules.ts catchStep; no click): a free body of moon size on the lane round any free slot, moving with
+//            you, fills a ring; full, it is your moon where it is (body.ts keepShape). The grip cancels your pull on a
+//            matched body. Caught off another host, or within STOLEN_S of one letting it go (markFreed): stolen.
+//   A moon guards just by orbiting (whatever crosses its path hits it) and is ore for your miners (civilization/stage.ts).
+//   Command: a tap on a moon selects it (`inspect`), a hold grinds it down (FEED of your mass a second, no heat); a tap on
+//            any other body or an enemy ship sets your priority target (`orders`; before LIFE: "No fleet yet").
+//   Break: a hit leaving it faster than escape relative to you, or shattering it. Shown on the orbit, never in a panel.
 
 type Moon = { b: Body; o: Orbit; slot: number; v: Vec; m: number; turn: number; face: number; lit: number; absorbing: boolean; pip: Sprite; stolen: boolean };
 /** Your priority target (civilization/stage.ts order: sets or clears it on a body or an enemy ship and notes how it stands); the enemy ship under a point. */
-export type Orders = { order: (t: Body | Foe) => { ok: boolean }; foeAt: (p: Vec, pad: number) => Foe | undefined };
+type Orders = { order: (t: Body | Foe) => { ok: boolean }; foeAt: (p: Vec, pad: number) => Foe | undefined };
 /** Where a target is and how big (a ship: `pad`). */
 const spot = (t: Body | Foe, pad: number) => ('motion' in t ? { x: t.motion.x, y: t.motion.y, r: t.r } : { x: t.x, y: t.y, r: pad });
 /** Before LIFE a Command on a body only says so (a fizzle). */
@@ -51,7 +39,6 @@ const GRAIN_V = 1.5; // ...flowing down at this many radii/s
 const GRAIN_TINT = 0xffd27a; // warmed toward the miners' ore colour
 const SPILL_S = 2; // s: a moon past moonCap spills the excess onto you (no moon heavier than its planet)
 const RECAPTURE_S = 3; // s a let-go body cannot be caught again (broken free, absorbing)
-const MOON = 0x9fdcff; // your moons' blue
 const GREEN = 0x7dff9a; // stolen
 const TRAIL = 1.6; // rad of fading orbit trail behind a moon
 const SEGS = 10;
@@ -69,6 +56,21 @@ let now = 0; // game seconds, module-wide so rivals.ts can mark bodies
 export const markFreed = (b: Body) => void freed.set(b, now);
 const recentlyFreed = (b: Body) => now - (freed.get(b) ?? -Infinity) < STOLEN_S;
 
+/** The heavier body `b` orbits, not `me`: bound to it within HOST_D of its radii (a held moon, a rival's rock, needs no bound test). */
+function hostOf(b: Body, near: Body[], me: Body): Body | undefined {
+  let best: Body | undefined, bp = 0;
+  for (const h of near) {
+    if (h === me || h === b || !h.m || h.moon || h.m < HOST_MIN * b.m) continue;
+    const rx = b.motion.x - h.motion.x, ry = b.motion.y - h.motion.y, d = Math.hypot(rx, ry);
+    if (d > HOST_D * h.r) continue;
+    const mu = G_WORLD * h.m, vx = b.motion.vx - h.motion.vx, vy = b.motion.vy - h.motion.vy;
+    // Orbiting: bound and moving round at ORBIT_V of circular at least (belt rocks drifting together are not moons).
+    if (!b.moon && (!bound(mu, rx, ry, vx, vy) || Math.abs(rx * vy - ry * vx) / (d || 1) < ORBIT_V * circular(mu, d))) continue;
+    if (mu / (d * d) > bp) [best, bp] = [h, mu / (d * d)];
+  }
+  return best;
+}
+
 export function createMoons(layer: Container, me: Body, input: Controls, glow: Texture, fx: Fx, canvas: HTMLElement, news: News) {
   const view = new Container();
   const lines = new Graphics();
@@ -78,8 +80,7 @@ export function createMoons(layer: Container, me: Body, input: Controls, glow: T
   const moons: Moon[] = [];
   const released = new WeakMap<Body, number>();
   const hints = [0, 0, 0, 0, 0];
-  let clock = 0, shown: Moon | null = null; // shown: selected by a Command (target panel)
-  let stolen = 0, zoomNow = 1;
+  let shown: Moon | null = null, stolen = 0, zoomNow = 1; // shown: selected by a Command (target panel)
   // The catch in progress: the candidate, its ring (0..1), last match quality, grip felt, theft (decided once it fills), the touch frame, its slot.
   let cand: Body | null = null, prog = 0, lastQ = 0, gripped = false, theft: boolean | undefined, assist: Vec | undefined, slot = -1;
 
@@ -87,8 +88,8 @@ export function createMoons(layer: Container, me: Body, input: Controls, glow: T
   /** Off its orbit. */
   function letGo(moon: Moon) {
     const b = moon.b;
-    [b.moon, b.motion.drag] = [false, 1e-3];
-    released.set(b, clock);
+    unmoon(b);
+    released.set(b, now);
     moon.pip.destroy();
     moons.splice(moons.indexOf(moon), 1);
     if (shown === moon) shown = null;
@@ -105,23 +106,9 @@ export function createMoons(layer: Container, me: Body, input: Controls, glow: T
     return best;
   }
 
-  /** The heavier body `b` orbits, not you: bound to it within HOST_D of its radii (a held moon, a rival's rock, needs no bound test). */
-  function hostOf(b: Body, near: Body[]): Body | undefined {
-    let best: Body | undefined, bp = 0;
-    for (const h of near) {
-      if (h === me || h === b || !h.m || h.moon || h.m < HOST_MIN * b.m) continue;
-      const rx = b.motion.x - h.motion.x, ry = b.motion.y - h.motion.y, d = Math.hypot(rx, ry);
-      if (d > HOST_D * h.r) continue;
-      const mu = G_WORLD * h.m, vx = b.motion.vx - h.motion.vx, vy = b.motion.vy - h.motion.vy;
-      // Orbiting: bound and moving round at ORBIT_V of circular at least (belt rocks drifting together are not moons).
-      if (!b.moon && (!bound(mu, rx, ry, vx, vy) || Math.abs(rx * vy - ry * vx) / (d || 1) < ORBIT_V * circular(mu, d))) continue;
-      if (mu / (d * d) > bp) [best, bp] = [h, mu / (d * d)];
-    }
-    return best;
-  }
   const mine = (b: Body) => moons.some((m) => m.b === b);
   /** Could `b` be caught at all (size and the lane are checked after)? Not you, a moon (yours, or your star's planet; a rival's rock on its circle can be stolen), a rival world or core, a great comet, nor a body just let go. */
-  const catchable = (b: Body) => b !== me && b.m > 0 && (!b.moon || me.guard?.own?.(b) === false) && !b.rival && !b.held && clock - (released.get(b) ?? -Infinity) >= RECAPTURE_S;
+  const catchable = (b: Body) => b !== me && b.m > 0 && (!b.moon || me.guard?.own?.(b) === false) && !b.rival && !b.held && now - (released.get(b) ?? -Infinity) >= RECAPTURE_S;
   const sizeOk = (b: Body) => { const cap = moonCap(b.m, b.r, me.m, me.r); return b.m >= Math.min(MOON_SHARE[0] * me.m, 0.25 * cap) && b.m <= 1.01 * cap; };
   /** The free body under a world point (within max(1.4 r, PICK_PX)), anywhere on its last LAG_S of path (a fast one has moved since the click): not you or your moons. Several: the heaviest that fits a slot, else the heaviest. */
   function under(p: Vec, near: Body[]): Body | undefined {
@@ -184,7 +171,6 @@ export function createMoons(layer: Container, me: Body, input: Controls, glow: T
     catching: () => (cand ? { body: cand, p: prog, q: lastQ, slot } : undefined),
     /** `near` = bodies around you (field.around), `zoom` for line widths, `aimTarget` = the HUD target (E off the canvas), `orders`: the civilization's priority target (none before LIFE). */
     update(dt: number, near: Body[], zoom: number, aimTarget: () => Body | undefined, orders?: Orders) {
-      clock += dt;
       now += dt;
       zoomNow = zoom;
       lines.clear();
@@ -247,7 +233,7 @@ export function createMoons(layer: Container, me: Body, input: Controls, glow: T
           gripped = true;
         }
         if (s.q === 0 && lastQ > 0 && s.p >= 0.3) sfx()?.play('snap', 0.4, 1);
-        if (s.q > 0 && theft === undefined) theft = !!hostOf(b, near) || recentlyFreed(b); // the old game's theft rule, judged once
+        if (s.q > 0 && theft === undefined) theft = !!hostOf(b, near, me) || recentlyFreed(b); // the old game's theft rule, judged once
         [prog, lastQ] = [s.p, s.q];
         if (Math.hypot(vx, vy) < ASSIST_V * 2 * R) assist = { x: bm.vx, y: bm.vy };
         news('match', 'Catch a moon', 'Bring a small body onto a free ring and match its speed');
@@ -305,9 +291,9 @@ export function createMoons(layer: Container, me: Body, input: Controls, glow: T
           const dx = pm.x - p.x, dy = pm.y - p.y, d = Math.hypot(dx, dy) || 1, ux = dx / d, uy = dy / d, L = d - b.r - R;
           if (Math.random() < dt * 8) fx.puff(p.x + ux * b.r, p.y + uy * b.r, ux, uy, 1, b.r * 0.2, 0.3 * R, b.tint);
           if (L > 0) {
-            const N = Math.min(25, Math.ceil(L / (GRAIN_GAP * R))), off = (clock * GRAIN_V * R) / L, tint = mixRgb(b.tint, GRAIN_TINT, 0.4, false);
+            const N = Math.min(25, Math.ceil(L / (GRAIN_GAP * R))), off = (now * GRAIN_V * R) / L, tint = mixRgb(b.tint, GRAIN_TINT, 0.4, false);
             for (let i = 0; i < N; i++) {
-              const k = (i / N + off) % 1, wob = Math.sin(k * 14 + clock * 3) * 0.05 * R;
+              const k = (i / N + off) % 1, wob = Math.sin(k * 14 + now * 3) * 0.05 * R;
               lines.circle(p.x + ux * (b.r + L * k) - uy * wob, p.y + uy * (b.r + L * k) + ux * wob, Math.max(1.5 / zoom, 0.025 * R)).fill({ color: tint, alpha: 0.7 * Math.sin(Math.PI * k) });
             }
           }
@@ -344,7 +330,7 @@ export function createMoons(layer: Container, me: Body, input: Controls, glow: T
         const free = s < slots && !((used >> s) & 1), on = !!cand && s === slot, want = !free ? 0 : on ? 0.12 + 0.3 * lastQ : cand ? 0.025 : 0.045;
         hints[s] += (want - hints[s]) * (1 - Math.exp(-dt / 0.25));
         if (hints[s] < 0.004) continue;
-        dashRing(lines, pm.x, pm.y, slotRadius(R, s), DASHES, clock * 0.04 * (s % 2 ? -1 : 1), on ? 0.35 + 0.65 * prog : 0.35, w, MOON, hints[s]);
+        dashRing(lines, pm.x, pm.y, slotRadius(R, s), DASHES, now * 0.04 * (s % 2 ? -1 : 1), on ? 0.35 + 0.65 * prog : 0.35, w, MOON, hints[s]);
       }
       // The candidate: a faint ring and a bright arc from 12 o'clock sweeping with the ring's progress (green: it will count
       // as stolen).
@@ -354,7 +340,7 @@ export function createMoons(layer: Container, me: Body, input: Controls, glow: T
         if (prog > 0) lines.moveTo(bm.x, bm.y - rr).arc(bm.x, bm.y, rr, -Math.PI / 2, -Math.PI / 2 + 2 * Math.PI * prog).stroke({ width: 1.6 * w, color: col, alpha: 0.75 });
       }
       // Too big to hold: a dashed ring at the size a moon may be, the body overflowing it.
-      if (big) dashRing(lines, big.motion.x, big.motion.y, big.r * Math.cbrt(moonCap(big.m, big.r, me.m, me.r) / big.m), DASHES, clock * 0.5, 0.5, w, MOON, 0.5);
+      if (big) dashRing(lines, big.motion.x, big.motion.y, big.r * Math.cbrt(moonCap(big.m, big.r, me.m, me.r) / big.m), DASHES, now * 0.5, 0.5, w, MOON, 0.5);
       // A soft cyan glow under the cursor on a body or ship a tap would make your priority (or clear it).
       const cur = input.kind() === 'mouse' ? input.aimWorld() : null, hb = cur && orders ? orders.foeAt(cur, PICK_PX / zoom) ?? under(cur, near) : undefined;
       const hs = hb && spot(hb, 10 / zoom);

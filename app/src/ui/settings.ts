@@ -1,4 +1,4 @@
-// Settings: a gear button that opens a small panel (frame-rate cap, FPS/stats display, sound, volume).
+// Settings: a gear button that opens a small panel (frame-rate cap, FPS/stats display (off by default), sound, volume).
 // Choices persist in localStorage (YouTube: cloud save); if storage is blocked the defaults apply.
 import './settings.css';
 
@@ -139,7 +139,7 @@ export function createSettings(handlers: Handlers) {
   };
 
   handlers.onCap(parseCap(cap.value));
-  onOff('show-stats', 'showStats', handlers.onStats);
+  onOff('show-stats', 'showStats', handlers.onStats, false); // players see no FPS unless they turned it on
   if (yt) root.querySelector('#sound')!.closest('label')!.remove(); // YouTube's mute is the one mute
   else onOff('sound', 'sound', handlers.onSound);
   if (DEBUG) onOff('debug-mode', 'debug', handlers.onDebug, false);

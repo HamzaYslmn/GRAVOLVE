@@ -4,10 +4,10 @@ import { setSurface } from '../asteroid/sphere';
 import { slotRadius } from '../../core/orbits';
 import { markFreed } from '../planet/moons';
 import { MOON_SHARE, moonSlots } from '../planet/rules';
-import { drop, hitKelvin, shed, type Body, type Hit } from '../asteroid/body';
+import { drop, hitKelvin, shed, unmoon, type Body, type Hit } from '../asteroid/body';
 import { burnShare, COMP, G_WORLD, pairPull, pieceShares, pullMass, SPREAD, youPull } from '../asteroid/rules';
 import { thrustOf } from '../asteroid/player';
-import { A_ENG, alarmStep, DEFEND_SHIELD, DODGE, evade, GATHER_U, newWave, next, restStep, SITE, stance, stationStep, STOCK_RATE, volley, WAVE_COST, waveSize, waveStep, WORLD_FLAGS, type Entry, type Stance, type Wave } from '../rivals/ledger';
+import { A_ENG, alarmStep, DEFEND_SHIELD, DODGE, evade, GATHER_U, newWave, next, restStep, SITE, stance, stationStep, STOCK_RATE, volley, WAVE_COST, waveStep, WORLD_FLAGS, type Entry, type Stance, type Wave } from '../rivals/ledger';
 import type { Ctx } from './combat';
 import { bump, bumps, MISS_V, sparks } from './crash';
 import {
@@ -17,32 +17,24 @@ import { lineClear, pick, pull, seeker, trigger, type Gun, type Missile, type Tr
 import { clear, scan } from './nav';
 import {
   ARMS, BEATEN, beamPop, CHASE_V, FRIGATE_S, FRIGATE_STOCK, HIT_KILL, HIT_MIN, intercept, LEASH, raid, RIVAL_AIM, RIVAL_FIRE, RIVAL_FIRST, RIVAL_HIT_MAX, RIVAL_LEAD, RIVAL_LOADED, RIVAL_MASS, RIVAL_ROCK, SALVO_LEAD,
-  RIVAL_TRAVEL, rivalFrigates, rivalLevel, rivalSalvo, rivalShips, shellR, SHIELD_K, shieldHolds, shieldMax, shieldMeet, shieldRegen, shieldShot, SLUG_SPEED, strength, T_SEE, weaponHit, type Arm, type Raid, type Shield,
+  RIVAL_TRAVEL, rivalFrigates, rivalLevel, rivalSalvo, rivalShips, shellR, SHIELD_K, shieldHolds, shieldMax, shieldMeet, shieldRegen, shieldShot, SLUG_SPEED, strength, T_SEE, waveFighters, weaponHit, type Arm, type Raid, type Shield,
 } from './rules';
 import { crashes, defend, dropLost, foeOf, lose, newShip, strike, type Foe, type Ship } from './ships';
 import { shieldLook, type ShieldLook } from './view';
 import { slugBodies, type Mark, type Shielded, type Slug } from './weapon';
 
-// Rival civilizations: other living worlds with their own people, shield, defence ships and a mass driver (numbers and
-// arrival rules in rules.ts). They spawn in the quietest of a few spots ahead of you (field.fillAt), as the next named
-// rival of the run's roster (rivals/ledger.ts) when one is free.
-//   - Their patrols hunt pirate ships too, so pirate raids on them are fights.
-//   - Their shield is a shell like yours (rules.ts shieldMeet); their air burns your slugs once it is down. What gets through kills people.
-//   - Their rock rides a circle round their world, a passive guard; on its circle it is stolen by a match (moons.ts); dropped (left behind or beaten), a match within 30 s steals it.
-//   - Strategy (stances and war waves: rivals/ledger.ts): probes look you over, a miner strips free rocks near their world,
-//     and with stock enough and odds that suit its temper a war wave masses round their world in view (fighters in a V,
-//     its frigates on their battery circuit, the silo glowing), then the fighters make strafing runs at you in wings of
-//     three, a burst a run whenever a gun bears (your frigate first, then ships and miners, else your shield: guns.ts
-//     pick); the frigates lance your world from home (rules.ts ARMS.lance) and the silo fires a salvo after each lance
-//     salvo. Home on 40% losses, a frigate lost, WAVE_S, outrun, its own shield low, or your people at the raid's floor.
-//     Every ship away dies touching a body; home patrols steer round bodies and graze or wreck on them as yours do
-//     (ships.ts crashes).
-//   - Open once its defence fleet is gone for good (YARD fleets' worth of rebuilds spent): no rebuilds, its shield stops mending, and it holds SITE × level for miners.
-//   - Weapon hits on it go through rules.ts weaponHit like yours (`struck`): your rounds chip its shield and burn stock,
-//     lance bolts and missiles land on its people.
-// Its world is an ordinary gravity body all its life (ledger WORLD_FLAGS): engines (ledger stationStep) keep it KEEP of your
-// radii off you on an orbit, clear of other rival worlds, and burn off the line of a missile of yours once it sees it (ledger DODGE);
-// beaten, the engines are off and it stays your gravitating companion.
+// Rival civilizations (numbers in rules.ts, stances and waves in rivals/ledger.ts): living worlds with people, a shield shell
+// like yours (rules.ts shieldMeet; their air burns slugs once it is down), home patrols (ships.ts defend: they hunt pirates
+// too), a mass driver and a silo. Each spawns at the quietest spot ahead (field.fillAt) as the run roster's next named rival.
+//   - Their rock circles their world, a guard: a match on its circle steals it (moons.ts); dropped, a match within 30 s does.
+//   - Probes look you over, a miner strips free rocks; with stock and odds to suit its temper a war wave masses in view, then
+//     its fighters strafe you in wings of three (guns.ts pick: your frigate, ships, miners, else your shield), its frigates
+//     lance you from home and its silo fires after each lance salvo. Home on losses, outrun, its shield low, or your people
+//     at the raid's floor. Ships away die touching a body; home patrols graze or wreck as yours do (ships.ts crashes).
+//   - Open once its fleet is gone for good (YARD fleets of rebuilds spent): its shield stops mending, miners take SITE × level.
+//   - Weapon hits go through rules.ts weaponHit like yours (`struck`).
+// Its world is a gravity body (ledger WORLD_FLAGS): engines (ledger stationStep) keep it KEEP of your radii off you, clear of
+// other rivals, dodging your missiles (ledger DODGE); beaten, engines off, it stays your gravitating companion.
 
 const AIR = 1; // atm on a rival world (burns small slugs)
 const ROCK_ORBIT = 2.6; // rival radii (inside its ships' 2–4.6 R circuit: they steer round it)
@@ -81,7 +73,7 @@ export type Rival = {
   rock?: Body; rockA: number; ships: Ship[]; foes: WeakMap<Ship, Foe>; lights: { a: number; d: number }[];
   look: ShieldLook; flick: number; beaten: boolean; keep: number; turn: number; alarm: number; // a missile alarm (ledger alarmStep)
   left?: boolean; // gone out of reach (the next spawn waits)
-  entry?: Entry; stance: Stance; stanceT: number; stock: number; out: Out[]; wave?: Wave; c: Centre; fv: { x: number; y: number }; lash: { far: number; slow: number }; probeT: number;
+  entry?: Entry; temper: Entry['temper']; stance: Stance; stanceT: number; stock: number; out: Out[]; wave?: Wave; c: Centre; fv: { x: number; y: number }; lash: { far: number; slow: number }; probeT: number;
   rest: number; // s until its next volley of slugs (rivals/ledger.ts restStep)
   gun: Gun; lance: Gun; // its war wave's guns: the fighters' rounds, the frigates' lance
   /** Its defence fleet is gone: your miners work `site` (civilization/stage.ts). */
@@ -100,6 +92,7 @@ export function createRivals(ctx: Ctx) {
   let travelled = 0, nextAt = RIVAL_FIRST, clock = 0, since = -1, lastX = NaN, lastY = NaN, lastEntry: Entry | undefined;
   // Loaded: the field still holds the world (it stores it with its chunk once you leave; its view leaves the layer then).
   const near = (r: Rival) => r.b.m > 0 && !!r.b.view.parent && Math.hypot(r.b.motion.x - ctx.me.motion.x, r.b.motion.y - ctx.me.motion.y) < FAR * ctx.diag();
+  const veil = (r: Rival, s0: number, x: number, y: number) => s0 > 0 && [r.look.ripple(Math.atan2(y - r.b.motion.y, x - r.b.motion.x)), r.sh.s <= 0 && ctx.fx.burst(r.b.motion.x, r.b.motion.y, 20, r.b.r * 0.08, r.b.r * 1.4, VIOLET)]; // a hit on its veil while up (s0): a ripple; a burst if it collapses
 
   /** A rival world at the quietest of six spots ahead of you (or at `at`: test hook). */
   function spawn(at?: { x: number; y: number }) {
@@ -137,15 +130,14 @@ export function createRivals(ctx: Ctx) {
       b, level, sh: { level, s: SHIELD_K * level }, pop: 1, seen: 0, fireT: between(RIVAL_FIRE), rockT: 0, shipT: SHIP_AGAIN,
       rockA: Math.random() * Math.PI * 2, ships: [], foes: new WeakMap(), flick: 0, beaten: false, keep: between(KEEP), turn: Math.random() < 0.5 ? -1 : 1,
       frig: rivalFrigates(level), frigT: FRIGATE_S, wound: { k: 0 }, silo: { load: 0, glow: 0 }, thrust: { x: 0, y: 0 }, alarm: -between(DODGE.react),
-      entry, stance: 'explore', stanceT: 0, stock: 0, out: [], gun, lance, c: { x: 0, y: 0, vx: 0, vy: 0 }, fv: { x: 0, y: 0 }, lash: { far: 0, slow: 0 }, probeT: 0, rest: 0, open: false, site: { ore: 0, vol: 0 }, yard: YARD * rivalShips(level),
+      entry, temper, stance: 'explore', stanceT: 0, stock: 0, out: [], gun, lance, c: { x: 0, y: 0, vx: 0, vy: 0 }, fv: { x: 0, y: 0 }, lash: { far: 0, slow: 0 }, probeT: 0, rest: 0, open: false, site: { ore: 0, vol: 0 }, yard: YARD * rivalShips(level),
       lights: Array.from({ length: LIGHTS }, () => ({ a: Math.random() * Math.PI * 2, d: 0.25 + 0.65 * Math.sqrt(Math.random()) })),
       look: shieldLook(ctx.root, page, VIOLET, Math.floor(Math.random() * 1e9), 3),
     };
     for (let i = 0; i < rivalShips(level); i++) r.ships.push(newShip(b.r, (i / rivalShips(level)) * Math.PI * 2));
     b.guard = { r: 0, own, meet(q, v, x, y) { // its shell, as yours (its own rock passes; another world's moon meets it)
       const s0 = r.sh.s, st = strike(b, q, burnShare(AIR)), k = shieldMeet(r.sh, st.kelvin, st.share, v / st.vs);
-      if (k) [r.look.ripple(Math.atan2(y - b.motion.y, x - b.motion.x)), ctx.fx.flash(x, y, q.r * 2, 8, q.r * 3)];
-      if (s0 > 0 && r.sh.s <= 0) ctx.fx.burst(b.motion.x, b.motion.y, 20, b.r * 0.08, b.r * 1.4, VIOLET); // its veil collapses
+      if (k) [veil(r, s0, x, y), ctx.fx.flash(x, y, q.r * 2, 8, q.r * 3)];
       return k;
     } };
     list.push(r);
@@ -157,7 +149,7 @@ export function createRivals(ctx: Ctx) {
     const rock = r.rock;
     r.rock = undefined;
     if (!rock || ctx.moons.owns(rock)) return;
-    [rock.moon, rock.motion.drag] = [false, 1e-3];
+    unmoon(rock);
     markFreed(rock); // caught within 30 s it counts as stolen
   }
   function remove(r: Rival) {
@@ -178,9 +170,8 @@ export function createRivals(ctx: Ctx) {
   /** A weapon hit of `k` K on rival `r` (rules.ts weaponHit): its shield first; rounds through it burn stock, heavy fire lands on its people. */
   function struck(r: Rival, arm: Arm, k: number, x: number, y: number, cap?: Raid) {
     if (r.beaten || !r.b.m) return;
-    const s0 = r.sh.s, h = weaponHit(r.sh, r.wound, r.pop, arm, k, cap), bm = r.b.motion;
-    if (s0 > 0) r.look.ripple(Math.atan2(y - bm.y, x - bm.x));
-    if (s0 > 0 && r.sh.s <= 0) ctx.fx.burst(bm.x, bm.y, 20, r.b.r * 0.08, r.b.r * 1.4, VIOLET); // its veil collapses
+    const s0 = r.sh.s, h = weaponHit(r.sh, r.wound, r.pop, arm, k, cap);
+    veil(r, s0, x, y);
     r.stock = Math.max(0, r.stock - h.burn);
     if (!h.landed) return;
     [r.pop, r.flick] = [h.P, 1.5];
@@ -241,24 +232,24 @@ export function createRivals(ctx: Ctx) {
     return best;
   }
 
-  /** A war wave: waveSize fighters bought from stock, and every frigate it has. */
-  function sendWave(r: Rival, temper: keyof typeof WAVE_COST) {
-    const n = waveSize(r.level), a0 = Math.random() * Math.PI * 2, all = n + r.frig;
-    [r.stock, r.wave] = [r.stock - WAVE_COST[temper] * n, newWave(all, r.frig)];
+  /** A war wave: waveFighters bought from stock, and every frigate it has. */
+  function sendWave(r: Rival) {
+    const n = waveFighters(r.level), a0 = Math.random() * Math.PI * 2, all = n + r.frig;
+    [r.stock, r.wave] = [r.stock - WAVE_COST[r.temper] * n, newWave(all, r.frig)];
     for (let i = 0; i < all; i++) launch(r, i < r.frig ? 'frigate' : 'fighter', a0 + (i / all) * Math.PI * 2);
   }
 
   /** Stance, launches, the war wave and every ship away from home (`far`: you are out of its reach). */
-  function strategy(r: Rival, dt: number, on: boolean, far: boolean) {
-    const me = ctx.me, pm = me.motion, bm = r.b.motion, R = r.b.r, sr = ctx.shipR(), sp = OUT_V * me.r, temper = r.entry?.temper ?? 'hungry';
+  function strategy(r: Rival, dt: number, on: boolean, far: boolean, bodies: Body[]) {
+    const me = ctx.me, pm = me.motion, bm = r.b.motion, R = r.b.r, sr = ctx.shipR(), sp = OUT_V * me.r, temper = r.temper;
     r.stock += STOCK_RATE * r.level * dt;
     r.probeT -= dt;
     if ((r.stanceT -= dt) <= 0) {
       r.stanceT = 1;
-      const civ = ctx.civ, n = waveSize(r.level), yours = civ ? strength(civ.ships.filter((s) => s.kind === 'fighter').length, civ.frigates.length, civ.level) : 0;
+      const civ = ctx.civ, n = waveFighters(r.level), yours = civ ? strength(civ.ships.filter((s) => s.kind === 'fighter').length, civ.frigates.length, civ.level) : 0;
       const odds = yours > 0 ? strength(r.ships.length + n, r.frig, r.sh.level) / yours : Infinity;
       r.stance = r.open ? 'defend' : stance({ temper, wave: !!r.wave, shield: r.sh.s / shieldMax(r.sh), fleetShort: !r.ships.length, far, seen: r.seen, stock: r.stock, level: r.level, odds });
-      if (r.stance === 'attack' && !r.wave) sendWave(r, temper);
+      if (r.stance === 'attack' && !r.wave) sendWave(r);
       else if (r.stance === 'gather' && !r.out.some((s) => s.role === 'miner')) {
         const rock = freeRock(r);
         if (rock) launch(r, 'miner', Math.atan2(rock.motion.y - bm.y, rock.motion.x - bm.x)).rock = rock;
@@ -288,10 +279,10 @@ export function createRivals(ctx: Ctx) {
     // A lost frigate is rebuilt slowly, for FRIGATE_STOCK wave ships' worth of stock.
     if (!r.open && r.frig < rivalFrigates(r.level) && r.stock >= FRIGATE_STOCK * WAVE_COST[temper] && (r.frigT -= dt) <= 0) [r.frig, r.stock, r.frigT] = [r.frig + 1, r.stock - FRIGATE_STOCK * WAVE_COST[temper], FRIGATE_S];
 
-    const dtc = Math.min(dt, MAX_DT), n = steps(dtc), h = dtc / n, acc = sp * P_ACC, brake = BRAKE * acc, mR = me.r, L = ARMS.lance;
+    const dtc = Math.min(dt, MAX_DT), n = steps(dtc), h = dtc / n, acc = sp * P_ACC, brake = BRAKE * acc, mR = me.r, L = ARMS.lance, mIn = MASS_IN.map((q) => q * R), mOut = MASS_OUT.map((q) => q * R);
     [r.gun.u, r.lance.u] = [ARMS.round.u * mR, L.u * R];
     const outer = slotRadius(mR, Math.max(0, ...ctx.moons.list().map((m) => m.slot)));
-    const page = ctx.page, unit = shipUnit(mR, ctx.cam.zoom), aims = [...ctx.miners, ...ctx.mine], bodies = me.m ? [me, ...ctx.near] : ctx.near;
+    const page = ctx.page, unit = shipUnit(mR, ctx.cam.zoom), aims = [...ctx.miners, ...ctx.mine];
     lowPass(r.fv, r.c.vx, r.c.vy, dt);
     // The war wave: massing, its fighters in a V on the first round their world; out, wings of three in trail on strafing
     // runs at you (round the chasing centre, frame velocity low-passed). Its frigates keep their battery circuit at home.
@@ -300,7 +291,7 @@ export function createRivals(ctx: Ctx) {
     const route = (s: Out) => {
       const x = s.x - wc.x, y = s.y - wc.y;
       if (!massing) return strafe(s, x, y, s.vx - wfv.x, s.vy - wfv.y, RING_IN * mR, outer + RING_OUT * mR, keep, sp);
-      circuit(s, x, y, MASS_IN.map((q) => q * R), MASS_OUT.map((q) => q * R), sp, RF_TURN);
+      circuit(s, x, y, mIn, mOut, sp, RF_TURN);
       avoid(x, y, keep, 2 * R);
     };
     const st = r.out.map((s) => {
@@ -321,7 +312,7 @@ export function createRivals(ctx: Ctx) {
         if (phase === 'go' && s.fired >= L.reload && me.m) {
           const a = leadAt(s, pm.x, pm.y, pm.vx, pm.vy, r.lance.u);
           [want.x, want.y] = [Math.cos(a) * 0.15 * sp, Math.sin(a) * 0.15 * sp];
-        } else circuit(s, x, y, MASS_OUT.map((q) => q * R), MASS_OUT.map((q) => q * R), 0.5 * sp, RF_TURN);
+        } else circuit(s, x, y, mOut, mOut, 0.5 * sp, RF_TURN);
         avoid(x, y, R + (2 + ROW[1]) * sr, 2 * R);
         [want.x, want.y] = [want.x + bm.vx, want.y + bm.vy];
       } else if (wave) formation(flying, flying.indexOf(s), massing ? 0 : 3, wc.x, wc.y, wfv, sr, mR, 1.3 * sp, keep, route, massing ? 1 : 0);
@@ -436,10 +427,10 @@ export function createRivals(ctx: Ctx) {
   }
 
   /** Patrols that break rocks heading for their world and hunt your ships near it; rebuilt one at a time while the yard lasts. */
-  function homeFleet(r: Rival, dt: number) {
+  function homeFleet(r: Rival, dt: number, bodies: Body[]) {
     const b = r.b;
     const missiles = ctx.missiles.live.filter((m) => m.team === 'you' && !m.dead); // point defence: picked first
-    defend(r.ships, b, ctx.near, dt, (share, v) => shieldHolds(r.sh, share, v), ctx.fx, ctx.kill, [...ctx.mine, ...raiders(), ...missiles], ctx.shots, { bodies: ctx.me.m ? [ctx.me, ...ctx.near] : ctx.near, sr: ctx.shipR() });
+    defend(r.ships, b, ctx.near, dt, (share, v) => shieldHolds(r.sh, share, v), ctx.fx, ctx.kill, [...ctx.mine, ...raiders(), ...missiles], ctx.shots, { bodies, sr: ctx.shipR() });
     dropLost(r.ships, b, ctx.fx, 8, 0.5, VIOLET);
     if (!r.open && !r.ships.length && r.yard <= 0) open(r);
     if (!r.open && r.yard > 0 && r.ships.length < rivalShips(r.level) && (r.shipT -= dt) <= 0) {
@@ -455,10 +446,10 @@ export function createRivals(ctx: Ctx) {
    */
   function silo(r: Rival, dt: number, armed: boolean) {
     const M = ARMS.missile, me = ctx.me, pm = me.motion, bm = r.b.motion, sl = r.silo, frigs = r.out.filter((s) => s.role === 'frigate');
-    const ready = armed && !!r.wave && (sl.load = Math.min(M.reload, sl.load + dt)) >= M.reload;
+    const ready = armed && !!r.wave && (sl.load = Math.min(M.reload, sl.load + dt)) >= M.reload && ctx.missiles.room(); // a full pool keeps the salvo
     sl.glow = ready ? sl.glow + dt : 0;
     if (!ready || r.wave!.phase !== 'go' || sl.glow < M.glow || (frigs.length && sl.glow < M.glow + ARMS.lance.reload && !frigs.some((s) => s.fired >= M.after && s.fired < M.after + 3))) return;
-    const a = Math.atan2(pm.y - bm.y, pm.x - bm.x), x = bm.x + Math.cos(a) * r.b.r * 1.05, y = bm.y + Math.sin(a) * r.b.r * 1.05, n = rivalSalvo(r.level, SALVO_LEAD[r.entry?.temper ?? 'hungry']);
+    const a = Math.atan2(pm.y - bm.y, pm.x - bm.x), x = bm.x + Math.cos(a) * r.b.r * 1.05, y = bm.y + Math.sin(a) * r.b.r * 1.05, n = rivalSalvo(r.level, SALVO_LEAD[r.temper]);
     for (let i = 0; i < n; i++) ctx.missiles.launch({ team: 'rival', x, y, vx: bm.vx, vy: bm.vy, tx: pm.x, ty: pm.y, tvx: pm.vx, tvy: pm.vy, u: M.u * me.r, life: M.life, k: M.k, blast: M.blast * me.r, fan: n > 1 ? M.fan * ((2 * i) / (n - 1) - 1) : 0, target: me, own: (q) => q === r.b || q === r.rock, from: r.b, seek: () => (me.m ? { ...me.motion, r: me.r } : undefined), seeker: seeker(M, me.r) });
     [sl.load, sl.glow] = [0, 0];
     ctx.fx.flash(x, y, r.b.r * 0.3, 8, r.b.r * 0.6);
@@ -499,7 +490,7 @@ export function createRivals(ctx: Ctx) {
         nextAt += RIVAL_TRAVEL;
         if (list.filter((r) => near(r) && !r.beaten).length < RIVAL_LOADED) spawn();
       }
-      const page = ctx.page, yourShieldDown = !civ?.state || civ.state.shield <= 0;
+      const page = ctx.page, yourShieldDown = !civ?.state || civ.state.shield <= 0, bodies = me.m ? [me, ...ctx.near] : ctx.near;
       for (const r of [...list]) {
         const b = r.b;
         if (!b.m) {
@@ -528,7 +519,7 @@ export function createRivals(ctx: Ctx) {
           if (r.entry) r.entry.alive = false;
           continue;
         }
-        const L = rivalLevel(clock - since, civ?.level ?? 1, RIVAL_LEAD[r.entry?.temper ?? 'hungry']);
+        const L = rivalLevel(clock - since, civ?.level ?? 1, RIVAL_LEAD[r.temper]);
         if (L > r.level && !r.open) [r.level, r.sh.level, r.sh.s] = [L, L, r.sh.s + SHIELD_K * (L - r.level)];
         if (!r.open) shieldRegen(r.sh, dt);
         rockMoon(r, dt);
@@ -536,8 +527,8 @@ export function createRivals(ctx: Ctx) {
         r.rest = restStep(r.rest, yourShieldDown, dt);
         const armed = r.seen >= T_SEE && on && me.m > 0;
         if (armed && volley(!!r.wave, r.rest)) fireSlug(r, dt);
-        homeFleet(r, dt);
-        strategy(r, dt, on, far);
+        homeFleet(r, dt, bodies);
+        strategy(r, dt, on, far, bodies);
         silo(r, dt, armed);
         if (r.pop <= BEATEN) beat(r);
         else look(r, dt, on, page);
@@ -600,7 +591,7 @@ export function createRivals(ctx: Ctx) {
     attack(r: Rival) {
       if (r.wave || r.beaten) return;
       [r.seen, r.stock, r.stanceT] = [Math.max(r.seen, 60), Math.max(r.stock, 1e3), 1];
-      sendWave(r, r.entry?.temper ?? 'hungry');
+      sendWave(r);
     },
     /** Your beam on `b` (combat.ts): false while a rival's shield takes its `kelvin` (nothing removed); else its people fall by BEAM_KILL × `share`. */
     beam(b: Body, kelvin: number, share: number, x: number, y: number) {

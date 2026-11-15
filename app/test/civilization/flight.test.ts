@@ -379,4 +379,11 @@ for (const fps of [30, 120]) {
   }
   console.log(`top speed (${PIRATE_SPEED[1]} R/s cruise):\n  ${rows.join('\n  ')}`);
 }
+// A hit-stop frame (dt 0, main.ts) flies nothing: thrust at h 0 leaves the craft as it was (burn and bank never 0/0 NaN).
+for (const top of [Infinity, 5 * R]) {
+  const c: Craft = { x: R, y: 2 * R, vx: 3 * R, vy: R, heading: 0.3, burn: 0.5, bank: 0.2, hurt: 1 }, was = { ...c };
+  [want.x, want.y] = [0, 4 * R];
+  thrust(c, ACC * R, TURN, 0, 0, 0, top);
+  assert.deepEqual(c, was, `thrust at h 0 (top ${top}) leaves the craft unchanged`);
+}
 console.log('flight ok');

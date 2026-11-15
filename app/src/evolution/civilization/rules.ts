@@ -101,9 +101,8 @@ export type Stocks = { ore: number; vol: number; fuel: number };
 // light, 2 + one per METAL_SHIP u of metal your miners bring in, up to 6; frigates, slow heavy lasers, one from tier 3
 // and two from tier 5. A laser hit breaks a body up to `breaks` of you into at most `pieces` (Breaking below). A probe or
 // fighter run fires at most `bursts` bursts of `rounds` at `rate` a second, then the ship breaks off and cools `cool` s.
-// Each class its own feel (user, 2026-11-15): fighters fire fast and light, probes slow and weak; the frigate (ARMS.lance)
-// and rockets (ROCKET) are slow but heavy. Builds are
-// automatic, one at a time (stage.ts); miners have their own cap (mining.ts minerCap).
+// Fighters fire fast and light, probes slow and weak; the frigate (ARMS.lance) and rockets (ROCKET) slow but heavy. Builds
+// are automatic, one at a time (stage.ts); miners have their own cap (mining.ts minerCap).
 export const FRAG = 0.02;
 export const FLEET = {
   probe: { ore: 2, t: 4, breaks: 0.005, pieces: 3, rounds: 3, bursts: 1, cool: 5, rate: 4 },
@@ -117,7 +116,7 @@ const METAL_SHIP = 20;
 export const fleetCap = (k: ShipClass, T: number, metal: number) =>
   k === 'probe' ? T : k === 'fighter' ? Math.min(6, START_SHIPS + Math.floor(metal / METAL_SHIP)) : T >= 5 ? 2 : T >= 3 ? 1 : 0;
 
-// ---- Rockets: launched from your surface from tier 1, only at what you ordered an attack on (ships.ts rockets) inside the range,
+// ---- Rockets: launched from your surface from tier 1, only at your priority target (ships.ts rockets) inside the range,
 // ROCKET.ore each, one every ROCKET.reload s (× the energy fed: slower when the reactors run dry). Guided (guns.ts steer:
 // boost, acc R/s², turn rad/s, cone rad, burn s, blind s; arc rad: off the aim line, sides alternating; nav: the aim error
 // is closed at nav / time-to-go, a lazy arc from afar), cruise `speed` R/s on top of you (slower than a round: a rocket is seen coming): a body of `share` breaks into `pieces`, a bigger one or a
@@ -127,9 +126,9 @@ export const ROCKET = { ore: 2, reload: 8, speed: 12, share: [0.01, 0.25], piece
 export const rocketRange = (T: number) => 8 + 2 * clamp(T, 1, TIER_MAX); // R off your surface
 export const rocketSpread = (T: number) => (0.08 * (TIER_MAX - clamp(T, 1, TIER_MAX))) / (TIER_MAX - 1); // rad: ±0.6 R at 8 R off you at tier 1
 
-// ---- Breaking (ships.ts, stage.ts): your guns break only the body you order them at,
-// into pieces you can take: under `edible` a body burns up whole in your air or lands under HIT_MIN, so it feeds you. Pieces
-// a piece cap left unsafe are kicked sideways to miss (deflect). No cascade to dust.
+// ---- Breaking (ships.ts, stage.ts): your guns break only your priority target, into pieces you can take: under `edible`
+// a body burns up whole in your air or lands under HIT_MIN, so it feeds you. Pieces a piece cap left unsafe are kicked
+// sideways to miss (deflect). No cascade to dust.
 export const KEEP = 0.9; // share of a broken body that flies on as pieces; the rest is dust (it joins you when you have air)
 export const CUT = 0.8; // pieces are cut to this share of the edible size (on average)...
 export const CUT_SPREAD = 0.25; // ...unequal by this pieceShares spread (stage.ts cut): the largest 1.25 × the mean, still under it
@@ -154,7 +153,7 @@ export function edible(sb: number, v: number, vs: number, R: number) {
   }
   return Math.max(Math.min(sb, BURN_MAX), lo);
 }
-/** The size guns cut pieces under: what burns up whole in your air (all of it feeds you), else edible. Measured at 0.26 atm, pieces cut to edible fed you 68-71% of a 1.5-1.9% rock. */
+/** The size guns cut pieces under: what burns up whole in your air (all of it feeds you), else edible. */
 export const pieceSize = (sb: number, v: number, vs: number, R: number) => (sb > 0 ? Math.min(sb, BURN_MAX) : edible(sb, v, vs, R));
 /**
  * A body of `share` of you broken into at most `cap` pieces (KEEP of it, `piece` the mean) cut under the edible size `e`, the
@@ -186,7 +185,7 @@ export function deflect(px: number, py: number, wx: number, wy: number, contact:
 // burn-up) or is as heavy as you is not its business. It regenerates SHIELD_REGEN of its maximum per second. Weapon fire
 // is different (shieldShot): every hit counts, and it stops the mending for SHIELD_STUN s.
 export const SHIELD_K = 30; // K per level
-const SHIELD_REGEN = 0.01;
+export const SHIELD_REGEN = 0.01;
 export const SHIELD_FLOOR = -0.15;
 export const SHIELD_STOP = 0.025; // share of your mass a full level stops at up to the stick speed
 export const SHIELD_LEVELS = 3;
@@ -376,8 +375,8 @@ export const ARMS = {
 export const BURN_U = 0.2;
 export const BURN_WAVE = 20;
 export const LANDING = HIT_MIN;
-export const STRIKE = 14; // your radii off your surface to a rival's: your fleet engages (from RECALL at the world you order it at)...
-export const RECALL = 18; // ...and is recalled past this, on another target, with your shield down (then CALM_S s) or that order cancelled; never for losses
+export const STRIKE = 14; // your radii off your surface to a rival's: your fleet engages (from RECALL at your priority world)...
+export const RECALL = 18; // ...and is recalled past this, on another target, with your shield down (then CALM_S s) or that priority cleared; never for losses
 export const CALM_S = 20;
 export const RESERVE = 20; // u of ore your silo leaves for slugs
 // The siege (ships.ts defend, nav.ts ringStep / siegePost), your radii: the wing flies a ring `ring` past the enemy world's
@@ -387,13 +386,12 @@ export const RESERVE = 20; // u of ore your silo leaves for slugs
 export const SIEGE = { ring: [3, 3.8], clear: 2.5, wing: 5, home: 1, pass: 4, out: 3, foe: 6 };
 /** Fighters in the siege wing: all but SIEGE.home, at most SIEGE.wing (recounted every frame). */
 export const siegeWing = (fighters: number) => clamp(fighters - SIEGE.home, 0, SIEGE.wing);
-/** Your sortie's switch, its calm (s before it may start again), and `by`: only your order brought it on (outside STRIKE). */
+/** Your sortie's switch, its calm (s before it may start again), and `by`: only your priority brought it on (outside STRIKE). */
 export type Sortie = { on: boolean; calm: number; by?: boolean };
 /**
- * One frame of your sortie (stage.ts engage) on the hostile world whose surface is `gap` of your radii off yours (Infinity:
- * none): on by itself within STRIKE, from RECALL when you ordered it at that world (`ordered`), with your shield `s` up and no
- * calm; off past RECALL, on another target (`moved`), with your shield down (then CALM_S), or when the order that alone
- * brought it on is cancelled outside STRIKE. Losses never recall it. Says when it changed.
+ * One frame of your sortie (stage.ts) on the hostile world whose surface is `gap` of your radii off yours (Infinity: none):
+ * on within STRIKE, or RECALL while it is your priority (`ordered`), shield `s` up and no calm; off past RECALL, on another
+ * target (`moved`), shield down (then CALM_S), or that priority cleared outside STRIKE. Losses never recall it. Says when it changed.
  */
 export function sortieStep(st: Sortie, gap: number, ordered: boolean, s: number, moved: boolean, dt: number) {
   st.calm = Math.max(0, st.calm - dt);
@@ -422,17 +420,10 @@ export function weaponHit(sh: Shield, w: { k: number }, P: number, arm: Arm, k: 
   }
   return { P, burn, landed, through };
 }
-/** Sustained K/s on a shield: `n` hits of `k` K, a share `hit` landing, every `cycle` s. */
-export const kps = (k: number, n: number, hit: number, cycle: number) => (k * n * hit) / cycle;
-/** Seconds to break a full shield of `level` under fire `f` (K/s each, and the share of its cycle it leaves past the stun, when the shield mends: 0 if never). */
-export function ttk(level: number, f: { kps: number; idle: number }[]) {
-  const C = SHIELD_K * level, net = f.reduce((a, q) => a + q.kps, 0) - SHIELD_REGEN * C * Math.min(...f.map((q) => q.idle));
-  return net > 0 ? C / net : Infinity;
-}
 /** A rival war wave or your sortie, weighed: fighters + 5 × frigates + 2 × shield level. */
 export const strength = (fighters: number, frigates: number, level: number) => fighters + 5 * frigates + 2 * level;
 
-// ---- Pirate fleets: the design is in pirates.ts's header (and docs/gameevents.md); the numbers are here.
+// ---- Pirate fleets: the design is in docs/gameevents.md (and pirates.ts's header); the numbers are here.
 export const PIRATE_FIRST = [30, 60]; // s into the run before the first fleet
 export const PIRATE_GAP = 40; // mean s between fleets (Poisson)
 export const PIRATE_CALM = 60; // s with no attack on you after LIFE or the last attack...

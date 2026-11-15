@@ -76,6 +76,7 @@ export const steps = (dt: number) => Math.max(1, Math.ceil(Math.min(dt, MAX_DT) 
  * flies in space), and the velocity changes by at most GEE × `acc` a second (above `top` it only slows).
  */
 export function thrust(c: Craft, acc: number, turn: number, h: number, fvx = 0, fvy = 0, top = Infinity) {
+  if (h <= 0) return; // a hit-stop frame: burn and bank would be 0/0
   if (c.hurt) [c.hurt, acc] = [Math.max(0, c.hurt - h), acc * HURT_ACC];
   const x0 = c.vx, y0 = c.vy, w0 = Math.hypot(want.x, want.y), k = w0 > top ? top / w0 : 1;
   if (fvx * fvx + fvy * fvy > top * top) fvx = fvy = 0; // a frame faster than its top is not flown (no riding your velocity)

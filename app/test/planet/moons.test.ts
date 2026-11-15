@@ -29,6 +29,8 @@ assert.ok(moons.includes('moonCap(') && !moons.includes('MOON_SHARE[1]'), 'moon 
 // for "a rival's rock"), the rival lets go of a rock you now own, and the rock turns against the world's orbit round you
 // (capture.test.ts: a still player never matches it). No siege ring round the enemy world.
 assert.ok(moons.includes('guard?.own?.(b) === false'), "a rival's rock on its circle is catchable");
+// A ground moon's gas is air: planet/stage.ts runs moons.update inside rules.ts fedAir (rules.test.ts measures it).
+assert.ok(read('evolution/planet/stage.ts').includes('fedAir(sky, me, () => moons.update('), 'moons.update runs inside fedAir');
 const rivals = read('evolution/civilization/rivals.ts'), combat = read('evolution/civilization/combat.ts');
 assert.ok(rivals.includes('|| ctx.moons.owns(rock)') && rivals.includes('-r.turn * ROCK_W'), 'the rival gives up a stolen rock; its rock turns against its orbit');
 assert.ok(!combat.includes('sg.ring') && !combat.includes('.circle(sg.'), 'no siege ring');

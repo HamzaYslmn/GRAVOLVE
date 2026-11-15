@@ -75,8 +75,8 @@ const MOON_D = 3; // world radii: the moon's circle
 const GUARD_TURN = 2.5; // rad/s at most while swinging to meet a threat
 const GUARD_LOOK = 3; // s ahead it watches for bodies on course
 
-/** Keeps a living rival world's guard moon: catch, circle, swing to meet what comes in fast; let go when stolen or gone. */
-export function tendMoon(b: Body, around: Body[], dt: number) {
+/** Keeps a living rival world's guard moon (never `you`): catch, circle, swing to meet what comes in fast; let go when stolen or gone. */
+export function tendMoon(b: Body, around: Body[], you: Body, dt: number) {
   const R = b.rival!, e = R.entry, bm = b.motion;
   let mo = R.moon;
   if (mo && (!mo.m || mo.moon || !b.m || !e || e.life.progress <= 0)) [mo.held, mo, R.moon] = [false, undefined, undefined]; // stolen (now your moon), broken, or no life to guard
@@ -84,7 +84,7 @@ export function tendMoon(b: Body, around: Body[], dt: number) {
   if (!mo) {
     let best = CATCH * b.r;
     for (const o of around) {
-      if (o === b || !o.m || o.rival || o.moon || o.held || o.meteor || o.m < MOON_SHARE[0] * b.m || o.m > MOON_SHARE[1] * b.m) continue;
+      if (o === b || o === you || !o.m || o.rival || o.moon || o.held || o.meteor || o.m < MOON_SHARE[0] * b.m || o.m > MOON_SHARE[1] * b.m) continue;
       const d = Math.hypot(o.motion.x - bm.x, o.motion.y - bm.y);
       if (d < best) [best, mo] = [d, o];
     }
@@ -127,7 +127,7 @@ export function steerRival(b: Body, around: Body[], you: Body, dt: number) {
       if (gap > range) continue;
       // On course and too fast to touch safely (closing above the stick speed in their diameters): step aside.
       const vx = o.motion.vx - m.vx, vy = o.motion.vy - m.vy, v2 = vx * vx + vy * vy, along = -(dx * vx + dy * vy);
-      if (o !== R.prey && along > 0 && v2 > (V_STICK * D) ** 2) {
+      if (along > 0 && v2 > (V_STICK * D) ** 2) {
         const t = along / v2, mx = dx + vx * t, my = dy + vy * t, miss = Math.hypot(mx, my); // its offset at closest approach
         if (t < DODGE_S && miss < 1.3 * (b.r + o.r)) {
           const w = 1.5 * (1 - t / DODGE_S), s = miss || 1, side = miss ? 1 : 0;

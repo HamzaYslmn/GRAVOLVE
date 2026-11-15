@@ -3,10 +3,10 @@
 // you, and the Hungry one ends ahead of the Careful one; each forges a world (melts through, reaches LIFE in a few minutes
 // as a careful player does, never crosses the gas line); round robin skips the dead and those on the map.
 import assert from 'node:assert/strict';
-import { A_ENG, alarmStep, BAND, DODGE, evade, GATHER_U, MASS_S, newWave, next, ODDS, REST_S, restStep, roster, sidestep, stance, stationStep, STOCK_RATE, tick, volley, want, WAVE_COST, WAVE_S, waveSize, waveStep, WORLD_FLAGS, type Mood, type Temper, type Wave } from '../../src/evolution/rivals/ledger.ts';
+import { A_ENG, alarmStep, BAND, DODGE, evade, GATHER_U, MASS_S, newWave, next, ODDS, REST_S, restStep, roster, sidestep, stance, stationStep, STOCK_RATE, tick, volley, want, WAVE_COST, WAVE_S, waveStep, WORLD_FLAGS, type Mood, type Temper, type Wave } from '../../src/evolution/rivals/ledger.ts';
 import {
   ARMS, BEATEN, CALM_S, DRIVER_COOL, FLEET, raid, RESERVE, RIVAL_AIM, RIVAL_FIRE, RIVAL_LEAD, rivalFrigates, rivalLevel, rivalSalvo, SALVO_LEAD, salvo, SHIELD_K, shieldMax, shieldRegen,
-  shieldShot, SIEGE, siegeWing, SLUG_ORE, SLUG_SHARE, SLUG_SPEED, START_ORE, START_SHIPS, strength, weaponHit, type Shield,
+  shieldShot, SIEGE, siegeWing, SLUG_ORE, SLUG_SHARE, SLUG_SPEED, START_ORE, START_SHIPS, strength, waveFighters, weaponHit, type Shield,
 } from '../../src/evolution/civilization/rules.ts';
 import { COMP, G_WORLD, gravitates, impactHeat, pairPull, pullMass, radiusOf, youPull } from '../../src/evolution/asteroid/rules.ts';
 import { createMissiles, seeker } from '../../src/evolution/civilization/guns.ts';
@@ -71,13 +71,13 @@ console.log(`rival worlds ok: ${[...marks].map(([e, k]) => `${e.name} melts at $
   assert.equal(stance({ ...mood, temper: 'raider', stock: WAVE_COST.raider * 2 }), 'attack', 'a Raider attacks on less stock');
   assert.equal(stance({ ...mood, temper: 'careful', stock: WAVE_COST.careful * 2, shield: 0.7 }), 'defend', 'a Careful one defends sooner');
   // The odds (its strength ÷ yours) gate an attack by temper: Careful 1.2, Hungry 0.8, Raider 0.6.
-  const odds = strength(3 + waveSize(2), rivalFrigates(2), 2) / strength(4, 1, 2);
+  const odds = strength(3 + waveFighters(2), rivalFrigates(2), 2) / strength(4, 1, 2);
   for (const t of ['careful', 'hungry', 'raider'] as Temper[]) {
     const m = { ...mood, temper: t, stock: 1e3 };
     assert.equal(stance({ ...m, odds: ODDS[t] }), 'attack', `${t} attacks at its odds`);
     assert.equal(stance({ ...m, odds: ODDS[t] - 0.01 }), 'gather', `${t} waits below its odds`);
   }
-  console.log(`odds: an L2 rival (3 home + ${waveSize(2)} wave fighters, ${rivalFrigates(2)} frigate) against your 4 fighters and a frigate at L2: ${odds.toFixed(2)} → ${(['careful', 'hungry', 'raider'] as Temper[]).filter((t) => odds >= ODDS[t]).join(', ')} attack`);
+  console.log(`odds: an L2 rival (3 home + ${waveFighters(2)} wave fighters, ${rivalFrigates(2)} frigate) against your 4 fighters and a frigate at L2: ${odds.toFixed(2)} → ${(['careful', 'hungry', 'raider'] as Temper[]).filter((t) => odds >= ODDS[t]).join(', ')} attack`);
 
   // A wave masses MASS_S s in view (time out of view does not count) before it leaves.
   const w = newWave(3);
@@ -158,8 +158,8 @@ console.log(`rival worlds ok: ${[...marks].map(([e, k]) => `${e.name} melts at $
       }
       stock += STOCK_RATE * L * 0.1;
       if (!wave && (mineT -= 0.1) <= 0) [mineT, stock] = [15, stock + GATHER_U];
-      const st = stance({ temper, wave: !!wave, shield: b.s / shieldMax(b), fleetShort: false, far: false, seen: t, stock, level: L, odds: strength(L + 1 + waveSize(L), frig, L) / yours });
-      if (st === 'attack' && !wave) [wave, stock, lanceT, siloT] = [newWave(waveSize(L) + frig, frig), stock - WAVE_COST[temper] * waveSize(L), Lc.reload, M.glow];
+      const st = stance({ temper, wave: !!wave, shield: b.s / shieldMax(b), fleetShort: false, far: false, seen: t, stock, level: L, odds: strength(L + 1 + waveFighters(L), frig, L) / yours });
+      if (st === 'attack' && !wave) [wave, stock, lanceT, siloT] = [newWave(waveFighters(L) + frig, frig), stock - WAVE_COST[temper] * waveFighters(L), Lc.reload, M.glow];
       if (wave) {
         const was = wave.phase;
         waveStep(wave, 0.1, true);

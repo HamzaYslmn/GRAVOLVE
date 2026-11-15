@@ -7,7 +7,7 @@
     "build": "tsc --noEmit && vite build --base=./",
     "preview": "vite preview",
     "test": "node --test \"test/**/*.test.ts\"",
-    "bench": "node test/civilization/nav.test.ts --bench && node test/civilization/pirates.test.ts --bench"
+    "bench": "node test/civilization/nav.test.ts --bench && node test/civilization/pirates.test.ts --bench && node test/asteroid/field.test.ts --bench"
   },
   "dependencies": {
     "pixi.js": "^8.23.0"

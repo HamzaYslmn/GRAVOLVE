@@ -131,6 +131,6 @@ for (let i = 0; i < 91; i++) {
     }
   }
   const ms = (performance.now() - t0) / 1000;
-  console.log(`lattice: ${N} cells, ${(ms * 1000).toFixed(1)} µs a frame (1,000 frames, Node; no puts)${sink < 0 ? '!' : ''}`);
+  console.log(`cost: lattice ${N} cells, ${(ms * 1000).toFixed(1)} µs a frame (1,000 frames, Node; no puts)${sink < 0 ? '!' : ''}`);
 }
 console.log('lattice: ok');

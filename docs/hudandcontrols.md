@@ -155,7 +155,7 @@ Pattern from the old game: a milestone plus one self-imposed constraint costs a 
   - `gravolve.ach`: `{id: time}`, merged across tabs before every save, so a save never drops another tab's unlocks.
   - `gravolve.best`: peak mass and the fastest Age I / II / III (run seconds), saved the moment an age completes; shown on the game-over card.
   - `gravolve.hints`: the hints already shown.
-  - Settings `gravolve.*`: FPS cap (VSync, 30, 60, 120, 240, Unlimited (benchmark)), show FPS, sound, debug mode, volume (default 20%).
+  - Settings `gravolve.*`: FPS cap (VSync, 30, 60, 120, 240, Unlimited (benchmark)), show FPS (off by default), sound, debug mode, volume (default 20%).
 - Settings: a gear button opening a small panel with those choices, the achievements gallery button and a collapsible "How to play" (controls, eating, the goal, a fun fact: metal rocks are about twice as sturdy as stone).
 
 Also built in waves 2–4: the mining reach as a faint gold gauge, a thin line with inward ticks (the moon slots are broken cyan circles) [G]; the grain line of a mining link was deleted 2026-11-14, the only stream left is the manual moon grind

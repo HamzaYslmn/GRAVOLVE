@@ -12,7 +12,7 @@ import { createStarStage, type StarState } from '../star/stage';
 import { createWorldHud } from './hud';
 import { createMoons } from './moons';
 import {
-  beforeClimate, climate, envelope, GAS_WARN, gasPath, habitability, impact, lifeStep, nextGoal, onGasLine, PLANET_M, PROTO_M, RAIN_GAP, seaCover, lifeName, stageOf, THIEF, tierIndex, tierName,
+  beforeClimate, climate, envelope, fedAir, GAS_WARN, gasPath, habitability, impact, lifeStep, nextGoal, onGasLine, PLANET_M, PROTO_M, RAIN_GAP, seaCover, lifeName, stageOf, THIEF, tierName,
   type Life, type Sky,
 } from './rules';
 
@@ -21,8 +21,6 @@ const NEWS_WAIT = 4; // s after the handover before the stage's own news: Age I'
 const RAIN_BACK = 0.9; // share of the water you brought that the first rain restores (stands in for outgassing)
 /** One toast per step of the ladder: the molten/solid and rocky/plain names of one mass step share a key. */
 const tierKey = (name: string) => (name === 'Protoplanet' || name === 'Dwarf planet' ? 'dwarf' : name === 'Rocky planet' || name === 'Planet' ? 'planet' : name);
-
-export { tierIndex };
 
 // Age II (Worlds), created by main.ts at AGE_GOAL. Keeps Age I's body, field and collisions and adds climate,
 // magnetic field, life, impact setbacks, world tiers, its HUD rows and the climate drawn on the body
@@ -103,12 +101,11 @@ export function createPlanetStage(layer: Container, me: Body, renderer: Renderer
     /** `dt` game time, `real` wall time (the HUD); `near` = bodies around you, `zoom` the camera's, `aimTarget` the HUD target (moons.ts). */
     update(dt: number, real: number, near: Body[], zoom: number, aimTarget: () => Body | undefined) {
       age += dt;
-      moons.update(dt, near, zoom, aimTarget, civ);
+      fedAir(sky, me, () => moons.update(dt, near, zoom, aimTarget, civ)); // a ground moon's gas is air
       if (moons.stolen >= THIEF) seen.add('thief'); // Master thief (core/achievements.ts), not a toast
       if (!me.m) return;
       // Age III: the star's light (warmth, dose, Dyson energy), your orbit and the Dyson sphere; read by the climate and the civilization below.
       if (star) light = star.update(dt, real, zoom, !!aimTarget(), state?.pressure ?? 0);
-      if (!me.m) return;
       const m0 = me.m, leaked = climate(sky, me, dt, light.warm);
       if (leaked) {
         const m1 = me.m; // vapour lost to space: same shape, smaller

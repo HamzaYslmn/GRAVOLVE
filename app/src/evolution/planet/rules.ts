@@ -3,11 +3,10 @@
 // vapour leaking away), habitability (the doc's four scores) and life (one step: LIFE, an intelligent species).
 // Age II heat is inner heat, impacts, meals and radioactive rock; star light arrives in Age III.
 import { boilingK, heatOfK, kelvin, LATENT, MELT_K, pressure, waterState, type WaterState } from '../../core/water.ts';
-import { clamp } from '../../core/rng.ts';
+import { clamp01 } from '../../core/rng.ts';
 import { matchQuality, matchStep, slotRadius } from '../../core/orbits.ts';
-import { AGE_GOAL, blend, COOL, MOLTEN, START_R, TIERS, uncapR, type Comp } from '../asteroid/rules.ts';
+import { AGE_GOAL, blend, COOL, MOLTEN, START_R, tierAt, TIERS, uncapR, type Comp } from '../asteroid/rules.ts';
 
-const clamp01 = (x: number) => clamp(x, 0, 1);
 /** 0 at a, 1 at b (either order), clamped. */
 const ramp = (a: number, b: number, x: number) => clamp01((x - a) / (b - a));
 
@@ -45,11 +44,11 @@ export function tierName(m: number, comp: Comp, heat: number, line = gasPath(com
   if (m >= SUPER_M) return line ? 'Mini-Neptune' : 'Super-Earth';
   if (m >= PLANET_M) return solidOf(comp) >= 0.6 ? 'Rocky planet' : 'Planet';
   if (m >= PROTO_M) return heat > MOLTEN ? 'Protoplanet' : 'Dwarf planet';
-  return TIERS[TIERS.filter(([t]) => m >= t).length - 1][1];
+  return TIERS[tierAt(m)][1];
 }
 
 /** Tier count over the whole ladder (Age I tiers + Age II mass steps), for the tier-up reward. */
-export const tierIndex = (m: number) => TIERS.filter(([t]) => m >= t).length - 1 + AGE2_STEPS.filter((t) => m >= t).length;
+export const tierIndex = (m: number) => tierAt(m) + AGE2_STEPS.filter((t) => m >= t).length;
 
 /** The next named goal by mass on your line; `need` = the composition the doc asks for. Undefined: a rocky world's goal is life. */
 export function nextGoal(m: number, comp: Comp, line = gasPath(comp)): { name: string; mass: number; need?: string } | undefined {
@@ -100,6 +99,8 @@ export type Sky = { vapor: number; gas0: number };
 
 /** Call before the player's update (it boils water): the gas that appears until `climate` is kept steam. */
 export const beforeClimate = (sky: Sky, b: World) => void (sky.gas0 = b.m * gasOf(b.comp));
+/** Runs `feed` (moons ground onto you) between beforeClimate and climate: the gas it brings is air, not steam that rains out. */
+export const fedAir = (sky: Sky, b: World, feed: () => void) => { const g = b.m * gasOf(b.comp); feed(); sky.gas0 += b.m * gasOf(b.comp) - g; };
 
 /**
  * One climate step after the player's update. Changes heat, comp and mass; returns the mass leaked to space.
@@ -186,7 +187,6 @@ export const SETTLE_V = 2; // own diameters/s
 const BOMB_FLOOR = 0.15;
 const BOMB_S = 120;
 export const bombardment = (settled: number) => BOMB_FLOOR + (1 - BOMB_FLOOR) * Math.exp(-Math.max(0, settled) / BOMB_S);
-/** Life stage index (−1: none yet) for a progress. */
 /** 0 once life holds, −1 before (WorldState.life). */
 export const stageOf = (progress: number) => (progress >= LIFE_S ? 0 : -1);
 export const lifeName = (progress: number) => (progress >= LIFE_S ? 'Life' : progress > 0 ? 'Life emerging' : 'No life');
@@ -214,6 +214,7 @@ export function impact(life: Life, kelvin: number): number | 'soft' {
 // ---- Moons (planet/moons.ts holds them on core/orbits.ts slots)
 // Slots: min(5, 1 + ⌊2·log10(m / 10^3.5)⌋) = 1 at Planetoid, 2 at 10^4, 3 at 10^4.5, 4 at 10^5, 5 at 10^5.5.
 export const MOON_SHARE = [0.002, 0.125]; // by mass: a body 0.2–12.5% of you can be caught (= GIANT_HIT); by size see MOON_R
+export const MOON = 0x9fdcff; // your moons' blue (moons, the target panel)
 export const MOON_R = 0.45; // R: a moon is never wider than this (neighbouring rings, 1.25 R apart, never touch: stretched rocks included)
 /** The most mass a moon (mass `m`, radius `r`) may hold round you (`M`, `R`): MOON_SHARE[1] of you and no wider than MOON_R · R (same shape: its loose radius goes with ∛m). */
 export const moonCap = (m: number, r: number, M: number, R: number) => Math.min(MOON_SHARE[1] * M, m * (uncapR(MOON_R * R) / uncapR(r)) ** 3);

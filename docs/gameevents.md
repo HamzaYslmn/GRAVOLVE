@@ -50,9 +50,19 @@ gravity), shedding up to 40 ice crumbs; parked 1,275 s: 5 passes, 0 contacts (me
 
 ### Giant clash
 
-Age I only. Poisson 300 s: two giants 3–12× you meet beside you (d 1.2–3), shatter; dust ring, flash, boom, scaled shake,
-0.6 s slow motion; never killed a still player in 120 s (measured). The clash is skipped when the heavier giant would
-pass M_MAX (10^4), so it is an Age I show (checked, `field.ts` `giants`). Clashes at every size: Planned → Clash at every
+Age I only, one at a time. Poisson 300 s: two giants 3–12× you (the lighter at least half the heavier, no net momentum)
+start off screen and drift in over 20–40 s (`CLASH_S`, 0.7–1.8 of their diameters/s), each steered toward the other every
+frame so rocks and gravity cannot knock it off line. They meet across your line of sight, on screen near its edge: 0.85–0.95
+of the way from you to the edge, per axis (`field.ts` `giants`; 544–608 u sideways, 306–342 u up or down for a 640 × 360 u half view).
+At contact the staged impact replaces the drift: they hit at the closing speed rules.ts `damage` gives for the heavier's
+`CLASH_D` 1.2–3, so both shatter; dust ring, flash, boom, scaled shake, 0.6 s slow motion. Dev hook: `field.clash()`
+brings the next one now. Measured (`test/asteroid/field.test.ts`, a parked player holding its place, 8 seeds, 6 met):
+met after 24.6–36.6 s, impact 37–76 diam/s, the heavier's damage 1.20–2.86, closest pass 19.9–49.4 R of yours (30 seeds:
+never under 15.5 R; 9.2 R when they met 0.55–0.9 short half views from you); a giant never touched a parked player. A
+bigger body swallows a giant on its way in about 1 of 5 (2 of the 8 test seeds): that clash never happens. A coasting
+player can still drift into a giant's path (eaten in 2 of 30 seeds, 3 of 30 before): the field's own pull and meals move a
+coasting start-size body 34–1519 u in 30 s, the giants' pull only ~17 u (median, clash run − same seed without). The
+clash is skipped when the heavier giant would pass M_MAX (10^4), so it is an Age I show (checked, `field.ts` `giants`). Clashes at every size: Planned → Clash at every
 size.
 
 ### Pirates

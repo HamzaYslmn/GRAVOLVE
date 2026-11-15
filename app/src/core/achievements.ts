@@ -1,13 +1,12 @@
 // Achievements: a pure list plus a tracker, no DOM (ui/achievements.ts draws them, main.ts feeds them). main.ts builds
 // a snapshot about twice a second and reports moments the snapshot cannot see (a meal, a shatter, a setback, Age I, a
 // respawn, the end of the run). Each unlocks once, ever; unlocks persist through the Store main.ts hands in, as {id: unlock time}.
-import { AGE_GOAL } from '../evolution/asteroid/rules.ts';
+import { AGE_GOAL, type Comp } from '../evolution/asteroid/rules.ts';
 import { BROWN_DWARF_M, PLANET_M } from '../evolution/planet/rules.ts';
 import { DONE } from '../evolution/star/rules.ts';
 
 const TOP = 0; // WorldState.life once life holds (planet/rules.ts stageOf)
 
-type Comp = { rock?: number; metal?: number; ice?: number; gas?: number; radio?: number };
 /** Your world (planet stage) at snapshot time; absent in Age I. */
 export type WorldSnap = {
   water: string; waterShare: number; life: number; lifeSpeed: number; envelope: boolean; moons: number; slots: number; magnet: number;
@@ -73,7 +72,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   a('Mastery', 'giant', 'Giant killer', 'Break a heavier body to dust and live', (_, r) => r.giant),
   a('Mastery', 'eden', 'Eden', 'Life speed 90% for a minute', (_, r) => r.timers.eden >= 60),
   a('Mastery', 'chain', 'Unbroken chain', 'Life with no setback', (s, r) => life(s) === TOP && r.chain === 'on'),
-  a('Mastery', 'house', 'Full house', 'Four moon slots, all filled', (s) => (s.world?.moons ?? 0) >= 4 && s.world!.moons >= s.world!.slots),
+  a('Mastery', 'house', 'Full house', 'Four or more moon slots, all filled', (s) => (s.world?.moons ?? 0) >= 4 && s.world!.moons >= s.world!.slots),
   a('Mastery', 'thinker', 'Fast thinker', 'Life within 15 min', (s) => life(s) === TOP && s.t <= 900),
   a('Mastery', 'duelist', 'Duelist', 'Beat a rival world', (s) => !!s.world?.seen('beaten')),
   a('Mastery', 'bounty', 'Bounty', 'Destroy a pirate fleet', (s) => !!s.world?.seen('pirates-down')),

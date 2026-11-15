@@ -7,15 +7,15 @@ import { rockAtlas } from './evolution/asteroid/atlas';
 import { absorb, drop, type Body, type Hit } from './evolution/asteroid/body';
 import { burnStreak, impactFeedback } from './evolution/asteroid/feedback';
 import { createAsteroidField } from './evolution/asteroid/field';
-import { BIOME_SKY, biomeNews, createHud, describe, rosterNews } from './evolution/asteroid/hud';
+import { BIOME_SKY, biomeNews, createHud, describe, noteHit, rosterNews } from './evolution/asteroid/hud';
 import { createMinimap } from './ui/minimap';
 import { createDebug } from './ui/debug';
 import { createNews, toast, type News, type RunNews } from './ui/toast';
-import { BROWN_DWARF_M, LIFE_S } from './evolution/planet/rules';
+import { BROWN_DWARF_M, LIFE_S, tierIndex } from './evolution/planet/rules';
 import { scoreOf } from './core/score';
 import { AGE_GOAL, MOLTEN, TIERS } from './evolution/asteroid/rules';
 import { createPlayer } from './evolution/asteroid/player';
-import { createPlanetStage, MILESTONES, tierIndex, type PlanetStage } from './evolution/planet/stage';
+import { createPlanetStage, MILESTONES, type PlanetStage } from './evolution/planet/stage';
 import { createCombat, type Combat } from './evolution/civilization/combat';
 import { createSpheres } from './evolution/asteroid/sphere';
 import { createCamera } from './core/camera';
@@ -67,7 +67,7 @@ const sfx = createSfx();
 const gameArea = { halfW: 640, halfH: 360 };
 const kit: Kit = { input, glow, fx, canvas: app.canvas, field: () => field, view: camera.state, area: gameArea, sfx };
 const gameHud = createHud();
-const minimap = createMinimap(); // debug mode: biome map (settings)
+const minimap = DEBUG ? createMinimap() : undefined; // debug mode: biome map (settings)
 // Debug mode (ui/debug.ts), localhost dev server only (settings DEBUG): one-click stage jumps and star helpers; a touched run saves no records.
 const debugUi = DEBUG ? createDebug({ me: () => player.body, planet: () => planet, field: () => field, over: () => !!run.cause, touched: () => void (run.debug = true) }) : undefined;
 // Achievements: a snapshot of what already exists about twice a second, plus moments from the hits.
@@ -103,25 +103,28 @@ const say: News = (k, t, sub) => (k === 'beaten' && run.worlds++, runNews.say(k,
 // Enemy ships shot down by this combat (rival patrols shooting pirates near you count too).
 const kills = () => combat.pirates.deaths.shot + combat.rivals.deaths.shot;
 const runScore = () => scoreOf({ ...run, ships: run.ships + kills() });
+/** The old player, planet stage and combat go; a fresh player at (x, y) with its own impact feedback and run news. */
+function freshPlayer(x: number, y: number) {
+  player?.destroy();
+  planet = void planet?.destroy();
+  combat?.destroy();
+  achUi.closeGallery();
+  player = createPlayer(playerLayer, atlas[0], glow, spheres, input.axis, x, y, () => planet?.moons.frame()); // frame: the touch assist
+  feel = feelFor(player.body);
+  runNews = createNews(MILESTONES);
+  return player.body;
+}
 function startRun() {
   for (const c of rockLayer.removeChildren()) c.destroy({ children: true });
-  player?.destroy();
-  planet?.destroy();
-  planet = undefined;
   gameHud.visible = true;
   ach.newRun();
-  achUi.closeGallery();
   [achDt, eater] = [0, 0];
-  player = createPlayer(playerLayer, atlas[0], glow, spheres, input.axis, START.x, START.y, () => planet?.moons.frame()); // frame: the touch assist
-  const me = player.body;
+  const me = freshPlayer(START.x, START.y);
   run = { seconds: 0, peak: me.m, meals: 0, detail: '', start: me.m, focus: me.motion, card: 0, aged: false, debug: false, ships: 0, worlds: 0, life: false, tier: 0, linked: false, cover: 0 };
   tier = tierIndex(me.m);
-  feel = feelFor(me);
   field = createAsteroidField(rockLayer, atlas, glow, spheres, SEED + 7919 * runs++, me, onHit, (b, x, y, ux, uy, whole) => burnStreak(fx, player.body, b, x, y, ux, uy, whole));
   news = biomeNews();
   gone = rosterNews();
-  combat?.destroy();
-  runNews = createNews(MILESTONES);
   combat = createCombat(playerLayer, me, app.renderer, kit, say);
 }
 let feel: ReturnType<typeof impactFeedback>;
@@ -140,6 +143,7 @@ function onHit(h: Hit) {
   feel(h);
   combat.hit(h); // rival worlds' shields and people
   if (h.a !== me) return;
+  noteHit(h); // the speed gauge's hard-hit flash
   const p0 = planet?.life.progress;
   planet?.hit(h); // big impacts set life back
   if (h.kind === 'eat' || h.kind === 'accrete') run.meals++;
@@ -181,13 +185,8 @@ function respawn(from?: Body) {
     const room = Math.min(Infinity, ...big.map((b) => Math.hypot(b.motion.x - x, b.motion.y - y) - b.r));
     if (room > best.room) best = { x, y, room };
   }
-  player.destroy();
-  planet?.destroy();
   run.ships += kills();
-  combat.destroy();
-  if (from) best = { x: from.motion.x, y: from.motion.y, room: 0 };
-  player = createPlayer(playerLayer, atlas[0], glow, spheres, input.axis, best.x, best.y, () => planet?.moons.frame());
-  const me = player.body;
+  const { x, y } = from?.motion ?? best, me = freshPlayer(x, y);
   absorb(me, (from?.m ?? AGE_GOAL * 1.01) - me.m, from?.comp ?? old.comp); // just past the line, so it reads Planetoid
   me.heat = from ? from.heat : MOLTEN + 2;
   if (from) {
@@ -195,10 +194,7 @@ function respawn(from?: Body) {
     drop(from);
   }
   ach.moment({ kind: 'respawn' });
-  achUi.closeGallery();
-  feel = feelFor(me);
   field.follow(me);
-  runNews = createNews(MILESTONES);
   combat = createCombat(playerLayer, me, app.renderer, kit, say);
   planet = createPlanetStage(playerLayer, me, app.renderer, kit, combat, runNews);
   if (from) planet.life.progress = LIFE_S * 1.5; // the colony's people carry on (life full, with its buffer)
@@ -242,7 +238,7 @@ measureRefreshMs().then((ms) => {
     onStats: (show) => (hud.hidden = !show),
     onSound: (on) => (sfx.enabled = on),
     onVolume: (v) => (sfx.volume = v),
-    onDebug: (on) => void ((minimap.visible = on), debugUi && (debugUi.visible = on)),
+    onDebug: (on) => void (minimap && (minimap.visible = on), debugUi && (debugUi.visible = on)),
     achievements: { label: achUi.label, open: achUi.openGallery },
   });
 });
@@ -351,7 +347,7 @@ app.ticker.add((ticker) => {
   const area = Math.min(zoom, BASE_ZOOM / view);
   [gameArea.halfW, gameArea.halfH] = [width / 2 / area, height / 2 / area];
   field.update(camera.state, gameArea.halfW, gameArea.halfH, dt, (d) => combat.contacts(d), Math.max(width, height) / 2 / (BASE_ZOOM / view)); // the margin: your natural view, not the zoomed-out one
-  minimap.update(player.body.motion, gameArea.halfW, gameArea.halfH, field.biomeAt);
+  minimap?.update(player.body.motion, gameArea.halfW, gameArea.halfH, field.biomeAt);
   fx.update(dt);
   background.update({ width, height, x: world.x, y: world.y, scale: world.scale.x, base: BASE_ZOOM, web: field.webHere(), tint: BIOME_SKY[field.biomeHere()] }); // voids look dark, biomes tint the sky
   if (ticker.elapsedMS < 100) frameMs += (ticker.elapsedMS - frameMs) * 0.05; // a stall or a throttled tab isn't a frame

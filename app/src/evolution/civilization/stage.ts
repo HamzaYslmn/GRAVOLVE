@@ -1,10 +1,10 @@
+import type { Field } from '../../kit';
 import type { News } from '../../ui/toast';
 import { sfx } from '../../audio/sfx';
 import { K_PER_HEAT } from '../../core/water';
 import type { Container, Renderer } from 'pixi.js';
 import type { Fx } from '../../render/fx';
 import { absorb, compTint, drop, shed, type Body, type Hit } from '../asteroid/body';
-import type { createAsteroidField } from '../asteroid/field';
 import { burnShare, pieceShares } from '../asteroid/rules';
 import { EXTINCT, GAS_WARN, MOON_SHARE } from '../planet/rules';
 import type { Moons } from '../planet/moons';
@@ -26,34 +26,23 @@ import { slots as fleetSlots, type Power, type Slot, type SlotKey, type Yard } f
 import { createCivView } from './view';
 import { chips, CLEARED, status, type Fleet, type Target } from './orders';
 
-// Civilization: created by the planet stage when LIFE appears (an intelligent species), on top of Age II (its
-// climate, moons and life keep running). It grows and builds by itself (no tech ladder).
-// Frame order (planet/stage.ts update): moons → climate → life → civilization.update; hits come through hit() first.
-//   - It starts with city lights, a level-1 shield and START_SHIPS defence ships on patrol.
-//   - Miners work every moon you hold, faster with the tier, by rules.ts mineMix: radioactive goes to the fuel stock, metal and
-//     water are stock unless your world lacks them, gas only while the air is thin; rock stays (a bare moon still
-//     guards). They also roam (mining.ts picks the sites every RESCORE s): free bodies, debris clusters and open rival
-//     worlds inside the reach (a big one held to LINK_HOLD × it), mined while a shuttle works them; a beaten world comes
-//     down whole, in its own mix. Hits that get through kill people instead of setting life back, except ≥ EXTINCT[1].
-//   - Builds, one at a time: a frigate (from tier 3), fighters, probes, each to its own cap (rules.ts fleetCap), then
-//     shield levels; reactors burn fuel for what inner heat and the solar farms (rules.ts solar) do not cover; short of it
-//     yards, reloads and mending slow with the energy fed (rules.ts fuelBurn). Your people dig eaten rad rock into fuel (refine);
-//     with nothing to mine they dig their own world (rules.ts homeDig).
-//   - Priority target (`order`: Command on any body, rival world, enemy ship or missile, planet/moons.ts): one at a time,
-//     the same target again clears it; setting it fires nothing. Each weapon keeps its rhythm and, when it next comes free,
-//     takes it first if orders.ts status says it can hurt and reach it (`on`): fighters, probes and the frigate break rocks
-//     and rockets cut them into pieces that burn up in your air (`cut`), or chip what they cannot (orders.ts chips); every
-//     idle home fighter and the rockets take a priority ship; a fighting world is the siege. A note over it says how it
-//     stands (`tell`); it ends once the target is gone or beaten. Nothing fires at rocks without it.
-//     The shield is paid from energy first (rules.ts shieldFed); it ignores what would land under HIT_MIN.
-//   - Battles (rules.ts ARMS, docs/civilizationgameplay.md): probes and one fighter always screen (missiles first); once
-//     a rival world's surface is within STRIKE of yours (RECALL for your priority) your fleet engages by itself
-//     (`sortie`, rules.ts sortieStep): the siege wing rings and strafes it, the frigate lances it from its post on the
-//     ring, the silo fires a salvo 1 s after each lance salvo while ore ≥ RESERVE. Recalled past RECALL, on another
-//     target, with your shield down (then CALM_S) or the priority cleared; never for losses. Distance is the throttle.
-//     Weapon hits on you (struck) go through rules.ts weaponHit.
+// Civilization: made by the planet stage at LIFE, on top of Age II (frame order, planet/stage.ts: moons → climate → life →
+// this; hits come through hit() first). It grows and builds by itself (no tech ladder).
+//   - Starts with city lights, a level-1 shield and START_SHIPS patrols.
+//   - Mining (rules.ts mineMix; mining.ts picks sites every RESCORE s): every held moon, then roaming sites inside the reach
+//     (free bodies, open rival worlds; a beaten one comes down whole). Rad ore feeds the fuel stock; metal and water are stock
+//     unless your world lacks them; gas only while the air is thin. Nothing to mine: home mines (rules.ts homeDig).
+//   - Builds one at a time (rules.ts buildOrder, each class to its fleetCap, then shield levels); reactors burn fuel for what
+//     inner heat, solar and Dyson leave; the energy fed scales yards, reloads and mending (rules.ts fuelBurn).
+//   - Priority target (`order`): one at a time, the same target clears it; it fires nothing. Each weapon takes it first as it
+//     comes free if orders.ts status says it can (`on`): it breaks and cuts (`cut`) or chips (orders.ts chips); a fighting
+//     world is the siege. A note says how it stands (`tell`). Nothing fires at rocks without it.
+//   - Battles (rules.ts ARMS): within STRIKE of a rival world (RECALL for your priority) the fleet engages (`sortie`, rules.ts
+//     sortieStep): the wing rings and strafes, the frigate lances, the silo follows each lance salvo while ore ≥ RESERVE.
+//     Recalled past RECALL, on another target, shield down or priority cleared; never for losses. Hits on you: rules.ts weaponHit.
+//   - Hits that get through kill people instead of setting life back, except ≥ EXTINCT[1]; the shield ignores what lands under HIT_MIN.
 //   - While LIFE is lost: people fall ASLEEP_FALL, nothing is mined or built, the shield goes out.
-//   - Star contact (Age III) once the people need CONTACT_NEED of the energy the world makes, or CONTACT_S in.
+//   - Star contact (Age III) once the people need CONTACT_NEED of the energy made, or CONTACT_S in.
 
 export type CivState = {
   active: boolean; // LIFE holds (a wipe-out puts the civilization to sleep, people dwindle)
@@ -78,7 +67,7 @@ const TREND_S = 2; // s over which the population trend is judged
 const BUILD_GAP = 0.6; // s between builds (so a ship does not appear the frame the last one launched)
 const CONTACT_NEED = 0.8; // share of the energy made that the people need when they look for a sun
 const CONTACT_S = 300; // s into the civilization: contact at the latest
-const SCATTER = 0.5; // radii of a broken body a second: its pieces spread apart but stay on its course (at 2, a third of a 0.9% rock's pieces missed you)
+const SCATTER = 0.5; // radii of a broken body a second: its pieces spread apart but stay on its course
 const LAND_NEWS: Record<Ore, [string, string]> = {
   radio: ['Miners bring fuel', 'Rad ore feeds your reactors'],
   ice: ['Miners bring water', 'Ice from your moons fills the seas'],
@@ -86,7 +75,7 @@ const LAND_NEWS: Record<Ore, [string, string]> = {
   metal: ['Miners bring iron', 'Metal from your moons strengthens the field'],
 };
 
-export function createCivilization(layer: Container, me: Body, renderer: Renderer, fx: Fx, moons: Moons, panel: HTMLElement, news: News, field: () => ReturnType<typeof createAsteroidField>) {
+export function createCivilization(layer: Container, me: Body, renderer: Renderer, fx: Fx, moons: Moons, panel: HTMLElement, news: News, field: () => Field) {
   const view = createCivView(layer, me, renderer, fx);
   const hud = createCivHud(panel);
   const stocks: Stocks = { ore: START_ORE, vol: 0, fuel: 0 };
@@ -99,7 +88,7 @@ export function createCivilization(layer: Container, me: Body, renderer: Rendere
   let pop = P0, past = P0, trendT = TREND_S, trend = 1, build: { kind: ShipClass | 'shield'; t: number; prog: number; ore: number; vol: number } | undefined, gap = 0;
   let state: CivState | undefined, active = true, contact = false, age = 0, metal = 0, pressure = 0, gasOn = false, work = [0, 0, 0]; // metal: u your miners brought in (fighter cap); gasOn: miners bring gas (rules.ts AIR_LOW); work: industries drawing WORK_E (yard, mending, rockets)
   let room = 0; // bn of room your colonies add (star/colony.ts)
-  // Battles: what combat lends (arm), heavy fire not yet landed, the silo (s loaded, s glowing), your fleet's sortie, s to the next.
+  // Battles: what combat lends (arm), your fleet's sortie (engage).
   let arms: Arms | undefined, sortie: Siege | undefined;
   const fleetOn: Sortie = { on: false, calm: 0 }; // rules.ts sortieStep
   const wound = { k: 0 }, silo = { load: 0, glow: 0 };
@@ -331,7 +320,7 @@ export function createCivilization(layer: Container, me: Body, renderer: Rendere
         if (q && !gap && stocks.ore >= q.ore) [stocks.ore, stocks.vol, build] = [stocks.ore - q.ore, stocks.vol - q.vol, { kind: k!, t: q.t, prog: 0, ore: q.ore, vol: q.vol }];
         else if (q) queued = { kind: k!, prog: 0, ore: q.ore, vol: q.vol, wait: stocks.ore < q.ore };
       }
-      if (build && (build.prog += ((buildSpeed(pop, Math.max(K, 1e-6)) * fed) / build.t) * dt) >= 1) {
+      if (build && active && (build.prog += ((buildSpeed(pop, Math.max(K, 1e-6)) * fed) / build.t) * dt) >= 1) {
         const a = Math.random() * Math.PI * 2;
         sfx()?.play(build.kind === 'shield' ? 'shield' : 'launch', 0.6, 1);
         if (build.kind === 'frigate') {
@@ -349,7 +338,7 @@ export function createCivilization(layer: Container, me: Body, renderer: Rendere
       }
 
       // Mining: every moon, MINE_RATE × tier of its starting mass a second, whatever the shuttles do; a bare moon stays. Then home mines (rules.ts homeDig).
-      if (active) for (const m of list) {
+      if (active && dt > 0) for (const m of list) { // a hit-stop frame mines nothing: no false "mined out"
         const b = m.body;
         if (!b.m) continue;
         if (!mined.has(b)) mined.set(b, b.m);

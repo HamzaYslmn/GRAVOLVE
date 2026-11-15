@@ -7,6 +7,7 @@ import type { Rock } from './atlas';
 import { gap, phys, rockBody, shed, tickBody, type Body } from './body';
 import type { Spheres } from './sphere';
 import { createWells } from './wells';
+import { EXTINCT } from '../planet/rules';
 import { blend, BURN_MAX, burnShare, collide, COMP, MOLTEN, critSpeed, DEATH_D, density, fallSpeed, GRAZE, reachGround, START_R, TOP, worldOpts } from './rules';
 
 // The player: an asteroid body steered by input, growing by eating rocks (body.ts). Thrust rises slower
@@ -36,8 +37,6 @@ const BOIL_THRUST = 0.6; // extra while thrusting
 const JET = 0.25;
 const ROCK_BONUS = 0.2; // the doc's rock path: +20% of a meal's rock mass
 const AIM_RANGE = 5; // player radii between surfaces at which the nearest rock shows its well
-const HARMLESS_K = 20; // K delivered: below this a hit costs life nothing (planet/rules.ts EXTINCT[0])...
-const WIPE_K = 150; // ...from this it wipes life out (EXTINCT[1]): red on a solid world
 const COLORS = { eat: 0x5fe08a, messy: 0xffd166, bounce: 0xff9f43, broken: 0xff4fa8, death: 0xff2d4a };
 const THREAT_RANGE = 12; // player radii between surfaces at which a heavier body shows its well
 const LOOKAHEAD = 3; // s ahead at which bodies on your course show their wells
@@ -78,8 +77,8 @@ export function createPlayer(layer: Container, rock: Rock, glow: Texture, sphere
    * What touching `t` would do, falling in included (rules.ts collide regimes, by worldOpts): green merge, yellow partial
    * accretion, orange graze or bounce, pink you break, red it eats you or the hit destroys you. Age I and a molten world
    * (heat > MOLTEN) read the regimes as they are: what you would eat is green. A solid Age II world reads the hit's heat
-   * (rules.ts worldHeat) instead: green if it burns up whole in your air or lands under HARMLESS_K with
-   * no damage, orange up to WIPE_K (a setback for life), red from WIPE_K (it wipes life out: moon-sized, giant impacts).
+   * (rules.ts worldHeat) instead: green if it burns up whole in your air or lands under EXTINCT[0] K (planet/rules.ts) with
+   * no damage, orange up to EXTINCT[1] (a setback for life), red from there (it wipes life out: moon-sized, giant impacts).
    */
   function predict(t: Body): Aim {
     const p = body.motion, D = 2 * body.r, contact = body.r + t.r;
@@ -98,8 +97,8 @@ export function createPlayer(layer: Container, rock: Rock, glow: Texture, sphere
     const burns = solid && t.m < BURN_MAX * body.m && reachGround(t.m / body.m, burnShare(pressure(body.m, body.comp.gas ?? 0))) <= 0;
     const [color, danger] =
       out.kind === 'eaten' || out.a.d >= DEATH_D ? [COLORS.death, 1] :
-      solid && (burns || (K < HARMLESS_K && out.a.d < 0.1)) ? [COLORS.eat, 0.1] :
-      solid && K >= WIPE_K ? [COLORS.death, 1] :
+      solid && (burns || (K < EXTINCT[0] && out.a.d < 0.1)) ? [COLORS.eat, 0.1] :
+      solid && K >= EXTINCT[1] ? [COLORS.death, 1] :
       solid ? [COLORS.bounce, 0.5] :
       out.a.d >= 1 ? [COLORS.broken, 0.75] :
       out.kind === 'eat' ? [COLORS.eat, 0.1] :
@@ -126,7 +125,7 @@ export function createPlayer(layer: Container, rock: Rock, glow: Texture, sphere
     },
     /** Removes everything the player drew (its rock parts may live on inside whatever ate it). */
     destroy() {
-      for (const o of [halo, heat, body.view]) if (!o.destroyed) o.destroy();
+      for (const o of [halo, heat, body.view]) if (!o.destroyed) o.destroy({ children: true }); // its sphere and city lights free their bakes (sphere.ts begin)
       wells.destroy();
     },
     /** `around`: bodies near you, for the wells; `inView`: whether a body is on screen (the target panel picks from those). */
@@ -210,7 +209,7 @@ export function createPlayer(layer: Container, rock: Rock, glow: Texture, sphere
       aim = pick && predict(pick);
       const want = new Map(sensed.slice(0, SENSED).map(({ t, s }, i) => [t, i ? 0.75 * s : s]));
       for (const t of want.keys()) if (!shown.has(t)) shown.set(t, 0);
-      for (const [t, s] of shown) {
+      for (const [t, s] of [...shown].sort(([a], [b]) => +want.has(b) - +want.has(a))) { // wanted first: fading ones never take the last well sprites
         const goal = t.m ? (want.get(t) ?? 0) : 0;
         const next = s + (goal - s) * (1 - Math.exp(-(goal > s ? RISE : FALL) * dt));
         if ((next < 0.01 && !goal) || !t.m) shown.delete(t); // gone bodies drop at once

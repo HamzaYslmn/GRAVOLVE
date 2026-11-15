@@ -18,11 +18,11 @@ export const web = (x: number, y: number, seed: number) =>
 // VOID_W..KUIPER_W with a void within reach (KUIPER_NEAR: shallow dips of the web between filaments don't count), sparse but
 // never empty (KUIPER_FILL), icy and slow.
 export const VOID_W = 0.1; // web below this is void
-export const KUIPER_W = 0.7;
+const KUIPER_W = 0.7;
 const KUIPER_FILL = 0.1;
 const KUIPER_NEAR = [2500, 5000]; // world units (region scale): rings of 8 web samples looking for the void
 /** How much Kuiper belt there is at a point with web w, 0..1 (soft edges, for mixing). */
-export function kuiperAt(x: number, y: number, seed: number, w = web(x, y, seed)) {
+function kuiperAt(x: number, y: number, seed: number, w = web(x, y, seed)) {
   const ring = smoothstep(VOID_W, VOID_W + 0.05, w) * (1 - smoothstep(KUIPER_W, KUIPER_W + 0.15, w));
   if (!ring) return 0;
   let low = w;
@@ -150,4 +150,12 @@ export function groupDrift(x: number, y: number, seed: number) {
   if (r() < STILL) return [0, 0];
   const a = r() * Math.PI * 2, v = GROUP_SPEED[0] + r() * (GROUP_SPEED[1] - GROUP_SPEED[0]);
   return [Math.cos(a) * v, Math.sin(a) * v];
+}
+/** Belt drift at a point: a unit vector along the belt times how much belt is there (0..1). */
+export function beltFlow(x: number, y: number, seed: number) {
+  const f = (px: number, py: number) => fbm(px / 6000, py / 6000, 3, seed + 11), e = 300;
+  let tx = -(f(x, y + e) - f(x, y - e)), ty = f(x + e, y) - f(x - e, y); // along the band (perpendicular to the gradient)
+  const belt = smoothstep(0.4, 0.66, f(x, y)), len = Math.hypot(tx, ty) || 1, ref = fbm(x / 30000, y / 30000, 2, seed + 13) * Math.PI * 4; // one direction per stretch of belt
+  if (tx * Math.cos(ref) + ty * Math.sin(ref) < 0) [tx, ty] = [-tx, -ty];
+  return [(tx / len) * belt, (ty / len) * belt];
 }

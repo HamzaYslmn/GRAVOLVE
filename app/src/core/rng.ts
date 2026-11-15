@@ -45,6 +45,7 @@ export function fbm(x: number, y: number, octaves: number, seed: number) {
 }
 
 export const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x));
+export const clamp01 = (x: number) => clamp(x, 0, 1);
 
 export const smoothstep = (a: number, b: number, x: number) => {
   const t = clamp((x - a) / (b - a), 0, 1);

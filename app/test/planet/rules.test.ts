@@ -1,10 +1,10 @@
 // node test/planet/rules.test.ts: Age II tiers, climate (greenhouse, rain, boiling), habitability, life.
 import assert from 'node:assert/strict';
-import { boil, kelvin, pressure, waterState } from '../../src/core/water.ts';
+import { boil, heatOfK, kelvin, pressure, waterState } from '../../src/core/water.ts';
 import { blend, COOL, G_WORLD, GIANT_HIT, radiusOf, START_R, youPull, type Comp } from '../../src/evolution/asteroid/rules.ts';
 import { slotRadius } from '../../src/core/orbits.ts';
 import {
-  FEED, gripWindow, LANE, matchWindow, moonCap, MOON_R, MOON_SHARE, beforeClimate, bombardment, climate, climateK, envelope, fieldParts, habitability, impact, lifeSpeed, lifeStep, LIFE_S, magnet, moonSlots, nextGoal, pickSlot, onGasLine, radioLife, SOFT_S, stageOf, tierIndex, tierName,
+  FEED, fedAir, gripWindow, LANE, matchWindow, moonCap, MOON_R, MOON_SHARE, beforeClimate, bombardment, climate, climateK, envelope, fieldParts, habitability, impact, lifeSpeed, lifeStep, LIFE_S, magnet, moonSlots, nextGoal, pickSlot, onGasLine, radioLife, SOFT_S, stageOf, tierIndex, tierName,
   type Life, type Sky, type World,
 } from '../../src/evolution/planet/rules.ts';
 
@@ -113,6 +113,25 @@ const fed = world(5e4, { ...wet.comp }, wet.heat), skyF: Sky = { vapor: 0, gas0:
 feed(fed, skyF, 300, 0.004);
 assert.ok(habitability(fed).rate > 0, `light feeding: ${fmt(fed)}`);
 console.log(`planet ok: feeding run -> ${hotNow}, ${lost.toFixed(0)} mass of vapour leaked; 400 s calm -> ${fmt(hot)}`);
+
+// Grinding a 70%-gas moon for 6 s onto a 1e5 world at 290 K with 2% gas (planet/stage.ts wraps moons.update in fedAir):
+// its gas stays air; counted as steam it would rain out as water within the minute after.
+{
+  const grind = (wrap: boolean) => {
+    const b = world(1e5, { rock: 0.6, metal: 0.1, ice: 0.28, gas: 0.02 }, heatOfK(290)), sky: Sky = { vapor: 0, gas0: 0 }, dt = 0.05, g0 = b.m * b.comp.gas!;
+    let fed = 0;
+    for (let t = 0; t < 66; t += dt) { // 6 s of grinding, then a minute of weather
+      beforeClimate(sky, b);
+      const eat = () => { const dm = t < 6 ? FEED * b.m * dt : 0; [b.comp, b.m, fed] = [blend(b.comp, b.m, { gas: 0.7, rock: 0.3 }, dm), b.m + dm, fed + 0.7 * dm]; };
+      if (wrap) fedAir(sky, b, eat); else eat();
+      climate(sky, b, dt);
+    }
+    return { kept: b.m * b.comp.gas! - g0, fed, atm: pressure(b.m, b.comp.gas!) };
+  };
+  const air = grind(true), rain = grind(false);
+  assert.ok(air.kept > 0.99 * air.fed && rain.kept < 0.5 * rain.fed, `kept ${air.kept.toFixed(0)} / ${rain.kept.toFixed(0)} of ${air.fed.toFixed(0)}`);
+  console.log(`planet ok: a ground gas moon keeps ${air.kept.toFixed(0)} of ${air.fed.toFixed(0)} gas as air (${air.atm.toFixed(2)} atm); counted as steam only ${rain.kept.toFixed(0)} (${rain.atm.toFixed(2)} atm)`);
+}
 
 // No metal core, no life (doc: magnetic field is one of the four); dry worlds have none either.
 assert.equal(habitability({ ...wet, comp: { rock: 0.55, ice: 0.2, gas: 0.25 } }).rate, 0);

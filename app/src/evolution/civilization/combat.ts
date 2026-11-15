@@ -1,4 +1,4 @@
-import type { Kit } from '../../kit';
+import type { Field, Kit } from '../../kit';
 import type { News } from '../../ui/toast';
 import { Container, Graphics, ParticleContainer, type Renderer, type Texture } from 'pixi.js';
 import type { Vec } from '../../core/entity';
@@ -8,12 +8,8 @@ import { dashRing, FAR_BOUNDS, type Fx } from '../../render/fx';
 import { AMBER, drawShip, quads, shipR, shipUnit, STEEL, techPage, VIOLET, YOU, type TechPage } from '../../render/tech';
 import { createReadout } from '../../ui/reticle';
 import { drop, shatter, shed, type Body } from '../asteroid/body';
-import type { createAsteroidField } from '../asteroid/field';
 import { G_WORLD, pieceShares, SPREAD } from '../asteroid/rules';
 import type { Moons } from '../planet/moons';
-/** What combat reads of your moons (planet/moons.ts); Age I has none (NO_MOONS) until the planet stage attaches them. */
-type MoonsView = Pick<Moons, 'list' | 'owns'>;
-const NO_MOONS: MoonsView = { list: () => [], owns: () => false };
 import type { Beam } from '../star/stage';
 import { bumps } from './crash';
 import { SPECK } from './flight';
@@ -40,7 +36,9 @@ import { breakMark, createSlugs, type Mark, type Shielded } from './weapon';
 // flashes, charging glows: guns.ts BOLT, never under a few screen px), the rivals' additive veils and ripples, one Graphics
 // for tractor lines, the beam and the touch arc. A burst on screen makes a quiet sound; hits light up in the gun's tint.
 
-type Field = ReturnType<typeof createAsteroidField>;
+/** What combat reads of your moons (planet/moons.ts); Age I has none (NO_MOONS) until the planet stage attaches them. */
+type MoonsView = Pick<Moons, 'list' | 'owns'>;
+const NO_MOONS: MoonsView = { list: () => [], owns: () => false };
 /** The camera this frame (world centre and half sizes in world units). */
 // halfW/halfH: the game area (spawns, sight, leash, leave: never shrunk by zooming in); seenW/seenH: what is on screen.
 type Cam = { x: number; y: number; halfW: number; halfH: number; seenW: number; seenH: number; zoom: number };
@@ -120,6 +118,7 @@ export function createCombat(layer: Container, me: Body, renderer: Renderer, kit
   const yourWorld = (): Shielded => ({ body: me, shield: (k, share, x, y) => ctx.civ?.shieldTake(k, share, x, y) ?? false, p: pressure(me.m, me.comp.gas ?? 0) });
   /** Missiles of the other side than `team`, still flying (foes, marks). */
   const enemyMissiles = (team: Team) => missiles.live.filter((m) => m.team !== team && !m.dead);
+  const enemyMarks = (): Mark[] => [...rivals.marks(), ...pirates.marks(), ...enemyMissiles('you').map((m) => ({ x: m.x, y: m.y, r: ctx.shipR(), kill: m.kill }))]; // every enemy ship and missile, for your slugs and beam
 
   return {
     rivals,
@@ -207,9 +206,8 @@ export function createCombat(layer: Container, me: Body, renderer: Renderer, kit
       if (!f) return;
       const bodies = me.m ? [me, ...ctx.near] : ctx.near;
       const worlds = [...(me.m ? [yourWorld()] : []), ...rivals.worlds()];
-      const r = ctx.shipR();
-      const enemy = [...rivals.marks(), ...pirates.marks(), ...enemyMissiles('you').map((m) => ({ x: m.x, y: m.y, r, kill: m.kill }))]; // your slugs shoot missiles down too
-      slugs.contacts(dt, bodies, worlds, (s): Mark[] => (s.foe ? [] : enemy), f.events, (s, b) => (s.foe ? rivals.own(s, b) : b.moon === true)); // your moons and your star's planets
+      const r = ctx.shipR(), enemy = enemyMarks();
+      slugs.contacts(dt, bodies, worlds, (s): Mark[] => (s.foe ? [] : enemy), f.events, (s, b) => (s.foe ? rivals.own(s, b) : b.moon === true), me.m ? me : undefined); // your moons and your star's planets
       // Every ship of every side is a hull to rounds and missiles; a missile is a smaller hull to rounds (ARMS.missile.size).
       const hulls: Hull[] = [];
       const add = (list: readonly Foe[], team: Team) => list.forEach((q) => hulls.push({ x: q.x, y: q.y, vx: q.vx, vy: q.vy, r, team, kill: q.kill }));
@@ -292,7 +290,7 @@ export function createCombat(layer: Container, me: Body, renderer: Renderer, kit
       const half = Math.sqrt(b.r * b.r - off2);
       if (along + half > 0 && along - half < t) [t, hit] = [Math.max(0, along - half), b];
     }
-    for (const k of [...rivals.marks(), ...pirates.marks(), ...enemyMissiles('you').map((m) => ({ x: m.x, y: m.y, r: ctx.shipR(), kill: m.kill }))]) {
+    for (const k of enemyMarks()) {
       const qx = k.x - x0, qy = k.y - y0, along = qx * ux + qy * uy;
       if (along < 0 || along > t || Math.abs(qx * uy - qy * ux) > k.r + BEAM_W * me.r) continue;
       breakMark(kit.fx, k);

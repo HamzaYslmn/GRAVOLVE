@@ -1,8 +1,7 @@
 import { sfx } from '../../audio/sfx';
 import { K_PER_HEAT } from '../../core/water';
 import { phys, shed, type Body, type Events } from '../asteroid/body';
-import { G_WORLD } from '../asteroid/field';
-import { AGE_GOAL, stickSpeed, youPull } from '../asteroid/rules';
+import { AGE_GOAL, G_WORLD, stickSpeed, youPull } from '../asteroid/rules';
 import type { Fx } from '../../render/fx';
 import { VIOLET, YOU } from '../../render/tech';
 import { homeContact, pebble, smolder, sparks } from './crash';
@@ -14,25 +13,14 @@ import { lineClear, nearest, pick, pull, seeker, trigger, type Cls, type Gun, ty
 import { breakOff, breakStep, guard, homeStep, LOOK, PAD, reachOf, ringStep, runStep, scanRel, siegePost, type Disc, type Home } from './nav';
 import { ARMS, deflect, FLEET, HIT_MIN, RESERVE, ROCKET, rocketRange, rocketSpread, salvo, SIEGE, strikeK } from './rules';
 
-// Defence ships: patrols around a world (yours, or a rival's: rivals.ts). Flight is flight.ts: pairs on a circuit round the
-// world (the two flights opposite ways, a wingman on its leader, firing with it), an attack run at the intercept that opens
-// fire in gun range, a break away before it gets close, then back on the circuit. Every ship steers round the bodies near it
-// (nav.ts scanRel + clearRel, its world and its own run target aside) and can still hit them (crashes: a graze hurts it, a
-// wreck loses it). Ships fly relative to their world, so they keep up at any speed. Idle ships hunt enemy ships (`foes`)
-// within FOE_REACH: a round that hits one breaks it.
-//   Rival patrols keep their autopilot: they go for bodies on course to hit their world that its shield cannot stop and
-//   would hurt (≥ HIT_MIN K delivered, or half its mass): a small one (≤ BREAK of the world) breaks at the first hit, a
-//   bigger one is pushed sideways a little by every hit so it misses (the kick shrinks with the body's mass).
-//   Yours (`frag`) never fire at rocks by themselves: only at your priority target
-//   (`frag.prio`, stage.ts, passed only while orders.ts says they take it): every idle fighter outside the siege wing flies
-//   the run (probes too while `frag.probes`), and a hit breaks it if the class can (FLEET.breaks) into pieces you can take
-//   (stage.ts cut), else pushes it sideways (rules.ts deflect). A run fires at most FLEET bursts, then cools. Your frigate
-//   lances the priority (frigateStep) and your surface launches guided rockets at it (rockets).
-// Battles (`siege`: your fleet engaged on a rival world, stage.ts): enemy ships are picked missiles first, then frigates
-// (guns.ts pick). The siege wing (Siege.wing fighters, rules.ts SIEGE) flies a ring round the enemy world in pairs of its
-// own (nav.ts ringStep), takes enemy ships within SIEGE.foe of it, and every SIEGE.pass s one free leader and its wingman
-// strafe the world, whose shield their rounds only chip (rules.ts weaponHit); the rest and the probes screen home. The
-// frigate lances the world from its post on the ring (nav.ts siegePost) once no priority rock needs breaking.
+// Defence ships round a world (yours, or a rival's: rivals.ts), flying relative to it (flight.ts, nav.ts): pairs on a circuit,
+// attack runs that fire in gun range and break off before they get close, steering round bodies they can still crash on
+// (crashes). Idle ships hunt enemy ships within FOE_REACH (guns.ts pick: missiles first, then frigates).
+//   Rival patrols run at bodies on course to hurt their world past its shield: under BREAK they break, bigger ones are pushed aside.
+//   Yours (`frag`) fire at rocks only for your priority (`frag.prio`, stage.ts): a hit breaks what the class can (FLEET.breaks,
+//   stage.ts cut), else pushes it aside (rules.ts deflect). The frigate lances it (frigateStep), the surface fires rockets (rockets).
+// Battles (`siege`, stage.ts): the siege wing rings the enemy world in pairs (nav.ts ringStep), takes its ships, and every
+// SIEGE.pass s a pair strafes it; the frigate lances it from its ring post (siegePost); the silo follows each lance salvo (siloStep).
 
 export const LOOK_S = 6; // s ahead a ship looks for threats (and a priority counts a body on course)
 const BREAK = 0.005; // share of your mass: smaller threats are broken up (rival ships; yours by FLEET.breaks)
@@ -327,6 +315,7 @@ export function frigateStep(f: Frigate, me: Body, order: Body | undefined, dt: n
     if (p && shots.fire(gun, f.g, p === 1, pm.x + f.x, pm.y + f.y, pm.vx + f.vx, pm.vy + f.vy, f.heading, pm.x + tx, pm.y + ty, bm.vx, bm.vy, b) && ++f.salvo >= L.salvo) {
       [f.aim, f.salvo, f.load, f.g, f.wx, f.wy, f.glow, f.fired] = [undefined, 0, 0, trigger(), 0, 0, 0, b === world ? 0 : f.fired]; // back on its circuit, recharging
     }
+    if (p && f.g.n === 0 && f.aim === b) f.g = trigger(); // the burst ended with a bolt refused: the salvo goes on
   }
 }
 
@@ -379,13 +368,12 @@ export type Silo = { load: number; glow: number };
 export function siloStep(silo: Silo, me: Body, siege: Siege | undefined, missiles: Missiles | undefined, stocks: { ore: number }, frigates: readonly Frigate[], dt: number, od: number, T: number, own: (b: unknown) => boolean, fx: Fx) {
   const M = ARMS.missile, n = salvo(T), w = siege?.world;
   silo.load = Math.min(M.reload, silo.load + dt * od);
-  const ready = !!w && !!missiles && silo.load >= M.reload && stocks.ore >= RESERVE + n * M.ore;
+  const ready = !!w && !!missiles?.room() && silo.load >= M.reload && stocks.ore >= RESERVE + n * M.ore;
   silo.glow = ready ? silo.glow + dt : 0;
   if (!ready || silo.glow < M.glow || (frigates.length && !frigates.some((f) => f.fired >= M.after && f.fired < M.after + 3))) return;
   const pm = me.motion, wm = w!.motion, a = Math.atan2(wm.y - pm.y, wm.x - pm.x), x = pm.x + Math.cos(a) * me.r * 1.05, y = pm.y + Math.sin(a) * me.r * 1.05;
   const seek = () => (w!.m ? { ...wm, r: w!.r } : undefined);
-  for (let i = 0; i < n; i++) missiles!.launch({ team: 'you', x, y, vx: pm.vx, vy: pm.vy, tx: wm.x, ty: wm.y, tvx: wm.vx, tvy: wm.vy, u: M.u * me.r, life: M.life, k: M.k, blast: M.blast * me.r, fan: n > 1 ? M.fan * (2 * i / (n - 1) - 1) : 0, target: w, own, seek, seeker: seeker(M, me.r) });
-  stocks.ore -= n * M.ore;
+  for (let i = 0; i < n; i++) if (missiles!.launch({ team: 'you', x, y, vx: pm.vx, vy: pm.vy, tx: wm.x, ty: wm.y, tvx: wm.vx, tvy: wm.vy, u: M.u * me.r, life: M.life, k: M.k, blast: M.blast * me.r, fan: n > 1 ? M.fan * (2 * i / (n - 1) - 1) : 0, target: w, own, seek, seeker: seeker(M, me.r) })) stocks.ore -= M.ore; // only what the pool took
   [silo.load, silo.glow] = [0, 0];
   fx.flash(x, y, me.r * 0.3, 8, me.r * 0.6);
   sfx()?.play('launch', 0.5, 0.7);

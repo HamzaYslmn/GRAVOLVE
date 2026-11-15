@@ -14,7 +14,7 @@ import {
   FUEL_E, FUEL_LOW, fuelBurn, reactor, REACTOR, refine, SOLAR, solar, solarWings, UNIT, WORK_E, SHIELD_FLOOR, SHIELD_K, shieldCost, shieldHolds, shieldMeet, shieldPunch, shieldRegen, SHIELD_STOP, START_SHIPS, tier, TIER_MAX,
   BEATEN, chargeRate, DRIVER_COOL, fireDir, fleetSize, HIT_MIN, intercept, RIVAL_LEAD, RIVAL_MASS, RIVAL_HIT_MAX, rivalLevel, SLUG_E, SLUG_ORE, SLUG_SHARE, SLUG_SPEED,
   BEAM_BITE, BEAM_COOL, beamLeft, beamPop, CUT, CUT_SPREAD, cutSpread, edible, KEEP, pieceSize, split, strikeK, type Shield,
-  ARMS, buildOrder, BURN_WAVE, kps, LANDING, raid, rivalFrigates, SHIELD_STUN, shieldShot, ttk, weaponHit, shieldLayers, siegeWing, SIEGE, sortieStep, CALM_S,
+  ARMS, buildOrder, BURN_WAVE, LANDING, raid, rivalFrigates, SHIELD_REGEN, SHIELD_STUN, shieldShot, weaponHit, shieldLayers, siegeWing, SIEGE, sortieStep, CALM_S,
   homeDig, HOME_RICH, HOME_VOL,
 } from '../../src/evolution/civilization/rules.ts';
 
@@ -468,6 +468,7 @@ assert.ok(slugK(1e5) > 12 && slugK(1e5) < 13.5, `slug on a shield ${slugK(1e5)}`
   const capped = weaponHit({ level: 1, s: -1 }, { k: 0 }, 1, 'missile', 500, raid(1));
   assert.ok(near(capped.P, 1 - RIVAL_HIT_MAX), `one raid kills at most ${RIVAL_HIT_MAX} (${capped.P})`);
   // Sustained K/s and the classes: a fighter 0.3–0.5, a frigate 4–6 fighters, a full strike wing (3) less than one frigate.
+  const kps = (k: number, n: number, hit: number, cycle: number) => (k * n * hit) / cycle; // n hits of k K, a share `hit` landing, every `cycle` s
   const fighter = kps(ARMS.round.k, FLEET.fighter.rounds * FLEET.fighter.bursts, ARMS.round.hit, ARMS.round.run), frigate = kps(ARMS.lance.k, ARMS.lance.salvo, ARMS.lance.hit, ARMS.lance.reload);
   assert.ok(fighter >= 0.3 && fighter <= 0.5 && frigate / fighter >= 4 && frigate / fighter <= 6 && 3 * fighter < frigate, `K/s: fighter ${fighter.toFixed(2)}, frigate ${frigate.toFixed(2)} (× ${(frigate / fighter).toFixed(1)})`);
   assert.deepEqual([1, 2, 3, 4].map(rivalFrigates), [0, 1, 1, 2]);
@@ -496,6 +497,10 @@ assert.ok(slugK(1e5) > 12 && slugK(1e5) < 13.5, `slug on a shield ${slugK(1e5)}`
   };
   const rate = (u: U, n = 1) => ({ kps: (n * u.k * u.at.length) / u.every, idle: Math.max(0, u.every - SHIELD_STUN - u.at[u.at.length - 1]) / u.every });
   const fire = (n: number) => ({ kps: n * fighter, idle: 0 }); // a wing staggers its runs: never a pause past the stun
+  const ttk = (level: number, f: { kps: number; idle: number }[]) => { // the share of its cycle each leaves past the stun (idle) lets the shield mend
+    const C = SHIELD_K * level, net = f.reduce((a, q) => a + q.kps, 0) - SHIELD_REGEN * C * Math.min(...f.map((q) => q.idle));
+    return net > 0 ? C / net : Infinity;
+  };
   const table: [string, (L: number) => U[], (L: number) => { kps: number; idle: number }[], number[]][] = [
     ['2 strike fighters', () => [fu(0), fu(ARMS.round.run / 2)], () => [fire(2)], [31, 62, 94]],
     ['3 fighters', () => [fu(0), fu(ARMS.round.run / 3), fu((2 * ARMS.round.run) / 3)], () => [fire(3)], [21, 42, 62]],

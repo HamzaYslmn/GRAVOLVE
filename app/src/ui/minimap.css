@@ -9,7 +9,6 @@
   box-sizing: border-box;
   pointer-events: none;
 }
-#minimap[hidden] { display: none; }
 #minimap .map { position: relative; width: 100%; height: 100%; overflow: hidden; }
 #minimap canvas { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
 #minimap .frame { position: absolute; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.7); }

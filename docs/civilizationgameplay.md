@@ -180,7 +180,7 @@ What they do (`ships.ts`); probes are the light class (user, 2026-11-14): their 
     1.5% / 1.9% → 83 / 74 / 80% (6-piece cap: pieces 0.18–0.29% partly land and bounce); a 5% rock broken by a rocket
     9.9 R out into 8 × 0.56%, 27% reached you; no round was ever fired at a piece. A swarm of 8 rocks of 0.8–1.5% at once
     (3 ships, no frigate): 13 rounds in 10 s, most rocks got through. Before the change the same 0.9% case lost 60% as
-    dust. With guns (Node): a 0.4 R body falling at 4 R/s is first hit 10.5–11.8 R out ([shipsandflight.md](shipsandflight.md) → Strike).
+    dust. Measured at 0.26 atm, pieces cut to `edible` fed you 68–71% of a 1.5–1.9% rock. With guns (Node): a 0.4 R body falling at 4 R/s is first hit 10.5–11.8 R out ([shipsandflight.md](shipsandflight.md) → Strike).
 - Idle ships hunt enemy ships (pirates, rival ships) within 9 R of your world with the same run: a round that hits breaks the ship (a still fighter's burst at a ship crossing 5 R out at 4 R/s: 59%, Node). Your fighters are lost only to enemy rounds (pirates during a raid on you, rival waves and patrols) or to bodies.
 
 ### Priority target

@@ -82,13 +82,15 @@ export function drop(b: Body) {
   b.view.destroy({ children: true });
   [b.parts, b.m] = [[], 0];
 }
+/** Off any ring (your moon, a star's planet, a rival's rock): a plain body again, with the field's drag. */
+export const unmoon = (b: Body) => void ([b.moon, b.motion.drag] = [false, 1e-3]);
 
-/** What a collision did, for effects. Speed is in the actor's diameters/s. */
 /** Kelvin a hit delivered to `w` (a rival world in it): the actor's own heat, else impactHeat from the actor's share at w's size. */
 export function hitKelvin(h: Hit, w: Body) {
   const ma = h.a.m - h.gain;
   return K_PER_HEAT * (w === h.a ? h.heat : impactHeat(ma / (ma + h.mb), (h.speed * h.a.r) / w.r, V_STICK, w.r));
 }
+/** What a collision did, for effects. Speed is in the actor's diameters/s. */
 export type Hit = {
   kind: Regime;
   a: Body; // the actor (gone if it was eaten or destroyed: m = 0)

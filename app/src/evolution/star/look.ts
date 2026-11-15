@@ -412,9 +412,6 @@ export function createStarView(root: Container, pg: StarPage) {
     strandPoints() {
       return grains.filter((g) => g.alpha > 0.05).map((g) => ({ x: g.x, y: g.y }));
     },
-    flashFrom(i: number) {
-      arrived[i] = 0;
-    },
     destroy() {
       box.destroy({ children: true });
     },

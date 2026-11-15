@@ -8,8 +8,8 @@ import { load, save } from '../../ui/settings';
 import { bar, finder, fit, hex, label, PERIOD, throttle } from '../../ui/panel';
 import type { Biome } from './web';
 import { habOf, type Entry } from '../rivals/ledger';
-import { lifeName, moonCap, MOON_SHARE } from '../planet/rules';
-import { AGE_GOAL, shapeOf, MAX_HEAT, mealsTo, MOLTEN, TAGS, TIERS, V_STICK, type Comp, type Element } from './rules';
+import { lifeName, moonCap, MOON, MOON_SHARE } from '../planet/rules';
+import { AGE_GOAL, shapeOf, MAX_HEAT, mealsTo, MOLTEN, TAGS, tierAt, TIERS, V_STICK, type Comp, type Element } from './rules';
 
 // The stage HUD, plain DOM over the canvas: every readout is an icon with a short caption. Two cards and a marker:
 //   your card (bottom left, 256 px): everything about your own body. Head (age, tier, mass), the stage's goal bar (moon pips
@@ -101,7 +101,7 @@ const pathOf = (c: Comp) =>
   (c.metal ?? 0) >= 0.4 ? 'an iron world in the making' : (c.ice ?? 0) >= 0.25 ? 'an ocean world in the making'
     : (c.gas ?? 0) >= 0.2 ? 'a gas giant in the making' : 'a rocky world in the making';
 
-const tierOf = (m: number) => TIERS[TIERS.filter(([t]) => m >= t).length - 1];
+const tierOf = (m: number) => TIERS[tierAt(m)];
 
 // The no-drag lesson: FAST_HINT bounces above the stick speed bring the "too fast" hint, and every fast
 // bounce flashes the speed needle so the bounce reads as "my speed".
@@ -112,8 +112,6 @@ let fastHits = 0, flashed = 0;
 export function noteHit(h: Hit) {
   if ((h.kind === 'bounce' || h.kind === 'graze') && h.speed > V_STICK) [fastHits, flashed] = [fastHits + 1, FLASH_S];
 }
-
-const MOON = 0x9fdcff; // moons.ts MOON
 
 export function createHud() {
   const root = document.createElement('div');
@@ -160,7 +158,7 @@ export function createHud() {
       $('.speed').classList.toggle('flash', flashed > 0 && me.m < AGE_GOAL);
 
       // Tier news and first-run hints
-      const i = TIERS.filter(([t]) => me.m >= t).length - 1;
+      const i = tierAt(me.m);
       const [from, name] = TIERS[i], next = TIERS[i + 1];
       if (lastTier >= 0 && i > lastTier) {
         // Above Age I the planet stage names the worlds.

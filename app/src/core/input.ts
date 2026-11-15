@@ -74,7 +74,11 @@ export function createInput(surface: HTMLElement, toWorld: (sx: number, sy: numb
   // Mouse: left = Fire at the cursor, right = Command on what is under it (no context menu over the game).
   surface.addEventListener('contextmenu', (e) => e.preventDefault());
   surface.addEventListener('pointermove', (e) => {
-    if (e.pointerType === 'mouse') [cursor, lastKind] = [local(e), 'mouse'];
+    if (e.pointerType !== 'mouse') return;
+    [cursor, lastKind] = [local(e), 'mouse'];
+    // A button pressed or let go while another is held comes as a move (chorded buttons), never as a pointerdown or up.
+    if (e.button === 0 && e.buttons & 1) fire = { at: cursor, t: now() };
+    else if (e.button === 2) void (e.buttons & 2 ? commandDown(cursor, 'mouse') : commandUp('mouse'));
   });
   surface.addEventListener('pointerleave', (e) => e.pointerType === 'mouse' && (cursor = null));
 

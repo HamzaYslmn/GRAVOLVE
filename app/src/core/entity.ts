@@ -70,12 +70,11 @@ export function shapeThrust(input: Vec, vx: number, vy: number, top: number, ret
   return { x: input.x + (k - along) * ux, y: input.y + (k - along) * uy };
 }
 
-// Touch joystick (user, 2026-11-14: "controls on mobile are very difficult"): the stick sets the velocity you want, not
-// raw thrust. Tilt t → speed top · t^STICK_CURVE along the stick (fine control near the centre, top speed at full tilt);
-// the thrust closes the gap over STICK_TAU s, so it also brakes off sideways drift. Same thrust, still no drag: a finger
-// held still at the centre brakes to a stop, a lifted finger coasts.
+// Touch joystick: the stick sets the velocity you want, not raw thrust. Tilt t → speed top · t^STICK_CURVE along the stick
+// (fine control near the centre, top speed at full tilt); the thrust closes the gap over STICK_TAU s, so it also brakes off
+// sideways drift. Same thrust, still no drag: a finger held still at the centre brakes to a stop, a lifted finger coasts.
 const STICK_CURVE = 2;
-export const STICK_TAU = 0.35;
+const STICK_TAU = 0.35;
 /** Thrust (length ≤ 1) that steers velocity (vx, vy) toward the stick's wanted velocity. */
 export function stickThrust(stick: Vec, vx: number, vy: number, top: number, accel: number): Vec {
   const t = Math.hypot(stick.x, stick.y), sp = t > 0 ? (top * t ** STICK_CURVE) / t : 0, k = accel * STICK_TAU;

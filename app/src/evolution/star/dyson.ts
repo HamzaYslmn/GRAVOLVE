@@ -2,7 +2,7 @@ import type { Kit } from '../../kit';
 import type { News } from '../../ui/toast';
 import type { Motion, Vec } from '../../core/entity';
 import type { Civilization } from '../civilization/stage';
-import type { Hauler, StarView } from './look';
+import type { Hauler } from './look';
 import { DONE, LIFT, PANELS, SEG_ORE, SEG_S, SEGMENTS } from './rules';
 
 // The Dyson sphere round your star: one segment at a time while the civilization lives and has the ore; each panel by
@@ -11,7 +11,7 @@ import { DONE, LIFT, PANELS, SEG_ORE, SEG_S, SEGMENTS } from './rules';
 const FLY_S = 2.6; // s a hauler takes from your world to its panel slot
 export const PER_SEG = PANELS / SEGMENTS;
 
-type Sphere = { m: Motion; R: number; segs: number; placed: number; build?: { t: number; launched: number }; haulers: Hauler[]; view?: StarView };
+type Sphere = { m: Motion; R: number; segs: number; placed: number; build?: { t: number; launched: number }; haulers: Hauler[] };
 
 export function createDyson(civ: Civilization, kit: Pick<Kit, 'fx' | 'sfx'>, news: News) {
   let done = false, closed = false, wait: string | undefined;
@@ -47,7 +47,6 @@ export function createDyson(civ: Civilization, kit: Pick<Kit, 'fx' | 'sfx'>, new
         const h = s.haulers[i];
         if ((h.t += dt / FLY_S) < 1) continue;
         s.placed = Math.max(s.placed, h.slot + 1);
-        s.view?.flashFrom(h.slot);
         kit.sfx.play('segment', 0.5, 1);
         s.haulers.splice(i, 1);
       }

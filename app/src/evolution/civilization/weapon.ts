@@ -59,9 +59,9 @@ export function createSlugs(fx: Fx) {
     },
     /**
      * Moves every slug one frame and resolves what it meets first (after the field moved its bodies: their step this frame
-     * was v·dt). `bodies` = the loaded bodies (and you), `worlds` = shielded worlds, `marks(s)` = ships this slug can hit.
+     * was v·dt). `bodies` = the loaded bodies (and `you`, while alive), `worlds` = shielded worlds, `marks(s)` = ships this slug can hit.
      */
-    contacts(dt: number, bodies: Body[], worlds: Shielded[], marks: (s: Slug) => Mark[], ev: Events, own: (s: Slug, b: Body) => boolean) {
+    contacts(dt: number, bodies: Body[], worlds: Shielded[], marks: (s: Slug) => Mark[], ev: Events, own: (s: Slug, b: Body) => boolean, you?: Body) {
       for (let i = live.length - 1; i >= 0; i--) {
         const s = live[i], sb = s.b, sm = sb.motion;
         const x0 = sm.x, y0 = sm.y, x1 = x0 + sm.vx * dt, y1 = y0 + sm.vy * dt;
@@ -113,7 +113,7 @@ export function createSlugs(fx: Fx) {
         }
         // Momentum of whatever of the slug does not bounce off goes into the target (a shot rock is knocked aside).
         const m0 = sb.m, tx = bm.vx, ty = bm.vy;
-        if (s.foe && hit === bodies[0]) resolve(hit, sb, ev, { player: true }); // a rival's slug on you (`bodies[0]`): you are the actor (life rules)
+        if (s.foe && hit === you) resolve(hit, sb, ev, { player: true }); // a rival's slug on you: you are the actor (life rules)
         else resolve(sb, hit, ev, { warhead: s.D });
         if (hit.m && !sb.m) [bm.vx, bm.vy] = [tx + (rvx * m0) / hit.m, ty + (rvy * m0) / hit.m];
       }

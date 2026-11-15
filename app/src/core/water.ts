@@ -6,7 +6,7 @@
 // water is spent. Gravity decides where the steam goes: a small body loses it to space, a big one keeps
 // it as atmosphere (gas), which raises the pressure, so liquid water becomes possible on big bodies.
 // ponytail: one well-mixed surface, no day/night or latitude.
-import { clamp } from './rng.ts';
+import { clamp01 } from './rng.ts';
 
 const SPACE_K = 120; // heat 0
 export const K_PER_HEAT = 430; // heat 3 (molten) ≈ 1410 K, heat 1 (doc: heated) ≈ 550 K
@@ -19,7 +19,6 @@ const BOIL = 0.02; // share of the water per second, at full boil
 const BOIL_SPAN = 200; // K above the boiling point for full boil
 export const LATENT = 40; // heat used up per unit of mass share boiled (comets use it too)
 
-const clamp01 = (x: number) => clamp(x, 0, 1);
 
 /** Surface temperature in kelvin. */
 export const kelvin = (heat: number) => SPACE_K + K_PER_HEAT * heat;

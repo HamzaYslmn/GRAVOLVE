@@ -44,7 +44,7 @@ export function roundShape(r: number, c: Comp, diff = 0) {
 }
 /** The drawn roundness: roundShape, less a debris piece's jag (Body.jag: 1 a fresh break, flat-faced .. 0 relaxed). */
 export const shapeOf = (r: number, c: Comp, diff = 0, jag = 0) => roundShape(r, c, diff) * (1 - jag);
-export const ROUND_M = 10 ** 3.5; // Planetoid (AGE_GOAL): every asteroid tier, icy ones too, stays an irregular atlas rock (user, 2026-11-15)
+export const ROUND_M = 10 ** 3.5; // Planetoid (AGE_GOAL): every asteroid tier, icy ones too, stays an irregular atlas rock
 /**
  * Does a body bake into a sphere (sphere.ts)? From ROUND_M up, once past half its round-off radius or molten (diff ≥ 0.3);
  * a debris piece (`jag` set) at any radius. A `rough` body (its count of kept parts: a comet, a small fragment, a rock pile
@@ -166,6 +166,7 @@ export const TIERS: [number, string][] = [
   [10 ** 2.5, 'Large asteroid'], [1000, 'Giant asteroid'], [10 ** 3.5, 'Planetoid'], [10 ** 4, 'Protoplanet'],
   [10 ** 4.5, 'Planet'], // world types above it: planet/rules.ts tierName
 ];
+export const tierAt = (m: number) => TIERS.filter(([t]) => m >= t).length - 1; // index into TIERS
 export const AGE_GOAL = 10 ** 3.5; // Planetoid: the doc's Age I ends as a planetesimal ("Gezegenimsi cisim")
 export const EATEN_MARGIN = 1.15; // a body must outweigh you by this much to swallow you
 // Age II: a body ≥ GIANT_HIT of your world is a giant impact (merges and melts it); smaller ones bounce off a solid world.
@@ -331,7 +332,7 @@ export function contactTime(qx: number, qy: number, sx: number, sy: number, rr: 
   return t <= 1 ? t : -1;
 }
 // A shield shell (civilization/rules.ts shellR): a body crossing it this frame meets it before the ground.
-export const REBOUND = 1; // a held body's closing speed comes back whole (elastic)
+const REBOUND = 1; // a held body's closing speed comes back whole (elastic)
 /** Where a body (offset `q`, step `s` this frame of `dt` s, as contactTime) first met a shell at contact distance `rr`: the offset, the outward normal, the closing speed (units/s, > 0). Undefined: no crossing this frame. */
 export function shellContact(qx: number, qy: number, sx: number, sy: number, rr: number, dt: number) {
   const t = contactTime(qx, qy, sx, sy, rr);

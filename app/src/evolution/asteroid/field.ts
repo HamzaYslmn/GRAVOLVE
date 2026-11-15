@@ -1,17 +1,16 @@
 import { Sprite, type Container, type Texture } from 'pixi.js';
 import type { Vec } from '../../core/entity';
 import { chunkSet } from '../../core/chunks';
-import { between, clamp, fbm, hashSeed, logBetween, poissonGap, rng, smoothstep } from '../../core/rng';
+import { between, clamp, hashSeed, logBetween, poissonGap, rng } from '../../core/rng';
 import type { Rock } from './atlas';
 import { pressure } from '../../core/water';
 import { bombardment, SETTLE_V } from '../planet/rules';
 import { absorb, asDebris, cluster, drop, gap, hitKelvin, keepShape, mixRgb, phys, resolve, rockBody, shatter, shed, sweep, tickBody, type Body, type Events, type Hit } from './body';
 import { makeRival, steerRival, tendMoon } from './rival';
 import { live, next, roster, struck, tick, type Entry } from '../rivals/ledger';
-import { noteHit } from './hud';
-import { density, groupDrift, KINDS, kindMix, nearStart, palette, place, rapidsFlow, tintBy, web, type Biome, type Place } from './web';
+import { beltFlow, density, groupDrift, KINDS, kindMix, nearStart, palette, place, rapidsFlow, tintBy, web, type Biome, type Place } from './web';
 import type { Spheres } from './sphere';
-import { AGE_GOAL, BURN_HEAT, BURN_MAX, burnShare, SPECK, EATEN_MARGIN, impactHeat, worldOpts, collide, COMP, G_WORLD, gravitates, pairPull, START_M, pullMass, reachGround, stickSpeed, youPull, V_STICK, radiusOf, START_R, type Element, type Comp } from './rules';
+import { AGE_GOAL, BURN_HEAT, BURN_MAX, burnShare, SPECK, EATEN_MARGIN, impactHeat, worldOpts, damage, COMP, G_WORLD, gravitates, pairPull, START_M, pullMass, reachGround, stickSpeed, youPull, V_STICK, radiusOf, START_R, type Element, type Comp } from './rules';
 
 // Asteroid field in world chunks, Minecraft-style: a chunk is generated once from the seed, stored as it is on unload
 // (eaten rocks stay eaten) and restored on load. A rock belongs to the chunk it is in; only loaded chunks simulate.
@@ -61,11 +60,10 @@ const SHOWER = 0.1;
 const SHOWER_AT = [20, 30];
 const SHOWER_SHARE = [0.02, 0.1];
 const MISS = 4;
-// Meteors are sized from you (at most METEOR_MAX: never planets; Age II METEOR_SHARE_AGE2) and cross the screen in METEOR_CROSS s.
+// Meteors are sized from you (at most M_MAX: never planets; Age II METEOR_SHARE_AGE2) and cross the screen in METEOR_CROSS s.
 const METEOR_SHARE = [0.01, 0.2];
 const METEOR_SHARE_AGE2 = [0.001, 0.01]; // a world: fast things stay small (under BURN_MAX, shooting stars), never a moon-sized hit
 const METEOR_CROSS = [0.8, 1.3]; // s to cross the screen width
-const METEOR_MAX = 1e4;
 const METEOR_PILE = 0.25;
 const METEOR_BINARY = 0.1;
 // World comets: Poisson (mean COMET_MEAN s) on random lines through a disc 1.5× the view, never aimed, at COMET_SPEED of
@@ -97,12 +95,13 @@ const BIG_HUNTER = 0.35;
 const HUNTER_MASS = [1.2, 2];
 const HUNTER_CHASE = 3;
 const RIVAL_CHASE = 7; // a rival chases at most this many of YOUR diameters/s: you can outrun one you see
-// Giant collision (Poisson, mean CLASH_MEAN s): two giants meet on screen beside you, hard enough (d in
-// CLASH_D) to shatter both.
+// Giant collision (Poisson, mean CLASH_MEAN s): two giants drift in from off screen for CLASH_S s (big things drift) and meet
+// on screen near its edge, clear of a player holding still. The impact is staged: at contact they hit as hard as CLASH_D
+// (rules.ts damage) to shatter both, ~50× the drift (mutual gravity tops out near 1 diameter/s; d ≥ 1 takes ~40).
 const CLASH_MEAN = 300;
 const CLASH_MASS = [3, 12]; // × your mass, each
 const CLASH_D = [1.2, 3];
-export { G_WORLD }; // rules.ts (moons and ships read it here)
+const CLASH_S = [20, 40];
 const SOURCES = 24; // heaviest loaded bodies that pull (plus the player)
 const MIN_ACCEL = 0.3; // units/s²: a source's reach ends where its pull drops below this
 const SAFE = 160; // world units kept clear around the player's start, so a run can't begin inside a rock
@@ -205,7 +204,7 @@ export function createAsteroidField(layer: Container, atlas: Rock[], glow: Textu
     const e = b.rival?.entry;
     if (b.rival?.moon) [b.rival.moon.held, b.rival.moon] = [false, undefined]; // its guard moon stays behind as a plain body
     if (e) return void ([e.m, e.comp, e.heat, e.diff, e.out] = [b.m, b.comp, b.heat, b.diff ?? e.diff, false], b.view.destroy({ children: true })); // back to the ledger: it lives on off the map
-    if (b.meteor) return b.view.destroy({ children: true });
+    if (b.meteor) return drop(b); // gone for good: m 0, so nothing (clash, great comets) keeps a ghost
     // A stored sphere frees its baked texture; it is re-baked from the same seed on its way back in.
     const core = b.parts.find((p) => p.core);
     if (core) [core.s.destroy(), (b.parts = b.parts.filter((p) => p !== core))];
@@ -228,9 +227,9 @@ export function createAsteroidField(layer: Container, atlas: Rock[], glow: Textu
     if (!comp && KINDS[k] === 'gas') glowBehind(b, GAS_MIST, 0.32, 3.4); // a soft mist of escaping volatiles around gas-rich bodies
     return b;
   }
-  /** An old merged pile: rocks of mass m split by `sizes` (the first is the core), glued together; `binary`: a contact binary. */
-  function heap(m: number, x: number, y: number, shares: number[], sizes: number[], rnd: () => number, binary = false) {
-    const sum = sizes.reduce((a, v) => a + v, 0), parts = sizes.map((v) => rock((m * v) / sum, x, y, shares, rnd));
+  /** An old merged pile: rocks of mass m split by `sizes` (the first is the core), glued together; `binary`: a contact binary; `comp`: all of that make-up. */
+  function heap(m: number, x: number, y: number, shares: number[], sizes: number[], rnd: () => number, binary = false, comp?: Comp) {
+    const sum = sizes.reduce((a, v) => a + v, 0), parts = sizes.map((v) => rock((m * v) / sum, x, y, shares, rnd, comp));
     parts[0].binary = binary;
     return cluster(parts[0], parts.slice(1), rnd);
   }
@@ -245,7 +244,7 @@ export function createAsteroidField(layer: Container, atlas: Rock[], glow: Textu
     const x0 = (cx + 0.2 + 0.6 * rnd()) * CHUNK, y0 = (cy + 0.2 + 0.6 * rnd()) * CHUNK, spread = scale ** 0.8;
     const span = place === 'field' ? (VIEW_W * spread * between(FIELD_SPAN, rnd)) / 2 : 0; // a field's radius
     if (Math.hypot(x0 - start.x, y0 - start.y) < 2 * CALM + span) return;
-    const [bx, by] = beltFlow(x0 / S, y0 / S), a = rnd() * Math.PI * 2, sp = (4 + rnd() * 12) * Math.sqrt(scale), drift = BELT_FLOW * Math.sqrt(scale);
+    const [bx, by] = beltFlow(x0 / S, y0 / S, seed), a = rnd() * Math.PI * 2, sp = (4 + rnd() * 12) * Math.sqrt(scale), drift = BELT_FLOW * Math.sqrt(scale);
     const pl = placeAt(x0, y0), [rx, ry] = rapidsFlow(x0 / S, y0 / S, seed, pl.rapids), slow = 1 - (1 - KUIPER_SLOW) * pl.kuiper, rapids = RAPIDS_FLOW * 2 * START_R * Math.sqrt(scale);
     const vx = (bx * drift + Math.cos(a) * sp) * slow + rx * rapids, vy = (by * drift + Math.sin(a) * sp) * slow + ry * rapids; // rapids carry these too
     const mix = kindMix(pl);
@@ -326,16 +325,6 @@ export function createAsteroidField(layer: Container, atlas: Rock[], glow: Textu
     keepShape(b);
   }
 
-  /** Belt drift at a point: a unit vector along the belt times how much belt is there (0..1). */
-  function beltFlow(x: number, y: number) {
-    const f = (px: number, py: number) => fbm(px / 6000, py / 6000, 3, seed + 11), e = 300;
-    const belt = smoothstep(0.4, 0.66, f(x, y));
-    let tx = -(f(x, y + e) - f(x, y - e)), ty = f(x + e, y) - f(x - e, y); // along the band (perpendicular to the gradient)
-    const len = Math.hypot(tx, ty) || 1, ref = fbm(x / 30000, y / 30000, 2, seed + 13) * Math.PI * 4; // one direction per stretch of belt
-    if (tx * Math.cos(ref) + ty * Math.sin(ref) < 0) [tx, ty] = [-tx, -ty];
-    return [(tx / len) * belt, (ty / len) * belt];
-  }
-
   /** A chunk's bodies, from the seed and your size when it is first seen. */
   function generate(cx: number, cy: number, key: string) {
     const rnd = rng(hashSeed(cx, cy, seed + 1));
@@ -383,7 +372,7 @@ export function createAsteroidField(layer: Container, atlas: Rock[], glow: Textu
         continue;
       }
       // Shared drifts (belt flow, rapids, the moving group this spot belongs to) plus the rock's own scatter.
-      const [bx, by] = beltFlow(x / S, y / S), [rx, ry] = rapidsFlow(x / S, y / S, seed, pl.rapids), [gx, gy] = groupDrift(x / S, y / S, seed);
+      const [bx, by] = beltFlow(x / S, y / S, seed), [rx, ry] = rapidsFlow(x / S, y / S, seed, pl.rapids), [gx, gy] = groupDrift(x / S, y / S, seed);
       const slow = 1 - (1 - KUIPER_SLOW) * pl.kuiper, root = Math.sqrt(scale), rapids = RAPIDS_FLOW * 2 * START_R;
       const loose = (1 - 0.75 * Math.hypot(bx, by)) * (gx || gy ? GROUP_JITTER : 1) * (1 + (RAPIDS_SCATTER - 1) * pl.rapids) * slow;
       body.motion.vx = (bx * BELT_FLOW * slow + rx * rapids + gx * slow) * root + Math.cos(a) * speed * loose;
@@ -425,7 +414,7 @@ export function createAsteroidField(layer: Container, atlas: Rock[], glow: Textu
       const speed = (2 * halfW) / between(METEOR_CROSS, mrnd);
       const side = from + (mrnd() - 0.5) * 0.8; // a shower comes from roughly one side
       const [sx, sy, ux, uy] = enter(side, dist, mrnd() < aimed ? 0.6 * Math.min(halfW, halfH) : WIDE * Math.hypot(halfW, halfH), mrnd);
-      meteor(sx, sy, ux * speed, uy * speed, Math.min(METEOR_MAX, player.m * logBetween(age2 ? METEOR_SHARE_AGE2 : METEOR_SHARE, mrnd)));
+      meteor(sx, sy, ux * speed, uy * speed, Math.min(M_MAX, player.m * logBetween(age2 ? METEOR_SHARE_AGE2 : METEOR_SHARE, mrnd)));
     }
   }
   /** The forced first shower (SHOWER_AT): lines across the screen, each missing a still you by MISS radii up to 0.6 of the short half-view. */
@@ -434,7 +423,7 @@ export function createAsteroidField(layer: Container, atlas: Rock[], glow: Textu
     for (let k = 3 + Math.floor(mrnd() * 2); k > 0; k--) {
       const speed = (2 * halfW) / between(METEOR_CROSS, mrnd), dir = from + Math.PI + (mrnd() - 0.5) * 0.6, ux = Math.cos(dir), uy = Math.sin(dir);
       const o = (mrnd() < 0.5 ? -1 : 1) * between([MISS * player.r, wide], mrnd), back = dist + speed * k * between([0.15, 0.4], mrnd); // staggered: one after another
-      meteor(pm.x - uy * o - ux * back, pm.y + ux * o - uy * back, ux * speed, uy * speed, Math.min(METEOR_MAX, player.m * logBetween(SHOWER_SHARE, mrnd)));
+      meteor(pm.x - uy * o - ux * back, pm.y + ux * o - uy * back, ux * speed, uy * speed, Math.min(M_MAX, player.m * logBetween(SHOWER_SHARE, mrnd)));
     }
   }
   /** A meteor of mass m at (sx, sy) flying at (vx, vy): of the local region's material, a quarter of them old piles, tumbling. */
@@ -508,8 +497,8 @@ export function createAsteroidField(layer: Container, atlas: Rock[], glow: Textu
     greats.push({ b, shed: SHED_S, left: GREAT_CRUMBS });
   }
 
-  /** A body of mass m at (x, y), its kind from the local region; heavy ones are often old piles. */
-  const spawn = (m: number, x: number, y: number, rnd: () => number) => heap(m, x, y, mixAt(x, y), Array.from({ length: 1 + Math.floor(rnd() * 5) }, (_, k) => (k ? 0.3 + rnd() : 1.5)), rnd);
+  /** A body of mass m at (x, y), its kind from the local region (its make-up `comp` if given: a named rival); heavy ones are often old piles. */
+  const spawn = (m: number, x: number, y: number, rnd: () => number, comp?: Comp) => heap(m, x, y, mixAt(x, y), Array.from({ length: 1 + Math.floor(rnd() * 5) }, (_, k) => (k ? 0.3 + rnd() : 1.5)), rnd, false, comp);
 
   const rrnd = rng(seed + 4);
   let nextRival = RIVAL_CALM, hunted = false;
@@ -531,30 +520,28 @@ export function createAsteroidField(layer: Container, atlas: Rock[], glow: Textu
     const e = first ? undefined : next(crew, lastOut), big = player.m * RIVAL_MASS[0] > M_MAX;
     const hunter = big && (e ? e.m > EATEN_MARGIN * player.m : rrnd() < BIG_HUNTER);
     const m = e ? e.m : first ? player.m * logBetween(FIRST_HUNTER, rrnd) : big ? player.m * logBetween(hunter ? HUNTER_MASS : BIG_RIVAL_MASS, rrnd) : Math.min(M_MAX, player.m * logBetween(RIVAL_MASS, rrnd));
-    const b = makeRival(spawn(m, x, y, rrnd), glow, a + Math.PI + (rrnd() - 0.5), hunter ? HUNTER_CHASE : undefined);
-    if (e) [b.comp, b.heat, b.diff, b.rival!.entry, e.out, lastOut] = [{ ...e.comp }, e.heat, e.diff, e, true, e];
+    const b = makeRival(spawn(m, x, y, rrnd, e && { ...e.comp }), glow, a + Math.PI + (rrnd() - 0.5), hunter ? HUNTER_CHASE : undefined);
+    if (e) [b.heat, b.diff, b.rival!.entry, e.out, lastOut] = [e.heat, e.diff, e, true, e];
     b.home = keyAt(x, y);
     fresh.push(b);
   }
 
-  // Giant collision: two giants on one line, timed to meet at a point on screen beside you.
+  // Giant collision: two giants drifting in on one line from off screen, timed to meet at a point on screen near its edge.
   const crnd = rng(seed + 5);
   let nextClash = poissonGap(CLASH_MEAN, crnd);
   let clash: [Body, Body] | undefined;
   function giants(dt: number, halfW: number, halfH: number) {
-    if (!player.m || (nextClash -= dt) > 0) return;
+    if (!player.m || clash || (nextClash -= dt) > 0) return; // one show at a time: the next waits for this one to land
     nextClash = poissonGap(CLASH_MEAN, crnd);
-    const pm = player.motion, side = crnd() * Math.PI * 2, off = (0.55 + 0.35 * crnd()) * Math.min(halfW, halfH);
-    const px = pm.x + Math.cos(side) * off, py = pm.y + Math.sin(side) * off; // where they meet
+    const pm = player.motion, side = crnd() * Math.PI * 2, off = 0.85 + 0.1 * crnd(); // share of the way to the screen's edge
+    const px = pm.x + Math.cos(side) * off * halfW, py = pm.y + Math.sin(side) * off * halfH; // where they meet: on screen, near its edge
     const dir = side + Math.PI / 2 + (crnd() - 0.5) * 0.8; // across your line of sight, so they pass you by
     // The lighter one is at least half the heavier: it moves faster, and a bigger gap would start it beyond meteor reach.
     const big = player.m * logBetween(CLASH_MASS, crnd);
     if (big > M_MAX) return; // an Age I show: past the ceiling nothing around is big enough
     const a = spawn(big, px, py, crnd), b = spawn(big * (0.5 + 0.5 * crnd()), px, py, crnd);
-    // Closing speed for the damage wanted: d grows with v², so scale from d at 1 world unit/s.
-    const closing = Math.sqrt(between(CLASH_D, crnd) / collide(phys(a), phys(b), 1).a.d);
-    const ua = (closing * b.m) / (a.m + b.m), ub = closing - ua; // no net momentum: the wreck stays where they meet
-    const t = (1.6 * Math.hypot(halfW, halfH)) / ua; // the slower one starts that far off
+    // The heavier starts 1.6 half-diagonals off; no net momentum: the wreck stays where they meet.
+    const t = between(CLASH_S, crnd), ua = (1.6 * Math.hypot(halfW, halfH)) / t, ub = (ua * a.m) / b.m;
     const cx = Math.cos(dir), cy = Math.sin(dir);
     for (const [g, u, s] of [[a, ua, -1], [b, ub, 1]] as const) {
       g.motion.x = px + cx * s * (u * t + g.r);
@@ -679,7 +666,7 @@ export function createAsteroidField(layer: Container, atlas: Rock[], glow: Textu
       struck(e, hitKelvin(h, w));
     }
   };
-  const events: Events = { hit: (h) => void (h.a === player && noteHit(h), rivalHit(h), onHit(h)), debris: (x, y, vx, vy, m, comp, from) => void (m >= SPECK * player.m && addBody(x, y, vx, vy, m, comp, from)) }; // specks are just dust
+  const events: Events = { hit: (h) => void (rivalHit(h), onHit(h)), debris: (x, y, vx, vy, m, comp, from) => void (m >= SPECK * player.m && addBody(x, y, vx, vy, m, comp, from)) }; // specks are just dust
 
   /**
    * Mutual escape speed in diameters/s of `a` (the heavier: the rules' unit). Rock pairs stick below half of it: they merge
@@ -789,7 +776,7 @@ export function createAsteroidField(layer: Container, atlas: Rock[], glow: Textu
       if (b.rival) {
         if (player.m) b.rival.chase = Math.min(b.rival.chase, (RIVAL_CHASE * player.r) / b.r);
         steerRival(b, around, player, dt);
-        tendMoon(b, around, dt);
+        tendMoon(b, around, player, dt);
         const e = b.rival.entry;
         if (e) { // on the map the body owns its numbers; a rival world runs its climate and life here (cooling: tickBody)
           [e.m, e.comp, e.heat, e.diff] = [b.m, b.comp, b.heat, b.diff ?? e.diff];
@@ -805,23 +792,6 @@ export function createAsteroidField(layer: Container, atlas: Rock[], glow: Textu
       if (!b.moon || player.guard?.own?.(b) === false) { sweep(player, b, dt); if (b.metShell === player) b.moon = false; } // nothing tunnels through you; a rival's rock meets your shell and leaves its circle
     }
     for (const s of swept) for (const b of rocks) if (s !== b && !(s.moon && b.moon)) sweep(s, b, dt); // after every body moved
-    if (clash) {
-      const [a, b] = clash;
-      if (!a.m || !b.m) clash = undefined;
-      else {
-        // Until they meet, each keeps heading for the other: rocks on the way and the field's gravity would knock them off line.
-        const dx = b.motion.x - a.motion.x, dy = b.motion.y - a.motion.y, d = Math.hypot(dx, dy) || 1;
-        if ((b.motion.vx - a.motion.vx) * dx + (b.motion.vy - a.motion.vy) * dy < 0 && d > a.r + b.r) {
-          for (const [g, s] of [[a, 1], [b, -1]] as const) {
-            const v = Math.hypot(g.motion.vx, g.motion.vy);
-            g.motion.vx = (s * dx / d) * v;
-            g.motion.vy = (s * dy / d) * v;
-          }
-        } else if (d > 4 * (a.r + b.r)) clash = undefined; // met and parted
-        sweep(a, b, dt); // they close faster than their size per frame at low fps
-      }
-    }
-
     // Broadphase: sort and sweep along x (by left edge; each body is tested only against those whose left edge lies before
     // its right edge), then a y check. Each pair once. The order is kept from the last frame (bodies barely move), so an
     // insertion sort is nearly linear.
@@ -850,6 +820,18 @@ export function createAsteroidField(layer: Container, atlas: Rock[], glow: Textu
       if (p.rival || q.rival || p.moon || q.moon) resolve(p, q, events); // a moon eats like you do: a guard swallows slow infall
       else resolve(p, q, events, { stick: Math.min(V_STICK, escape(p, q)) / 2, graze: 1 });
     };
+    if (clash) {
+      // Until they meet each keeps heading for the other (rocks on the way and gravity would knock it off line); once they
+      // overlap, the staged impact (CLASH_D) replaces the drift and lands first, before any rock can touch them at that speed.
+      const [a, b] = clash, [p, q] = a.m >= b.m ? clash : [b, a], dx = b.motion.x - a.motion.x, dy = b.motion.y - a.motion.y, d = Math.hypot(dx, dy) || 1;
+      const hit = a.m && b.m && d < a.r + b.r ? Math.sqrt(between(CLASH_D, crnd) / damage(phys(p), phys(q), 1 / (2 * p.r))) : 0; // the heavier takes CLASH_D
+      if (a.m && b.m) for (const [g, s, o] of [[a, 1, b], [b, -1, a]] as const) {
+        const v = hit ? (hit * o.m) / (a.m + b.m) : Math.hypot(g.motion.vx, g.motion.vy); // no net momentum
+        [g.motion.vx, g.motion.vy] = [(s * dx * v) / d, (s * dy * v) / d];
+      }
+      if (hit) touch(a, b);
+      if (!a.m || !b.m || hit) clash = undefined;
+    }
     for (let k = 0; k < sweepOrder.length; k++) {
       const a = sweepOrder[k], right = a.left! + 2 * a.r;
       for (let l = k + 1; l < sweepOrder.length && sweepOrder[l].left! <= right; l++) {
@@ -859,10 +841,10 @@ export function createAsteroidField(layer: Container, atlas: Rock[], glow: Textu
     }
     contacts(dt);
     // Rocks rehome to the chunk they're in; one that left the loaded area waits there. Meteors live within a few screens of you.
-    const next: Body[] = [], kept = new Set<Body>();
-    const reach2 = (4 * Math.hypot(halfW, halfH)) ** 2;
+    const next: Body[] = [], reach2 = (4 * Math.hypot(halfW, halfH)) ** 2;
     for (const b of [...rocks, ...fresh]) {
       if (!b.m && b.rival?.entry) [b.rival.entry.alive, b.rival.entry.out] = [false, false]; // eaten or broken: gone for the run
+      if (!b.m && b.rival?.moon) b.rival.moon.held = false; // its guard moon stays behind as a plain body
       if (!b.m) continue;
       // A speck below a pixel (you grew past it), or a body with NaN or infinite numbers (it would "touch" everything): dropped.
       if ((b.m < SPECK * player.m && !b.moon && !b.rival) || !Number.isFinite(b.motion.x + b.motion.y + b.motion.vx + b.motion.vy + b.r + b.m + b.heat)) {
@@ -879,8 +861,6 @@ export function createAsteroidField(layer: Container, atlas: Rock[], glow: Textu
           b.view.position.set(b.motion.x, b.motion.y);
           layer.addChild(b.view);
         }
-        if (kept.has(b)) continue; // safety: a body listed twice would collide with itself
-        kept.add(b);
         next.push(b);
       }
     }
@@ -912,7 +892,7 @@ export function createAsteroidField(layer: Container, atlas: Rock[], glow: Textu
     biomeAt: (x: number, y: number): Biome => placeAt(x, y, sAt(x, y)).biome,
     /** A body of mass m joining the field (rival worlds, their rocks, loot, pieces; `from`: the body a piece broke off). */
     spawn: addBody,
-    /** Seconds settled and the bombardment now, for checks. */
-    calm: () => ({ settled, bomb }),
+    /** Brings the next giant clash now (dev checks; Age I only: past M_MAX nothing is big enough). */
+    clash: () => void (nextClash = 0),
   };
 }

@@ -49,7 +49,7 @@ const bolt = (t: number, hz: number, dB: number): Layer[] =>
 const rec = (...layers: Layer[]): Recipe => [Math.max(...layers.map((l) => l[5][l[5].length - 1][0])) + 0.02, layers];
 const settle = note(110, 0.05, -16, 0.25, 70); // a low bump: something with weight comes to rest
 
-export const RECIPES: Record<string, Recipe> = {
+const RECIPES: Record<string, Recipe> = {
   // Moon captured: a whoosh, a low settle, a rising chime (three takes). Stolen: brighter, two more notes on top.
   capture1: rec(swish(0, 0.2, 400, 1800, -6), settle, note(392, 0.08, -18, 0.6), note(587, 0.17, -18, 0.8)),
   capture2: rec(swish(0, 0.22, 300, 1500, -6), settle, note(440, 0.07, -19, 0.5), note(659, 0.15, -19, 0.6), note(880, 0.24, -22, 0.8)),
@@ -203,7 +203,7 @@ const SETBACK = new Set(['overwhelmed', 'rad', 'starrad', 'needsun', 'roche', 's
 const gainOf = (dB: number) => 10 ** (dB / 20);
 
 /** Renders a recipe to a buffer. */
-export function render([seconds, layers]: Recipe, sampleRate: number) {
+function render([seconds, layers]: Recipe, sampleRate: number) {
   const c = new OfflineAudioContext(1, Math.ceil(seconds * sampleRate), sampleRate);
   for (const [source, type, hz0, hz1, q, env] of layers) {
     const from = env[0][0], to = env[env.length - 1][0];

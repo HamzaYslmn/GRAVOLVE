@@ -17,20 +17,14 @@ import type { Rival, Rivals } from './rivals';
 import type { Foe } from './ships';
 import type { Mark } from './weapon';
 
-// Pirate fleets (numbers in rules.ts), about in every age: nomads who crack rocks and haul the pieces, and raid worlds
-// when they can. A ship dies the moment it touches any body (ram them, drag them through a belt: fast
-// bodies are swept along their path); rounds take hull hits (raider 1, hauler 2, marauder 4). Node-safe (test/civilization/pirates.test.ts
-// flies it with a fake ctx): value imports only from flight, rules, core and asteroid/rules.
-//   - Fleet states: cruise (one formation on a straight lane across the view) → work (a rock) or raid (a world) → leave
-//     (straight out in formation, then gone or a jump). Decisions every THINK s (`think`), a target kept ≥ COMMIT s.
-//   - The formation flies round a virtual lead (the flag) that steers round every body with the formation's width
-//     added; slots are fixed (marauder or a raider at the point, haulers on the centreline, two raiders beside each).
-//   - One job a ship: form (its slot), gun (strafing runs at its target), haul (a claimed piece on the tractor line),
-//     guard (circling the stand-off point, clear of bodies by its circuit). Evasion overrides: a jink, a hauler's dash to a guard,
-//     a scatter. Their own pieces never break them: a rock about to crack keeps transit ships out of its fling, and a piece
-//     drifting onto a ship is shoved off by its tractor.
-//   - Every ship scans the bodies in reach once a frame and clears them every sub-step (nav.ts); goals are moved out
-//     of bodies; your moon system is one keep-out for all but gun runs at you.
+// Pirate fleets in every age (numbers in rules.ts, design in docs/gameevents.md): nomads who crack rocks, haul the
+// pieces and raid worlds. A ship dies touching any body (swept: fast bodies never tunnel); rounds take hull hits.
+// Node-safe (pirates.test.ts flies it with a fake ctx).
+//   - States: cruise (a formation on a lane across the view) → work (a rock) or raid (a world) → leave (gone or a jump);
+//     decisions every THINK s, a target kept ≥ COMMIT s. The formation's fixed slots follow a virtual lead (the flag).
+//   - Jobs: form, gun (strafing runs), haul (a piece on the tractor line), guard (circling the stand-off point); evasion
+//     overrides (jink, a hauler's dash to a guard, scatter). A crack keeps ships out of its fling; the tractor shoves
+//     their own pieces off. Each ship scans once a frame and clears every sub-step (nav.ts); your moon system is one keep-out.
 
 const PIRATE = 0xd9cfbf; // bone hulls, clear of you (cyan), rivals (violet) and the verdict colours
 const TRACER = 0xff7a50; // their rounds
@@ -236,9 +230,9 @@ export function createPirates(ctx: Ctx, rivals: Rivals, rnd: () => number = Math
   function strike(fl: Fleet, b: Body, hx: number, hy: number) {
     const me = ctx.me, T = fl.target, hold = fl.ships.find((s) => s.kind === 'hauler' && !s.dead && s.units < HOLD && s.stolen.ore + s.stolen.vol < STEAL);
     if (T?.kind === 'you' && b === me && ctx.civ && !ctx.civ.shieldTake(PIRATE_K, 1e-4, hx, hy)) {
-      const st = ctx.civ.stocks, got = st.ore + st.vol > 0 && hold ? ctx.civ.steal(Math.min(1, STEAL - hold.stolen.ore - hold.stolen.vol)) : { ore: 0, vol: 0 };
-      if (st.ore + st.vol <= 0) chip(fl, Math.atan2(hy - me.motion.y, hx - me.motion.x)); // no stock left: water or air (no hauler room: nothing)
+      if (ctx.civ.stocks.ore + ctx.civ.stocks.vol <= 0) chip(fl, Math.atan2(hy - me.motion.y, hx - me.motion.x)); // no stock left: water or air (no hauler room: nothing)
       else if (hold) {
+        const got = ctx.civ.steal(Math.min(1, STEAL - hold.stolen.ore - hold.stolen.vol)); // the last of it too: the hauler has it, nothing is chipped
         hold.stolen.ore += got.ore;
         hold.stolen.vol += got.vol;
         stow(hold, (got.ore + got.vol) * UNIT * me.m, { rock: 0.7, metal: 0.3 });
@@ -473,9 +467,8 @@ export function createPirates(ctx: Ctx, rivals: Rivals, rnd: () => number = Math
       thrust(f, P_ACC * fsp, FLAG_TURN, h, 0, 0, CHASE_V * sp);
       for (const s of alive) fly(fl, s, h, sp, sr, R, stand, guards);
     }
-    // Shove: a piece of their own work (cracked by them, loose, or a small rock being cracked) within SHOVE ship radii of a
-    // ship's hull, closing on it, has its own drift off that ship brought up to SHOVE[2] R/s by the tractor (field gravity and
-    // collisions keep pushing drifting pieces into the ships that circle them; they don't die on their own pieces).
+    // Shove: their own piece (cracked, loose, or a small rock being cracked) closing within SHOVE ship radii of a hull has its
+    // drift off that ship brought up to SHOVE[2] R/s by the tractor (gravity keeps pushing pieces into the ships circling them).
     for (const p of new Set([...fl.own, ...fl.loose, ...fl.cracks.keys()])) {
       if (!live(p, me)) fl.own.delete(p);
       if (!live(p, me) || p.m > SHOVE[1] * me.m) continue;
@@ -599,7 +592,8 @@ export function createPirates(ctx: Ctx, rivals: Rivals, rnd: () => number = Math
     return true;
   }
 
-  rivals.watch(() => (fleet?.ships ?? []).filter((s) => !s.dead)); // their patrols hunt raiders
+  const afloat = () => (fleet?.ships ?? []).filter((s) => !s.dead);
+  rivals.watch(afloat); // their patrols hunt raiders
   return {
     get fleet() {
       return fleet;
@@ -617,9 +611,8 @@ export function createPirates(ctx: Ctx, rivals: Rivals, rnd: () => number = Math
       if (fleet) step(fleet, dt);
     },
     /** Slugs and the beam: any touch breaks a ship. */
-    marks: (): Mark[] => (fleet?.ships ?? []).filter((s) => !s.dead).map((s) => ({ x: s.x, y: s.y, r: ctx.shipR(), kill: () => die(s, 'shot') })),
-    /** Rounds: each takes one hull hit (`kill` = hit). */
-    foes: (): Foe[] => (fleet?.ships ?? []).filter((s) => !s.dead),
+    marks: (): Mark[] => afloat().map((s) => ({ x: s.x, y: s.y, r: ctx.shipR(), kill: () => die(s, 'shot') })),
+    foes: afloat, // rounds: each takes one hull hit (`kill` = hit)
     /** Ships die touching any body, swept along this frame's relative motion so fast bodies never tunnel; a hauler's claimed piece is spared. */
     contacts(bodies: Body[], dt: number) {
       if (!fleet) return;

@@ -1,5 +1,7 @@
 // One run score (YouTube Playables keeps one best score; the game-over card shows the breakdown). Pure, Node-safe.
 // Each part pays at the stage where it happens; mass is logarithmic, so every ×10 is worth the same at any stage.
+import { AGE_GOAL } from '../evolution/asteroid/rules.ts';
+import { clamp01 } from './rng.ts';
 export type ScoreInput = {
   peak: number; start: number; seconds: number; // peak and start mass; run time (s)
   life: boolean; tier: number; ships: number; worlds: number; // Age II done; highest civ tier; enemy ships shot; rival worlds beaten
@@ -7,12 +9,10 @@ export type ScoreInput = {
 };
 export type Part = { label: string; points: number };
 
-const AGE_GOAL = 10 ** 3.5; // asteroid/rules.ts AGE_GOAL (kept import-free)
 const MASS = 2000; // per ×10 of mass
 const TIME_CAP = 1200; // s; scaled by Age I progress, so idling small earns nothing
 const LIFE = 3000, TIER = 400, SHIP = 40, SHIPS_CAP = 100, WORLD = 1500, WORLDS_CAP = 4, STAR = 3000, DYSON = 8000;
 
-const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 const log = (peak: number, start: number) => Math.max(0, Math.log10(peak / start));
 
 /** The mass part alone: old saves' best score (a lower bound of what that run scored). */

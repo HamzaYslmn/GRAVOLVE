@@ -63,7 +63,7 @@ type Button = { label: string; keys: string[]; act: () => void };
 function card(id: string, label: string, html: string, buttons: Button[]) {
   const el = document.createElement('div');
   el.id = id;
-  el.className = 'ui-panel end-card';
+  el.className = 'ui-panel';
   el.setAttribute('role', 'dialog');
   el.setAttribute('aria-label', label);
   el.innerHTML = `${html}<div class="buttons">${buttons.map((b) => `<button type="button">${b.label}</button>`).join('')}</div>
@@ -79,6 +79,8 @@ function card(id: string, label: string, html: string, buttons: Button[]) {
   const onKey = (e: KeyboardEvent) => {
     const b = buttons.find((x) => x.keys.includes(e.code));
     if (!b) return;
+    if (e.repeat) return void e.preventDefault(); // a key held from the run (Space: Fire) neither restarts nor clicks the focused button
+    if ((e.code === 'Enter' || e.code === 'Space') && (e.target as Element).closest?.('button, input, select, summary')) return; // a focused control acts itself
     e.preventDefault();
     close(b);
   };

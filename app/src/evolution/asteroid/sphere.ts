@@ -255,21 +255,21 @@ export function createSpheres(renderer: Renderer) {
     },
     /** Rounds `b` off once it's heavy enough (`animate`: as a visible process, for your own body; others just are round), keeps its sphere sized, sinks meals in, re-bakes when it changed. */
     update(b: Body, dt: number, animate = false) {
-      if (!b.m || b.view.destroyed || (b.m < ROUND_M && !b.parts[0]?.core)) return; // most rocks: too small to round, nothing to do
+      if (!b.m || b.view.destroyed || (b.m < ROUND_M && b.parts.length && !b.parts[0].core)) return; // most rocks: too small to round, nothing to do (none left: a stored sphere, re-baked)
       const R = b.r / b.k; // body-local radius
       let core = b.parts[0]?.core ? b.parts[0] : b.parts.find((p) => p.core);
       if (!core) {
-        if (!bakes(b.m, b.r, b.comp, b.diff, b.rough, b.jag) || budget <= 0) return void (b.rough && sink(b, dt, R));
+        if (!(bakes(b.m, b.r, b.comp, b.diff, b.rough, b.jag) || !b.parts.length) || budget <= 0) return void (b.rough && sink(b, dt, R));
         const f = fades.get(b);
         if (f) [f.s.destroy(), fades.delete(b)];
         // Rounding off is a process, not a swap: the sphere fades in under the pile while the rocks sink into it,
         // outer ones last, over ~TRANSFORM s; the sphere settles from a little smaller to its full size.
-        const tex = bake(b), s = new Sprite({ texture: tex, anchor: 0.5, alpha: 0 });
+        const tex = bake(b), s = new Sprite({ texture: tex, anchor: 0.5, alpha: 0 }), at = b.parts.length ? b.view.getChildIndex(b.parts[0].s) : b.view.children.length; // above glows and halos, under the pile
         if (!animate) for (const p of b.parts) p.s.destroy();
         else for (const p of b.parts) p.age = SINK_S - (TRANSFORM - FADE_S) * (0.1 + 0.45 * Math.min(1, Math.hypot(p.s.x, p.s.y) / R) + 0.45 * Math.random()); // outer ones tend to go last, spread over the whole process
         core = { s, r: R, base: 0xffffff, age: animate ? 0 : TRANSFORM, core: true };
         [b.parts, b.rough] = [[core, ...b.parts.filter((p) => !p.s.destroyed)], undefined];
-        b.view.addChildAt(s, 0);
+        b.view.addChildAt(s, at);
         b.baked = b.m;
         live.set(s, tex);
       }

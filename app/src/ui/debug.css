@@ -8,7 +8,6 @@
   color: var(--ui-text);
   font: var(--ui-font);
 }
-#debug[hidden] { display: none; }
 #debug summary {
   list-style: none;
   width: 40px;
