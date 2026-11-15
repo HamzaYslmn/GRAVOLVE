@@ -472,7 +472,7 @@ assert.ok(slugK(1e5) > 12 && slugK(1e5) < 13.5, `slug on a shield ${slugK(1e5)}`
   assert.ok(fighter >= 0.3 && fighter <= 0.5 && frigate / fighter >= 4 && frigate / fighter <= 6 && 3 * fighter < frigate, `K/s: fighter ${fighter.toFixed(2)}, frigate ${frigate.toFixed(2)} (× ${(frigate / fighter).toFixed(1)})`);
   assert.deepEqual([1, 2, 3, 4].map(rivalFrigates), [0, 1, 1, 2]);
   assert.ok(FLEET.frigate.ore === 25 && FLEET.frigate.t === 40, 'a frigate costs 25 ore and 40 s');
-  // Time to break a full shield (L1–3): the planned table (docs/civilizationgameplay.md) against ttk (mean rates, regen while
+  // Time to break a full shield (L1–3): the planned table (docs/aliencivilizations.md → Fighting a rival world) against ttk (mean rates, regen while
   // idle past the stun) and a measured volley-by-volley run (real shieldShot and shieldRegen, averaged over 20 start phases).
   // Volleys land whole, so measured may differ from the mean by up to one firing cycle (the plan's "~170" row: 15%).
   type U = { k: number; at: number[]; every: number; t0: number };

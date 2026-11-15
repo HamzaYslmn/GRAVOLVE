@@ -30,9 +30,9 @@ There is no drag in space: you keep drifting, so push against your motion to bra
 | Select a moon | right click or E | long press |
 | Grind a moon | hold right click or E | hold |
 | Fire (civilization on) | left click, or Space | tap |
-| Order an attack (civilization on) | right click or E on a body | long press |
+| Set a priority target (civilization on) | right click or E on a body, rival world or enemy ship; again to clear | long press |
 | Zoom | mouse wheel | two-finger pinch |
-| Play again | Enter, or R for a new run | button |
+| Play again | Enter, or R for a new run; after Age I, Enter / Space / C goes on as a planetoid | button |
 
 ## License
 
