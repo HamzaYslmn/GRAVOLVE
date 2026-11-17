@@ -259,19 +259,38 @@ Breaking and `stage.ts` `cut`.
 
 - **Fire** (left-click, tap, stick point; Space: the HUD target) launches a guided rocket from your surface (user,
   2026-11-17; `combat.ts`, `rules.ts` `ROCKET`; the same rocket for rival worlds). It locks the enemy ship or rocket under
-  the aim, else the body, else steers to the clicked point, passes over it and flies on. Nothing fires before LIFE.
-- **Flight** (2026-11-17: real thrust): 12 R/s, 16 R/s² along the nose only, nose ≤ 2.6 rad/s, pads ±0.7 rad. The path
-  lags the nose, so a hard late break slips one rocket (a 6 R/s ship breaking 90° at 0.6 s is hit 21%): fire a pair.
+  the aim, else the body (held while it lives), else flies the world-fixed ray through the clicked point; past your mining
+  reach it locks the first enemy ship, rocket or your priority it can make (`guns.ts` `spot`), else flies on. Nothing fires
+  before LIFE.
+- **Flight** (user, 2026-11-17: slower, true from a moving world): 9 R/s relative to its target, 11.7 R/s² along the nose
+  only, nose ≤ 2.8 rad/s, pads ±0.7 rad; it flies in its target's frame, so a click from a moving world lands (5 R/s: 224 of
+  224 on a still rock at 2–20 R). A point shot keeps your forward speed. A lock comes round: a 10 R/s crossing ship and a
+  6 R/s one breaking 90° at 0.6 s are both hit 100%. The seeker lets go 0.57 s before the hit (user, 2026-11-18: a small
+  margin to dodge): the counterplay is a hard burn across in that last half second (a 6–7.5 R/s² world slips 22–45%),
+  range or point defence (one fighter stops 39%); burning away no longer
+  outruns it.
 - **Magazine** (`stage.ts` `fire`, `mag`): `salvo(T)` 2 / 3 / 4 at tiers 1 / 3 / 5 (user, 2026-11-17: at least a rival's
   pair); `ROCKET.ore` 5 ore a launch; one back every 6 s × energy fed, drawing `WORK_E`. Notes "Reloading", "No ore"; the
   reticle ring and the Fleet Rockets row show it.
-- **Look** (`bolts.ts`): drawn in the ships' unit, `ROCKET.len` 0.07 R (0.7 × the rival probe), smaller than any ship;
-  the flame and embers grow with thrust (bright on launch and turns, low in straight cruise).
-- **Range:** fuel = 2 × your mining reach off your surface (`mining.ts` `fireReach`: 16.8 / 21.8 / 26.8 R with 1 / 3 / 5
-  slots; user, 2026-11-17: no shots across the map); turning costs range.
+- **Look** (`bolts.ts`): drawn in the ships' unit, `ROCKET.len` 0.095 R (0.95 × the rival probe; bigger 2026-11-17),
+  smaller than any ship; the flame and embers grow with thrust (bright on launch and turns, low in straight cruise); flame
+  width floor `w` 2.5 px (was 1.5; flame 2 × `w`, jet 1.1 × `w`).
+- **Range:** fuel = 3 × your mining reach off your surface (user, 2026-11-17; `mining.ts` `fireReach`: 25.2 / 32.7 /
+  40.2 R with 1 / 3 / 5 slots; no shots across the map); turning costs range. Rival worlds still arm within 2 × (`armReach`).
 - **Hits:** a free body ≤ 25% of you breaks into ≤ 8 pieces ("Rocket hit"); bigger or a rival's rock is chipped (`ships.ts`
   `chip`: 0.25% of you, two chunks, +40 K); a rival world takes 20 K (`weaponHit`); a direct hit kills a ship (through a
   pirate's shield), ships within 0.6 R take the blast.
+- **Near miss** (2026-11-18; `feel.ts` `createDodge`, wired in `combat.ts` `contacts`): an enemy rocket that passes within
+  `NEAR.d` 1.5 R of your surface, once the gap has reopened by 0.3 R (it has passed), plays a `whoosh` panned to it and 5
+  violet embers back along its path, once a salvo (one shooter's rockets in flight). The last rocket of an untouched salvo
+  of 2+ plays `dodge` and 8 embers where it ends (shot down, burst on a moon or out of fuel). Your locked rocket passing its
+  target without a hit: 3 cyan embers, no sound (`passed`). Measured over 2,880 planner runs (2026-11-18): ≤ 1 whoosh and ≤ 1
+  clean cue a salvo, none at or before the closest approach, none off the far pad, none in a salvo with a hit; the clean
+  cue comes a median 1.8 s (max 3.6 s) after the first pass. Your death silences both cues.
+- **Hit feel** (2026-11-18; `feel.ts` `STOP`, `stopFor`; `kit.freeze`): your rocket bursting on screen by tier: 1 an enemy
+  rocket in the blast, 2 a ship in it, 3 a kill or a live rival world. Hit-stop 25 / 40 / 60 ms of game time (HUD and audio
+  run on), at least 0.5 s apart (≤ 120 ms a second); one `strike` (loud, pitch 0.3 / 2, 0.5 / 1, 0.8 / 0.3) replaces the
+  blast sound, and a wreck's crack within 0.1 s of it stays silent. No shake, no squash.
 - Flight and checks: [shipsandflight.md](shipsandflight.md) → Rockets.
 
 ### Battles
@@ -317,6 +336,8 @@ Speeds and reaches: [shipsandflight.md](shipsandflight.md) → Guns.
   0.3 R wide; open by day light blue (`0x6cc4ff`) with a glint, stowed dark at night (`0x1b2f52`); fade out at 5–3 px.
 - Shield veils and lattice, shuttles with ore pods, lights on mined moons, ships with plumes, rockets with cyan trim, the
   gold reach gauge, four cyan arcs on your priority.
+- Embers for rocket feel (Rockets → Near miss): 5 violet as an enemy rocket whooshes past, 8 where the last of a dodged
+  salvo ends, 3 cyan as your rocket overshoots its target.
 
 ## Planned
 
@@ -362,7 +383,10 @@ Standing decisions: [README.md](README.md). Civilization ones, oldest first:
 - **Priority target** (user, 2026-11-15): sets one priority, not an attack; notes say honestly why it waits.
 - **Rockets that feel like rockets** (user, 2026-11-15): homing; close shots harder to dodge, far ones easier; slower than
   rounds, kicked to alternating sides. (Missiles superseded 2026-11-17; the feel carries over.)
-- **Rockets on Fire** (user, 2026-11-17): left-click launches a guided rocket (real thrust, nose ≤ 2.6 rad/s, fuel = 2 ×
-  mining reach); right-click / E sets the priority. Mass driver, Dyson energy beam, surface priority rockets, your silo, rival
+- **Rockets on Fire** (user, 2026-11-17): left-click launches a guided rocket (real thrust, nose ≤ 2.8 rad/s, fuel = 3 ×
+  mining reach since 2026-11-17); right-click / E sets the priority. Mass driver, Dyson energy beam, surface priority rockets, your silo, rival
   slugs and silo removed; rivals launch the same rocket. Duel balance by `ROCKET.ore` 5 and `RIVAL_SALVO` 8 s.
 - **Salvage** (user, 2026-11-17): wrecks drop what they were made of, burned and carried.
+- **Rocket feel** (2026-11-18): a near miss is heard and seen once a salvo, a dodged salvo of 2+ gets its own cue, your
+  overshoot shows embers only; your hits stop time briefly by tier (≤ 60 ms, ≥ 0.5 s apart) with one strike sound. No
+  shake, no squash.

@@ -71,12 +71,6 @@ export function scrape(c: Craft): 1 | 2 {
   c.hurt = HURT_S;
   return 1;
 }
-/** keepOut without the landing it records: a knock off a body pushed the ship into its own world. */
-export const surface = (c: Craft, r: number) => {
-  const s = c.slam;
-  keepOut(c, r);
-  c.slam = s;
-};
 export const SLAM = [0.9, 2]; // R/s onto its own world (keepOut's `slam`): a landing from here grazes, from here wrecks
 /**
  * A home ship's contacts (craft s relative to its world at pm, radius R): its bump (bar `skip`), else its world's surface
@@ -89,7 +83,8 @@ export function homeContact<B extends Disc>(s: Craft, pm: { x: number; y: number
   s.slam = 0;
   if (grade === 1) {
     [s.x, s.y, s.vx, s.vy, s.heading, s.hurt, s.hull] = [a.x - pm.x, a.y - pm.y, a.vx - pm.vx, a.vy - pm.vy, a.heading, a.hurt, a.hull];
-    surface(s, R);
+    keepOut(s, R); // a knock off a body pushed the ship into its own world: no landing recorded
+    s.slam = 0;
   }
   return { grade, hit, hard, a };
 }

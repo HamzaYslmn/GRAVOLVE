@@ -1,11 +1,14 @@
-// node test/rivals/ledger.test.ts: the roster has distinct names and every temperament; over a simulated
+// node test/rivals/ledger.test.ts: the roster has distinct names and personas from every group; over a simulated
 // 20-minute run (you 69.5 → 10^6, with a shrink and a pause) every off-screen rival stays within BAND of you, grows with
-// you, and the Hungry one ends ahead of the Careful one; each forges a world (melts through, reaches LIFE in a few minutes
+// you, and the one with the largest share ends ahead of the smallest; each forges a world (melts through, reaches LIFE in a few minutes
 // as a careful player does, never crosses the gas line); round robin skips the dead and those on the map.
 import assert from 'node:assert/strict';
-import { A_ENG, alarmStep, BAND, DODGE, evade, GATHER_U, MASS_S, newWave, next, ODDS, PURSUIT, pursueStep, REST_S, restStep, roster, sidestep, stance, stationStep, STOCK_RATE, tick, volley, want, WAVE_COST, WAVE_S, waveStep, WORLD_FLAGS, type Mood, type Temper, type Wave } from '../../src/evolution/rivals/ledger.ts';
 import {
-  ARMS, BEATEN, CALM_S, FLEET, raid, RIVAL_GLOW, RIVAL_LEAD, RIVAL_SALVO, rivalFrigates, rivalLevel, rivalSalvo, ROCKET, SALVO_LEAD, salvo, SHIELD_K, shieldMax, shieldRegen,
+  A_ENG, alarmStep, BAND, COMMIT, DODGE, evade, GATHER_U, newWave, next, PROFILE, pursueStep, remember, REST_S, restStep, roster, sidestep, stance, stationStep, STOCK_RATE,
+  TELL, TELL_MIN, tell, TEMPERS, tick, volley, want, waveStep, WORLD_FLAGS, type Mood, type Temper, type Wave,
+} from '../../src/evolution/rivals/ledger.ts';
+import {
+  ARMS, BEATEN, CALM_S, FLEET, raid, RIVAL_SALVO, rivalFrigates, rivalLevel, rivalSalvo, ROCKET, salvo, SHIELD_K, shieldMax, shieldRegen,
   shieldShot, SIEGE, siegeWing, START_ORE, START_SHIPS, strength, waveFighters, weaponHit, type Shield,
 } from '../../src/evolution/civilization/rules.ts';
 import { COMP, G_WORLD, gravitates, pairPull, pullMass, radiusOf, youPull } from '../../src/evolution/asteroid/rules.ts';
@@ -16,8 +19,11 @@ import { LIFE_S } from '../../src/evolution/planet/rules.ts';
 
 const comp = { rock: 0.8, metal: 0.1, ice: 0.08, gas: 0.02 };
 const list = roster(292, 69.5, comp);
-assert.equal(new Set(list.map((e) => e.name)).size, list.length, 'distinct names');
-for (const t of ['hungry', 'careful', 'raider']) assert.ok(list.some((e) => e.temper === t), `has a ${t} rival`);
+for (let seed = 0; seed < 200; seed++) { // every roster: 5 distinct names and personas, ≥ 2 bold, ≥ 1 mid, ≥ 1 cautious
+  const l = seed === 0 ? list : roster(seed, 69.5, comp), groups = l.map((e) => PROFILE[e.temper].group), count = (g: string) => groups.filter((x) => x === g).length;
+  assert.ok(l.length === 5 && new Set(l.map((e) => e.name)).size === 5 && new Set(l.map((e) => e.temper)).size === 5 && count('bold') >= 2 && count('mid') >= 1 && count('cautious') >= 1, `a roster of 5, never passive: ${l.map((e) => e.temper)}`);
+}
+for (const t of TEMPERS) assert.ok(PROFILE[t].mass[0] < PROFILE[t].mass[1] && PROFILE[t].mass[1] < 1.1 && PROFILE[t].massS >= 12, `${t}: mass under 1.1× you, masses ≥ 12 s in view`);
 
 // You: Age I in 100 s (×45), then ×10 every 3 minutes; a 20% shrink at 6:00 (an impact), parked flat 10:00–12:00.
 const youAt = (t: number) => {
@@ -41,9 +47,9 @@ for (let t = 0; t < 1200; t += dt) {
     k.gasMax = Math.max(k.gasMax, e.comp.gas ?? 0);
   }
 }
-const hungry = list.find((e) => e.temper === 'hungry')!, careful = list.find((e) => e.temper === 'careful')!;
-assert.ok(hungry.m > careful.m, 'Hungry ends ahead of Careful');
-assert.ok(careful.m > 1e5 * BAND[0], 'they grew with you');
+const byShare = [...list].sort((a, b) => PROFILE[a.temper].share - PROFILE[b.temper].share), low = byShare[0], high = byShare[list.length - 1];
+assert.ok(high.m > low.m, `${high.temper} ends ahead of ${low.temper}`);
+assert.ok(low.m > 1e5 * BAND[0], 'they grew with you');
 for (const [e, k] of marks) {
   assert.ok(k.soup - k.aged > 60 && k.soup - k.aged < 240, `${e.name}: life ${(k.soup - k.aged).toFixed(0)} s after melting through`);
   assert.ok(k.alive - k.aged < 400, `${e.name}: LIFE ${(k.alive - k.aged).toFixed(0)} s after melting through`);
@@ -55,7 +61,8 @@ assert.equal(want({ ...list[0], m: 1e5, heat: 6 }), 'none', 'a molten world wait
 list[1].alive = false;
 list[2].out = true;
 assert.equal(next(list, list[0]), list[3]);
-assert.equal(next(list, list[3]), list[0]);
+assert.equal(next(list, list[3]), list[4]);
+assert.equal(next(list, list[4]), list[0]);
 console.log(`ledger ok: ${list.map((e) => `${e.name} (${e.temper}) ${(e.m / youAt(1199)).toFixed(2)}×`).join(', ')} at 20:00; ratio range ${worst[0].toFixed(2)}–${worst[1].toFixed(2)}×`);
 console.log(`rival worlds ok: ${[...marks].map(([e, k]) => `${e.name} melts at ${k.aged.toFixed(0)} s, life +${(k.soup - k.aged).toFixed(0)} s, LIFE +${(k.alive - k.aged).toFixed(0)} s`).join('; ')}`);
 
@@ -71,19 +78,27 @@ console.log(`rival worlds ok: ${[...marks].map(([e, k]) => `${e.name} melts at $
   for (const temper of ['hungry', 'raider'] as const) assert.equal(stance({ ...mood, temper, stock: 99, shield: 0.05 }), 'attack', `a ${temper} one keeps attacking with its shield low`);
   assert.equal(stance({ ...mood, stock: 99, fleetShort: true }), 'defend', 'fleet short: defend');
   assert.equal(stance({ ...mood, shield: 0, wave: true }), 'attack', 'a wave out keeps its course');
-  assert.equal(stance({ ...mood, temper: 'raider', stock: WAVE_COST.raider * 2 }), 'attack', 'a Raider attacks on less stock');
-  assert.equal(stance({ ...mood, temper: 'careful', stock: WAVE_COST.careful * 2, shield: 0.7 }), 'defend', 'a Careful one defends sooner');
+  assert.equal(stance({ ...mood, temper: 'raider', stock: PROFILE.raider.cost * 2 }), 'attack', 'a Raider attacks on less stock');
+  assert.equal(stance({ ...mood, temper: 'careful', stock: PROFILE.careful.cost * 2, shield: 0.7 }), 'defend', 'a Careful one defends sooner');
   // The odds (its strength ÷ yours) gate an attack by temper: Careful 1.2, Hungry 0.8, Raider 0.6.
   const odds = strength(3 + waveFighters(2), rivalFrigates(2), 2) / strength(4, 1, 2);
-  for (const t of ['careful', 'hungry', 'raider'] as Temper[]) {
+  for (const t of TEMPERS) {
     const m = { ...mood, temper: t, stock: 1e3 };
-    assert.equal(stance({ ...m, odds: ODDS[t] }), 'attack', `${t} attacks at its odds`);
-    assert.equal(stance({ ...m, odds: ODDS[t] - 0.01 }), 'gather', `${t} waits below its odds`);
+    assert.equal(stance({ ...m, odds: PROFILE[t].odds }), 'attack', `${t} attacks at its odds`);
+    assert.equal(stance({ ...m, odds: PROFILE[t].odds - 0.01 }), 'gather', `${t} waits below its odds`);
   }
-  console.log(`odds: an L2 rival (3 home + ${waveFighters(2)} wave fighters, ${rivalFrigates(2)} frigate) against your 4 fighters and a frigate at L2: ${odds.toFixed(2)} → ${(['careful', 'hungry', 'raider'] as Temper[]).filter((t) => odds >= ODDS[t]).join(', ')} attack`);
+  // Personas: a Brute attacks outgunned; a Grudger never starts it, but hurt attacks at any odds; a Jackal waits at even
+  // odds and attacks while your shield is under half; a Prober jabs at even odds and stops once hurt; spite emboldens.
+  const at = (temper: Temper, odds: number, more: Partial<Mood> = {}) => stance({ ...mood, temper, stock: 1e3, odds, ...more });
+  assert.ok(at('brute', 0.3) === 'attack' && at('grudger', 5) === 'gather' && at('grudger', 0.1, { hurt: true }) === 'attack', 'Brute outgunned, Grudger only once hurt');
+  assert.ok(at('jackal', 1) === 'gather' && at('jackal', 1, { weak: true }) === 'attack', 'a Jackal waits for your shield to fall under half');
+  assert.ok(at('prober', 1) === 'attack' && at('prober', 1, { hurt: true }) === 'gather', 'a Prober stops once hurt');
+  assert.ok(at('hungry', 0.6, { spite: 1 }) === 'attack' && at('hungry', 1, { spite: -1 }) === 'gather', 'spite lowers the odds it needs, fear raises them');
+  assert.ok(at('jackal', 99, { shield: 0.4 }) === 'defend' && at('prober', 99, { seen: 9 }) === 'attack' && at('grudger', 99, { seen: 20 }) === 'explore', 'defend share and explore time by persona');
+  console.log(`odds: an L2 rival (3 home + ${waveFighters(2)} wave fighters, ${rivalFrigates(2)} frigate) against your 4 fighters and a frigate at L2: ${odds.toFixed(2)} → ${(['careful', 'hungry', 'raider'] as Temper[]).filter((t) => odds >= PROFILE[t].odds).join(', ')} attack`);
 
-  // A wave masses MASS_S s in view (time out of view does not count) before it leaves.
-  const w = newWave(3);
+  // A wave masses its massS s in view (time out of view does not count) before it leaves.
+  const w = newWave(3, 0, PROFILE.hungry);
   for (let t = 0; t < 30; t += 0.1) waveStep(w, 0.1, false);
   assert.equal(w.phase, 'mass', 'never leaves unseen');
   let left = 0;
@@ -91,10 +106,10 @@ console.log(`rival worlds ok: ${[...marks].map(([e, k]) => `${e.name} melts at $
     waveStep(w, 0.1, true);
     left += 0.1;
   }
-  assert.ok(left >= MASS_S - 1e-6 && left < MASS_S + 0.2, `masses ${left.toFixed(1)} s in view`);
+  assert.ok(left >= PROFILE.hungry.massS - 1e-6 && left < PROFILE.hungry.massS + 0.2, `masses ${left.toFixed(1)} s in view`);
   // It retreats at 40% losses: 5 ships turn at the 2nd loss, 4 at the 2nd, 3 at the 2nd, 2 at the 1st.
   for (const [n, turn] of [[5, 2], [4, 2], [3, 2], [2, 1]]) {
-    const v = newWave(n);
+    const v = newWave(n, 0, PROFILE.hungry);
     v.phase = 'go';
     for (let k = 1; k <= n; k++) {
       v.alive = n - k;
@@ -103,19 +118,27 @@ console.log(`rival worlds ok: ${[...marks].map(([e, k]) => `${e.name} melts at $
       if (v.phase === 'home') break;
     }
   }
-  const lostF = newWave(3, 1);
+  const lostF = newWave(3, 1, PROFILE.hungry);
   lostF.phase = 'go';
   lostF.frig = 0;
   waveStep(lostF, 0.1, true);
   assert.equal(lostF.phase, 'home', 'a wave turns home when its frigate is lost');
-  const late = newWave(4);
+  const late = newWave(4, 0, PROFILE.hungry);
   late.phase = 'go';
-  for (let t = 0; t < WAVE_S + 0.2; t += 0.1) waveStep(late, 0.1, true);
-  assert.equal(late.phase, 'home', 'goes home after WAVE_S');
+  for (let t = 0; t < PROFILE.hungry.waveS + 0.2; t += 0.1) waveStep(late, 0.1, true);
+  assert.equal(late.phase, 'home', 'goes home after its waveS');
+  // A persona's wave (newWave's p): a Prober's wave of 3 turns home at its first loss, and by 15 s; a Brute's masses 14 s.
+  const jab = newWave(3, 0, PROFILE.prober), jabT = newWave(3, 0, PROFILE.prober), brute = newWave(3, 0, PROFILE.brute);
+  [jab.phase, jab.alive, jabT.phase] = ['go', 2, 'go'];
+  waveStep(jab, 0.1, true);
+  let jt = 0, bt = 0;
+  for (; jabT.phase === 'go'; jt += 0.1) waveStep(jabT, 0.1, true);
+  for (; brute.phase === 'mass'; bt += 0.1) waveStep(brute, 0.1, true);
+  assert.ok(jab.phase === 'home' && jt <= PROFILE.prober.waveS + 0.15 && Math.abs(bt - PROFILE.brute.massS) < 0.15, `Prober home at its first loss and at ${jt.toFixed(1)} s; Brute masses ${bt.toFixed(1)} s`);
 
   // Duels without the Sling (the user, 2026-11-14): you stay and fight a rival of level L. Your rockets (ROCKET: a magazine of
-  // salvo(T), one refilled every ROCKET.reload s, ROCKET.ore each from your stock, half land on its dodging world; a frigate
-  // of its that is out first). Its rockets: a salvo of rivalSalvo(L, SALVO_LEAD) every RIVAL_SALVO s, half land on you as you
+  // salvo(T), one refilled every ROCKET.reload s, ROCKET.ore each from your stock, all land on its dodging world (the dodge
+  // sim below measures 100% over the keep); a frigate of its that is out first, half of them). Its rockets: a salvo of rivalSalvo(L, its salvo) every RIVAL_SALVO s, half land on you as you
   // stay: outside its wave in volleys (restStep) and never on your people (floor: your people), with its wave out within the
   // wave's raid caps. Its war wave by its temper's odds: each fighter's rounds, each frigate's lance salvo; your home fighters,
   // at most two, each kill one wave ship per 3.5 s pass half the time. Your sortie while your shield holds (CALM_S after it
@@ -142,12 +165,12 @@ console.log(`rival worlds ok: ${[...marks].map(([e, k]) => `${e.name} melts at $
       if (mag >= 1 && ore >= ROCKET.ore) {
         [mag, ore] = [mag - 1, ore - ROCKET.ore];
         if (gone && wave!.frig > 0) { if (rnd() < 0.5 && ++fhp >= Lc.rivalHull) [wave!.frig, frig, fhp] = [wave!.frig - 1, frig - 1, 0]; } // at its frigate first
-        else if (rnd() < 0.5) hurt('rocket', ROCKET.k);
+        else if (rnd() < 0.61) hurt('rocket', ROCKET.k); // the share that lands on its dodging world (the dodge sim below: 61% over the keep; user 2026-11-18: a small margin to dodge)
       }
       rest = restStep(rest, a.s <= 0, 0.1);
       if ((gone || volley(!!wave, rest)) && (cb -= 0.1) <= 0) {
         cb = RIVAL_SALVO;
-        for (let i = 0; i < rivalSalvo(L, SALVO_LEAD[temper]); i++) if (rnd() < 0.5) hit('rocket', ROCKET.k, gone ? cap : { floor: pa, burnt: 0 });
+        for (let i = 0; i < rivalSalvo(L, PROFILE[temper].salvo); i++) if (rnd() < 0.5) hit('rocket', ROCKET.k, gone ? cap : { floor: pa, burnt: 0 }); // half: approximate
       }
       // Your sortie (rules.ts sortieStep: off with your shield down, then CALM_S).
       calm = Math.max(0, calm - 0.1);
@@ -159,8 +182,8 @@ console.log(`rival worlds ok: ${[...marks].map(([e, k]) => `${e.name} melts at $
       }
       stock += STOCK_RATE * L * 0.1;
       if (!wave && (mineT -= 0.1) <= 0) [mineT, stock] = [15, stock + GATHER_U];
-      const st = stance({ temper, wave: !!wave, shield: b.s / shieldMax(b), fleetShort: false, far: false, seen: t, stock, level: L, odds: strength(L + 1 + waveFighters(L), frig, L) / yours });
-      if (st === 'attack' && !wave) [wave, stock, lanceT] = [newWave(waveFighters(L) + frig, frig), stock - WAVE_COST[temper] * waveFighters(L), Lc.reload];
+      const st = stance({ temper, wave: !!wave, shield: b.s / shieldMax(b), fleetShort: false, far: false, seen: t, stock, level: L, odds: strength(L + 1 + waveFighters(L), frig, L) / yours, hurt: pb < 1, weak: a.s < 0.5 * shieldMax(a) });
+      if (st === 'attack' && !wave) [wave, stock, lanceT] = [newWave(waveFighters(L) + frig, frig, PROFILE[temper]), stock - PROFILE[temper].cost * waveFighters(L), Lc.reload];
       if (wave) {
         const was = wave.phase;
         waveStep(wave, 0.1, true);
@@ -192,7 +215,7 @@ console.log(`rival worlds ok: ${[...marks].map(([e, k]) => `${e.name} melts at $
   const pct = (x: number) => `${(100 * x).toFixed(0)}%`;
   // Rivals by temper (user, 2026-11-15: "rivals can beat me, some don't; sometimes I need to run, sometimes fight"), each at
   // the level it meets you (rivalLevel at 0 s). Tier 1 never wins a duel (rounds never take people): it holds or leaves.
-  const meet = (t: Temper) => rivalLevel(0, 1, RIVAL_LEAD[t]), row = (T: number, L: number, t: Temper, r: ReturnType<typeof rate>, label: string) =>
+  const meet = (t: Temper) => rivalLevel(0, 1, PROFILE[t].lead), row = (T: number, L: number, t: Temper, r: ReturnType<typeof rate>, label: string) =>
     console.log(`duel, tier ${T} ${label} vs ${t} L${L}: win ${pct(r.win)} (median ${r.wonT.toFixed(0)} s, people left ${r.left.toFixed(2)}), lose ${pct(r.lose)} (median ${r.lostT.toFixed(0)} s), ≥ 50% people at 60 s in ${pct(r.held60)}`);
   const t1 = (t: Temper, L = meet(t)) => { const r = rate(1, L, t); row(1, L, t, r, '(L1 shield, 2 fighters, 10 ore)'); assert.ok(r.held60 >= 0.9, `there is time to leave a ${t} rival: ≥ 50% of your people at 60 s in ${r.held60}`); return r; };
   const careful1 = t1('careful'), hungry1 = t1('hungry'), raider1 = t1('raider');
@@ -207,17 +230,41 @@ console.log(`rival worlds ok: ${[...marks].map(([e, k]) => `${e.name} melts at $
   assert.ok(hungry3.win >= 0.7, `with a frigate you win >= 70% vs an equal rival (${hungry3.win})`);
   assert.ok(raider3.win >= 0.5 && raider3.lose >= 0.02, `a Raider one level up is a contest: it sometimes beats you (win ${raider3.win}, lose ${raider3.lose})`);
   for (const [t, L] of [['careful', 2], ['hungry', 3], ['hungry', 4], ['raider', 4]] as const) row(5, L, t, rate(5, L, t), '(L3 shield, 6 fighters, two frigates, 120 ore)');
-  assert.ok(RIVAL_GLOW >= 1 && RIVAL_GLOW < MASS_S, "a rival's pad glows a second or more before each salvo: the tell");
-  assert.ok(rivalLevel(0, 1, RIVAL_LEAD.raider) === 2, 'a Raider meets a new civilization one level up');
+  // The other personas, at the level each meets you (after the rows above, so their draws stay put).
+  const more: Temper[] = ['brute', 'stalker', 'jackal', 'prober', 'grudger'];
+  for (const t of more) t1(t);
+  for (const t of more) t3(t, rivalLevel(0, 2, PROFILE[t].lead));
+  // The pad's tell by persona (TELL): a second or more, shorter than its wave's massing; pure; 0..hot, ending at hot × dim on a
+  // steady last COMMIT share; Brute shortest and hottest, Stalker longest; only the Jackal reads your shield; Prober flickers 4 times, Grudger 2.
+  {
+    const curve = (t: Temper, weak = false, n = 600) => Array.from({ length: n + 1 }, (_, i) => tell(t, (i / n) * TELL[t].s, weak));
+    for (const t of TEMPERS) {
+      const T = TELL[t], c = curve(t), last = c.slice(Math.ceil(600 * (1 - COMMIT)));
+      assert.ok(T.s >= TELL_MIN && T.s < PROFILE[t].massS, `${t}: the tell lasts ${TELL_MIN}+ s, under its massing (${T.s} s)`);
+      assert.ok(tell(t, 0.7) === tell(t, 0.7) && c.every((k) => k >= 0 && k <= T.hot + 1e-9), `${t}: the tell is pure and within 0..hot`);
+      assert.ok(Math.abs(tell(t, T.s) - T.hot * T.dim) < 1e-9 && tell(t, 9) === tell(t, T.s) && last.every((k, i) => !i || k >= last[i - 1] - 1e-12), `${t}: it ends at hot × dim, steady over the last ${COMMIT}`);
+      assert.equal(curve(t, true).some((k, i) => k !== c[i]), t === 'jackal', `${t}: ${t === 'jackal' ? 'brightens' : 'ignores'} your weak shield`);
+      const peaks = c.slice(0, Math.floor(600 * (1 - COMMIT))).filter((k, i, a) => i > 0 && i < a.length - 1 && k > a[i - 1] && k >= a[i + 1]).length;
+      assert.equal(peaks, T.blink, `${t}: ${T.blink} flickers before it commits`);
+    }
+    const s = TEMPERS.map((t) => TELL[t].s), hot = TEMPERS.map((t) => TELL[t].hot);
+    assert.ok(TELL.brute.s === Math.min(...s) && TELL.brute.hot === Math.max(...hot) && TELL.stalker.s === Math.max(...s), 'Brute: shortest and hottest; Stalker: longest');
+    assert.equal(new Set(TEMPERS.map((t) => JSON.stringify(TELL[t]))).size, TEMPERS.length, 'every persona has its own tell');
+  }
+  assert.ok(rivalLevel(0, 1, PROFILE.raider.lead) === 2, 'a Raider meets a new civilization one level up');
   // You can flee: a rival world's engines (A_ENG) cannot hold you accelerating away at 2 R/s² from 10 R: past ENGAGE (30 R) within 8 s.
   {
-    let ox = 10, vx = 0, t = 0;
-    for (; t < 8 && ox < 30; t += 0.05) {
-      const dv = stationStep(ox, 0, vx, 0, 10, 0.004, 1, 0.05, false);
-      vx += 2 * 0.05 + dv.x;
-      ox += vx * 0.05;
-    }
-    console.log(`fleeing at 2 R/s² from 10 R: past 30 R in ${t.toFixed(1)} s`);
+    const flee = (cap = A_ENG, close?: number) => {
+      let ox = 10, vx = 0, t = 0;
+      for (; t < 30 && ox < 30; t += 0.05) {
+        const dv = stationStep(ox, 0, vx, 0, 10, 0.004, 1, 0.05, false, 0, 0, cap, undefined, close);
+        vx += 2 * 0.05 + dv.x;
+        ox += vx * 0.05;
+      }
+      return { ox, t };
+    };
+    const { ox, t } = flee();
+    console.log(`fleeing at 2 R/s² from 10 R: past 30 R in ${t.toFixed(1)} s (A_ENG); by persona ${TEMPERS.map((p) => `${p} ${flee(PROFILE[p].eng, PROFILE[p].close).t.toFixed(1)}`).join(', ')} s`);
     assert.ok(ox >= 30 && t <= 8, `you outrun a rival world (${ox.toFixed(1)} R at ${t.toFixed(1)} s)`);
   }
 }
@@ -261,7 +308,8 @@ console.log(`rival worlds ok: ${[...marks].map(([e, k]) => `${e.name} melts at $
   // alternating) at it on its circular station `keep` R off you; it sees the launch, reacts after 0–0.4 s, builds its thrust
   // over DODGE.ramp (its last thrust fed back) across the rocket's line of sight, the way it already crosses it, until they
   // are gone, then brakes back onto its station (A_ENG engines alone cannot get it out of the way). The rockets fly by real
-  // thrust (nose ≤ ROCKET.turn, push ≤ ROCKET.acc), 16.8 R (one moon slot): whichever way it steps about half land, and a salvo of 2–3 always lands one.
+  // thrust (nose ≤ ROCKET.turn, push ≤ ROCKET.acc), 25.2 R (one moon slot): whichever way it steps, from 8 R nearly all land,
+  // from 12 R all, and a salvo of 2–3 always lands one.
   const s0 = sidestep(5, 0.1, 9, 0);
   assert.ok(s0.y > 0 && Math.abs(s0.x) < 0.03 * DODGE.v, 'it steps across a rocket\'s line of sight, on its miss\'s side');
   assert.ok(sidestep(5, 0.1, 9, 0, -1).y < 0, 'or the way it already crosses that line');
@@ -270,7 +318,7 @@ console.log(`rival worlds ok: ${[...marks].map(([e, k]) => `${e.name} melts at $
   { // the ramp: a goal velocity alone (on station, no pull, at rest), cap 7 R/s²; thrust = Δv / dt
     const dt = 1 / 60, go = (ay: number, was?: { x: number; y: number }) => stationStep(10, 0, 0, 0, 10, 0, 1, dt, false, 0, ay, 7, was).y / dt, step = (7 / DODGE.ramp) * dt;
     let T = 0, n = 0;
-    for (; n < 17; n++) T = go(50, { x: 0, y: T });
+    for (; n < Math.round(DODGE.ramp * 60) - 1; n++) T = go(50, { x: 0, y: T });
     const full = go(50, { x: 0, y: T });
     assert.ok(Math.abs(go(50, { x: 0, y: 0 }) - step) < 1e-6, `from rest it builds cap / ramp a second (${go(50, { x: 0, y: 0 })})`);
     assert.ok(T < 7 && Math.abs(full - 7) < 1e-9, `full thrust after ramp s, not before (${T.toFixed(3)}, then ${full})`);
@@ -312,10 +360,12 @@ console.log(`rival worlds ok: ${[...marks].map(([e, k]) => `${e.name} melts at $
   const all = salvos(300, () => 8 + 4 * rnd()), soft = salvos(200, () => 8 + 4 * rnd(), true, 5), hard = salvos(200, () => 8 + 4 * rnd(), true, 14);
   const cruise = salvos(100, () => 8 + 4 * rnd(), false), pc = (x: number) => (100 * x).toFixed(0);
   console.log(`your rockets (${ROCKET.speed} R/s, ≤ ${ROCKET.turn} rad/s, pads ±${ROCKET.pad} rad, alternating) at a dodging rival world (burn ${DODGE.a} R/s² built over ${DODGE.ramp} s, react 0–${DODGE.react[1]} s): land ${pc(l8.land)} / ${pc(l12.land)}% from 8 / 12 R, ${pc(all.land)}% over keep 8–12 R (burn 5: ${pc(soft.land)}%, 14: ${pc(hard.land)}%), ${pc(cruise.land)}% on A_ENG engines alone; a salvo of 2–3 lands at least ${Math.min(all.floor, l8.floor, l12.floor, soft.floor, hard.floor)}; thrust rises ≤ ${Math.max(all.rise, l8.rise).toFixed(1)} R/s³; ${DODGE.brake + 1} s after the last one at worst ${all.slow.toFixed(2)} R/s off its circular speed, easing back to its distance at ≤ ${all.ease.toFixed(2)} R/s`);
-  for (const [L, l] of [[8, l8], [12, l12]] as const) assert.ok(l.land >= 0.35 && l.land <= 0.8, `from ${L} R about half land (${l.land})`);
-  assert.ok(all.land >= 0.4 && all.land <= 0.7, `about half land over keep 8–12 R (${all.land})`);
-  assert.ok([soft, hard].every((l) => l.land >= 0.35 && l.land <= 0.85), `a weak (5 R/s²) or strong (14 R/s²) burn still lands about half (${soft.land}, ${hard.land})`);
-  assert.ok([l8, l12, all, soft, hard].every((l) => l.floor >= 1), 'every salvo of 2–3 lands at least one');
+  // A small margin to dodge, bots and players alike (user, 2026-11-18): close in nearly all land, from far a good burn slips most.
+  assert.ok(l8.land >= 0.95, `from 8 R nearly all land (${l8.land})`);
+  assert.ok(l12.land >= 0.1 && l12.land <= 0.5, `from 12 R it has time to burn across: most slip, not all (${l12.land})`);
+  assert.ok(all.land >= 0.5 && all.land <= 0.7, `over keep 8–12 R it slips 30–50%, about your own share (${all.land})`);
+  assert.ok(soft.land >= 0.95 && hard.land >= 0.2 && hard.land < all.land, `a weak burn (5 R/s²) slips none, a strong one (14 R/s²) more, never all (${soft.land}, ${hard.land})`);
+  assert.ok(l8.floor >= 1 && soft.floor >= 1, 'from 8 R, or at a weak burn, every salvo of 2–3 lands at least one');
   assert.ok(cruise.land >= 0.95, `A_ENG engines alone hardly get it out of the way (${cruise.land})`);
   assert.ok(all.slow < 0.5 && all.ease <= 3, `DODGE.brake + 1 s after the last rocket it sails its station again (under 0.5 R/s off: ${all.slow}), only easing back to its distance (${all.ease} R/s, ledger CLOSE_V 3)`);
   for (const s of [l8, l12, all, soft, hard, cruise]) assert.ok(s.rise <= s.burn / DODGE.ramp + 1e-6, `thrust builds, never jumps (${s.rise} R/s³)`);
@@ -352,21 +402,51 @@ console.log(`rival worlds ok: ${[...marks].map(([e, k]) => `${e.name} melts at $
   assert.ok(on.top >= 0.3 && on.down < 0.4, `with it it mends between volleys (${on.top}, down ${on.down})`);
 }
 // Pursuit: outrun (outside its keep + slack, the gap growing) a world lets go after its temper's patience, then rests
-// PURSUIT.rest s; one keeping station beside you (at its distance, or closing) never lets go.
+// its rest s; one keeping station beside you (at its distance, or closing) never lets go.
 {
-  const dt = 0.1, letGo = (t: Temper, d: number, dd: number, T = 120) => {
+  const dt = 0.1, letGo = (t: Temper, d: number, dd: number, T = 300, spite = 0) => {
     const p = { slow: 0, rest: 0 };
-    for (let s = 0; s < T; s += dt) if (!pursueStep(p, t, d, 10, dd, dt)) return s + dt;
+    for (let s = 0; s < T; s += dt) if (!pursueStep(p, t, d, 10, dd, dt, spite)) return s + dt;
     return Infinity;
   };
-  const at = (['careful', 'hungry', 'raider'] as Temper[]).map((t) => letGo(t, 20, 2));
-  at.forEach((s, i) => assert.ok(Math.abs(s - PURSUIT.s[(['careful', 'hungry', 'raider'] as Temper[])[i]]) < 0.2, `lets go at its patience: ${s}`));
+  const at = TEMPERS.map((t) => letGo(t, 20, 2));
+  at.forEach((s, i) => assert.ok(Math.abs(s - PROFILE[TEMPERS[i]].patience) < 0.2, `${TEMPERS[i]} lets go at its patience: ${s}`));
   assert.equal(letGo('careful', 10, 0, 600), Infinity, 'at station beside you: follows');
   assert.equal(letGo('careful', 20, -1, 600), Infinity, 'closing on you: follows');
-  const p = { slow: 0, rest: 0 };
-  let s = 0, back = -1;
-  for (; s < 300 && back < 0; s += dt) if (pursueStep(p, 'careful', 20, 10, 2, dt) && p.slow > 0 && s > PURSUIT.s.careful) back = s;
-  assert.ok(back >= PURSUIT.s.careful + PURSUIT.rest - 0.2, `rests ${PURSUIT.rest} s before it follows again: ${back}`);
-  console.log(`pursuit: outrun, a world lets go after ${at.map((v) => v.toFixed(1)).join(' / ')} s (careful / hungry / raider), follows again after ${PURSUIT.rest} s; at station it never lets go`);
+  assert.ok(Math.abs(letGo('hungry', 20, 2, 300, 1) - 2 * PROFILE.hungry.patience) < 0.2 && Math.abs(letGo('hungry', 20, 2, 300, -1) - 0.5 * PROFILE.hungry.patience) < 0.2, 'spite +1 doubles its patience; −1 halves it (the floor)');
+  const backAt = TEMPERS.map((t) => {
+    const p = { slow: 0, rest: 0 };
+    let s = 0, back = -1;
+    for (; s < 600 && back < 0; s += dt) if (pursueStep(p, t, 20, 10, 2, dt) && p.slow > 0 && s > PROFILE[t].patience) back = s;
+    assert.ok(back >= PROFILE[t].patience + PROFILE[t].rest - 0.2, `${t} rests ${PROFILE[t].rest} s before it follows again: ${back}`);
+    return back;
+  });
+  console.log(`pursuit: outrun, a world lets go after ${TEMPERS.map((t, i) => `${t} ${at[i].toFixed(1)}`).join(' / ')} s, follows again at ${backAt.map((v) => v.toFixed(0)).join(' / ')} s; at station it never lets go`);
+  // Memory (remember): clamped to −1..1, by group.
+  const e = (temper: Temper) => ({ ...list[0], temper, spite: 0 }), b = e('brute'), j = e('jackal'), c = e('prober');
+  [b, j, c].forEach((x) => remember(x, 'hurt'));
+  assert.ok(b.spite === 0.5 && j.spite === 0.5 && c.spite === -0.5, 'hurt: bold and mid angrier, cautious warier');
+  [b, j, c].forEach((x) => (remember(x, 'beaten'), remember(x, 'beaten')));
+  assert.ok(b.spite === 1 && j.spite === -1 && c.spite === -1, 'beaten twice: clamped');
+  remember(c, 'won');
+  assert.equal(c.spite, -0.5, 'it won: +0.5 for all');
+  // Catching up (keepStation's gates: engines only within ENGAGE 30 R and while it follows, pursueStep): you pass it at
+  // 6 R/s on its kept 10 R; a Stalker's engines and closing speed bring it back onto station, a Hungry one's fall behind.
+  const station = (t: Temper) => {
+    const P = PROFILE[t], q = { slow: 0, rest: 0 }, h = 1 / 60;
+    let x = -10, y = 0, vx = -6, vy = 0, was = { x: 0, y: 0 };
+    for (let s = 0; s < 60; s += h) {
+      const d = Math.hypot(x, y), dd = (x * vx + y * vy) / d;
+      if (d > 30 || !pursueStep(q, t, d, 10, dd, h)) return -s;
+      if (s > 1 && Math.abs(d - 10) < 1 && Math.abs(dd) < 0.5) return s;
+      const g = stationStep(x, y, vx, vy, 10, 0, 1, h, false, 0, 0, P.eng, was, P.close);
+      [vx, vy, was] = [vx + g.x, vy + g.y, { x: g.x / h, y: g.y / h }];
+      [x, y] = [x + vx * h, y + vy * h];
+    }
+    return -60;
+  };
+  const back = TEMPERS.map(station);
+  console.log(`passed at 6 R/s on station: ${TEMPERS.map((t, i) => `${t} ${back[i] > 0 ? `back at ${back[i].toFixed(1)} s` : `lost at ${(-back[i]).toFixed(1)} s`}`).join(', ')}`);
+  assert.ok(back[TEMPERS.indexOf('stalker')] > 0 && back[TEMPERS.indexOf('hungry')] < 0, 'a Stalker catches up from behind, a Hungry one does not');
 }
 console.log('rival civilizations ok');

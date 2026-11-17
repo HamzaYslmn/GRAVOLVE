@@ -19,7 +19,6 @@ const BOIL = 0.02; // share of the water per second, at full boil
 const BOIL_SPAN = 200; // K above the boiling point for full boil
 export const LATENT = 40; // heat used up per unit of mass share boiled (comets use it too)
 
-
 /** Surface temperature in kelvin. */
 export const kelvin = (heat: number) => SPACE_K + K_PER_HEAT * heat;
 /** Heat units at a surface temperature in kelvin (inverse of kelvin). */

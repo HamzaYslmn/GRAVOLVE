@@ -85,15 +85,14 @@ import { rocketAt } from './fakes.ts';
 }
 
 // Your rocket (guns.ts createRockets, a world of radius 1 at rest): a rock 9 R out crossing at 3 R/s that turns back 0.4 s
-// after the launch is hit from the inside pad (the side it turns back to); from the outside pad the seeker still closes in
-// more than the same shot without a seeker, which misses. A late course change beats the wrong-side rocket (its path lags
-// its nose, guns.test.ts): fire a pair. A rocket hears only a hit on its own target.
+// after the launch is hit from either pad (the lock holds and the rocket comes round); the same shot without a seeker
+// misses. A rocket hears only a hit on its own target.
 {
   const run = (guided: boolean, side = 1) => {
     const pool = createRockets(12, () => (side > 0 ? 0 : 0.9)), target: Disc = { m: 1, r: 0.4, motion: { x: 8, y: -4, vx: 0, vy: 3 } };
     let got = false, best = Infinity;
     const m = pool.launch(rocketAt(1, { tx: 8, ty: -4, target, ...(guided ? { seek: () => ({ ...target.motion, r: target.r }) } : {}), hit: (b: Disc) => void (got ||= b === target) }))!;
-    for (let t = 0, dt = 1 / 60; t < 3 && pool.live.length; t += dt) {
+    for (let t = 0, dt = 1 / 60; t < 6 && pool.live.length; t += dt) {
       if (t >= 0.4) target.motion.vy = -3;
       target.motion.x += target.motion.vx * dt;
       target.motion.y += target.motion.vy * dt;
@@ -104,6 +103,6 @@ import { rocketAt } from './fakes.ts';
   };
   const g = [run(true, 1), run(true, -1)], un = run(false);
   console.log(`your rocket at a rock 9 R out turning back 0.4 s after launch: guided ${g.map((f) => (f.got ? 'hit' : `missed by ${f.best.toFixed(2)} R`)).join(' / ')} (outside / inside pad), without a seeker ${un.got ? 'hit' : `missed by ${un.best.toFixed(2)} R`}`);
-  assert.ok(g[1].got && g.every((f) => f.best < un.best) && !un.got, 'the seeker follows a target that changes course: the inside pad hits, the outside one misses by less than no seeker');
+  assert.ok(g.every((f) => f.got) && !un.got, 'the seeker follows a target that changes course: both pads hit, no seeker misses');
 }
 console.log('priority target ok');

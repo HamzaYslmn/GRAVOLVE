@@ -1,7 +1,7 @@
 import { Container, Rectangle, RenderTexture, Sprite, Texture, UniformGroup, type Renderer } from 'pixi.js';
 import { clamp, smoothstep } from '../core/rng';
 import { mixRgb, type Body } from '../evolution/asteroid/body';
-import { airR, burnShare, MOLTEN, SPECK } from '../evolution/asteroid/rules';
+import { airR, burnShare, MOLTEN } from '../evolution/asteroid/rules';
 import { setSurface } from '../evolution/asteroid/sphere';
 import { LIFE_S } from '../evolution/planet/rules';
 import type { WorldState } from '../evolution/planet/stage';
@@ -118,7 +118,7 @@ export function createOverlays(layer: Container, renderer: Renderer) {
       ease('clouds', liquid && p > 0.1 ? (habitable ? 0.7 : 0.45) * Math.min(1, w.waterShare / 0.1) : w.water === 'ice' && p > 0.2 ? 0.2 : 0);
       // Limb: alpha 0.7·t, t = smoothstep(−2, 0.48, log10 p).
       ease('air', 0.7 * smoothstep(-2, 0.48, Math.log10(Math.max(p, 1e-3))));
-      ease('edge', 4 * burnShare(p) > SPECK ? 0.12 + 0.3 * shown.air : 0); // any air that can burn a rock shows out to its edge
+      ease('edge', 4 * burnShare(p) > 1e-3 ? 0.12 + 0.3 * shown.air : 0); // any air that can burn a rock shows out to its edge (1e-3: the SPECK before 2026-11-17)
       boost = Math.max(0, boost - dt);
 
       root.position.copyFrom(b.view.position);

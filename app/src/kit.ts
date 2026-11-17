@@ -11,4 +11,5 @@ export type Kit = {
   field: () => Field;
   view: Readonly<{ x: number; y: number; zoom: number }>; // the camera this frame
   area: Readonly<{ halfW: number; halfH: number }>; // the game area's half sizes (world units): your natural view
+  freeze: (s: number) => void; // hit-stop: s of game time frozen (the longest ask wins; HUD and audio run on)
 };

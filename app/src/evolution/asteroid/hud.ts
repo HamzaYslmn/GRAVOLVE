@@ -7,12 +7,12 @@ import { hold, kelvin, pressure, waterState, type WaterState } from '../../core/
 import { toast, toastBusy } from '../../ui/toast';
 import { load, save } from '../../ui/settings';
 import { bar, finder, fit, hex, label, PERIOD, throttle, widths } from '../../ui/panel';
-import { cell, head, icon, tipText, addTips } from '../../ui/rows';
+import { cell, head, icon, ICON, tipText, addTips } from '../../ui/rows';
 import { createTip } from '../../ui/tip';
 import type { Controls } from '../../core/input';
 import type { Biome } from './web';
 import { habOf, type Entry } from '../rivals/ledger';
-import { handsOff, lifeName, moonCap, MOON, MOON_SHARE } from '../planet/rules';
+import { handsOff, lifeName, MOON, moonSized } from '../planet/rules';
 import { AGE_GOAL, shapeOf, MAX_HEAT, mealsTo, MOLTEN, TAGS, tierAt, TIERS, V_STICK, type Comp, type Element } from './rules';
 
 // The stage HUD, plain DOM over the canvas: every readout is an icon with a label on the card's shared columns (ui/rows.ts,
@@ -34,8 +34,8 @@ import { AGE_GOAL, shapeOf, MAX_HEAT, mealsTo, MOLTEN, TAGS, tierAt, TIERS, V_ST
 const ELEMENTS: [Element, string, string, string][] = [
   ['metal', 'Metal', '#9fb0c8', '<path d="M6 1 10.3 3.5v5L6 11 1.7 8.5v-5Z"/><circle cx="6" cy="6" r="1.7"/>'],
   ['rock', 'Rock', '#c9a27a', '<path d="M2 8.2 2.8 4 6 1.6 9.6 3 11 7.2 8.4 10.6H3.6Z"/><path d="M6 4.2 5.1 6.9 7 7.8"/>'],
-  ['ice', 'Water', '#6fd3ff', '<path d="M6 1.2C4 4 2.8 5.8 2.8 7.6a3.2 3.2 0 0 0 6.4 0C9.2 5.8 8 4 6 1.2Z"/>'],
-  ['gas', 'Gas', '#ffd27a', '<path d="M1.5 3.8c1.5-1.3 3-1.3 4.5 0s3 1.3 4.5 0M1.5 8.2c1.5-1.3 3-1.3 4.5 0s3 1.3 4.5 0"/>'],
+  ['ice', 'Water', '#6fd3ff', ICON.water],
+  ['gas', 'Gas', '#ffd27a', ICON.gas],
   ['radio', 'Rad', '#8dff6a', '<path class="fill" d="M4.95 4.54L3.3 1.68A5.4 5.4 0 0 1 8.7 1.68L7.05 4.54A2.1 2.1 0 0 0 4.95 4.54ZM8.1 6.36L11.4 6.36A5.4 5.4 0 0 1 8.7 11.04L7.05 8.18A2.1 2.1 0 0 0 8.1 6.36ZM4.95 8.18L3.3 11.04A5.4 5.4 0 0 1 0.6 6.36L3.9 6.36A2.1 2.1 0 0 0 4.95 8.18Z"/><circle class="fill" cx="6" cy="6.36" r="1.1"/>'], // radioactive heavy elements
 ];
 // Speed gauge on a log scale (there is no top speed): the eat zone (0..8) keeps ~20% of the width,
@@ -61,7 +61,7 @@ const pct = (f: number) => `${Math.round(f * 100)}%`;
 /** A composition share as text: one decimal under 1%, so a trace never reads as 0%. */
 const share = (f: number) => (f > 0.0005 && f < 0.01 ? `${(f * 100).toFixed(1)}%` : pct(f));
 /** A composition as tooltip rows, biggest first. */
-export const mixRows = (c: Comp) => ELEMENTS.filter(([e]) => (c[e] ?? 0) >= 0.0005).sort((a, b) => c[b[0]]! - c[a[0]]!).map(([e, name]) => `${name}\t${share(c[e]!)}`).join('\n');
+const mixRows = (c: Comp) => ELEMENTS.filter(([e]) => (c[e] ?? 0) >= 0.0005).sort((a, b) => c[b[0]]! - c[a[0]]!).map(([e, name]) => `${name}\t${share(c[e]!)}`).join('\n');
 /** Mass as text: 12.3, 4.5k, 21.3M. */
 export const big = (m: number) => (m >= 1e6 ? `${(m / 1e6).toFixed(m >= 1e8 ? 0 : 1)}M` : m >= 1e4 ? `${Math.round(m / 1e3)}k` : m >= 1e3 ? `${(m / 1e3).toFixed(1)}k` : m.toFixed(1));
 
@@ -106,12 +106,6 @@ const tierOf = (m: number) => TIERS[tierAt(m)];
 const FAST_HINT = 2;
 const FLASH_S = 1.2;
 let fastHits = 0, flashed = 0;
-/** The speed row's tooltip (every stage): `v` and the predicted hit in your diameters a second. */
-export const speedTip = (v: number, aim?: Aim, moon = false) =>
-  `Speed ${speedText(v)}: your own diameters a second. No drag in space: thrust against your motion to brake.\nGreen, under ${V_STICK}: rocks stick, you eat them.\nAmber, to ${3 * V_STICK}: rough hits.\nRed: hits bounce or break.\nAll red: your target outweighs you, slow is not safe.${aim && !moon ? `\nThe small mark under it: your speed into your target, ${speedText(aim.speed)}.` : ''}`;
-/** The composition bar's tooltip (every stage). */
-export const mixTip = (c: Comp) =>
-  `What you are made of:\n${mixRows(c)}\nWater makes seas, gas makes air, sunk metal makes the magnetic field, Rad keeps a core churning and fuels reactors.`;
 /** A hit with you as the actor (field.ts). */
 export function noteHit(h: Hit) {
   if ((h.kind === 'bounce' || h.kind === 'graze') && h.speed > V_STICK) [fastHits, flashed] = [fastHits + 1, FLASH_S];
@@ -197,8 +191,8 @@ export function createHud(input?: Controls, surface?: HTMLElement) {
       return null;
     }
     if (!me) return null;
-    if (key === 'speed') return speedTip(seenV, seenAim, seenMoon);
-    if (key === 'mix') return mixTip(me.comp);
+    if (key === 'speed') return `Speed ${speedText(seenV)}: your own diameters a second. No drag in space: thrust against your motion to brake.\nGreen, under ${V_STICK}: rocks stick, you eat them.\nAmber, to ${3 * V_STICK}: rough hits.\nRed: hits bounce or break.\nAll red: your target outweighs you, slow is not safe.${seenAim && !seenMoon ? `\nThe small mark under it: your speed into your target, ${speedText(seenAim.speed)}.` : ''}`;
+    if (key === 'mix') return `What you are made of:\n${mixRows(me.comp)}\nWater makes seas, gas makes air, sunk metal makes the magnetic field, Rad keeps a core churning and fuels reactors.`;
     if (root.dataset.stage !== 'asteroid') return null;
     const i = tierAt(me.m), [from, name] = TIERS[i], next = TIERS[i + 1];
     switch (key) {
@@ -315,9 +309,9 @@ export function createHud(input?: Controls, surface?: HTMLElement) {
       if (!t) return;
       const who = moon ? undefined : t.rival?.entry?.name;
       $('.target .name').textContent = who ?? tierOf(t.m)[1];
-      const r = t.m / me.m, cap = moonCap(t.m, t.r, me.m, me.r);
+      const r = t.m / me.m;
       $('.target .ratio').textContent = r < 0.001 ? '×<0.001' : `×${r >= 10 ? Math.round(r) : r.toPrecision(2)}`;
-      moonsize.classList.toggle('on', t.m >= Math.min(MOON_SHARE[0] * me.m, 0.25 * cap) && t.m <= 1.01 * cap && !handsOff(t) && !t.rival); // planet/moons.ts sizeOk's bounds
+      moonsize.classList.toggle('on', moonSized(t.m, t.r, me.m, me.r) && !handsOff(t) && !t.rival);
       $('.target .sub').textContent = moon ? `Moon · ${rockName(t)}` : who ? `${tierOf(t.m)[1]} · ${rockName(t)}` : rockName(t);
       const tm = mixBar(t.comp, MIX_TARGET);
       if (tm !== theirs) $('.target .mix').innerHTML = theirs = tm;

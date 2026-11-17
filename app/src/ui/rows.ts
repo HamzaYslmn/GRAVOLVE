@@ -2,7 +2,7 @@
 // tooltip text registry: one line grid for every readout, one section header, one icon set.
 
 // 12×12 stroke icons, their ink centred on the box (16 px in section headers: class lg).
-const ICON = {
+export const ICON = {
   temp: '<path d="M5 6.8V1.6a1 1 0 0 1 2 0v5.2a2.4 2.4 0 1 1-2 0Z"/>',
   air: '<path d="M1.5 4.5h6.2a1.6 1.6 0 1 0-1.6-1.6M1.5 7.5h8a1.6 1.6 0 1 1-1.6 1.6"/>',
   water: '<path d="M6 1.2C4 4 2.8 5.8 2.8 7.6a3.2 3.2 0 0 0 6.4 0C9.2 5.8 8 4 6 1.2Z"/>',
@@ -46,7 +46,7 @@ export const head = (name: string, ic: IconKey, cap: string) =>
   `<div class="hd" data-tip="${name}" data-sec="${name}">${icon(ic, 'lg')}<em class="cap">${cap}</em><i class="chev"></i><span class="v"></span></div>`;
 
 /** A tooltip's text for a `data-tip` key, or null when the key is not this stage's (ui/tip.ts: '\n' lines, "label\tvalue" rows). */
-export type TipText = (key: string, el: HTMLElement) => string | null | undefined;
+type TipText = (key: string, el: HTMLElement) => string | null | undefined;
 const tips: TipText[] = [];
 /** Registers a stage's texts; the latest registered answers first (the star overrides the world's goal). Returns the remover. */
 export function addTips(f: TipText) {

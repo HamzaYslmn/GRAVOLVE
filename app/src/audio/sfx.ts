@@ -10,7 +10,7 @@ export type Sound = 'eat' | 'hit' | 'crack' | 'death' | 'eaten' | 'boom'
   // Age II moons
   | 'capture' | 'steal' | 'grip' | 'snap' | 'loose' | 'grind'
   // civilization and star
-  | 'shot' | 'launch' | 'shield' | 'segment' | 'link' | 'warp' | 'rocket' | 'blast'
+  | 'shot' | 'launch' | 'shield' | 'segment' | 'link' | 'warp' | 'rocket' | 'blast' | 'whoosh' | 'dodge' | 'strike'
   // banners (announce)
   | 'chime' | 'tier' | 'milestone' | 'achieve' | 'setback' | 'comet';
 
@@ -95,6 +95,15 @@ const RECIPES: Record<string, Recipe> = {
   // A rocket bursts: a short thump under a crackle of debris (it does not duck the rest).
   blast1: rec(note(80, 0, -10, 0.3, 40), ['crackle', 'bandpass', 2000, 1200, 1, [[0, -60], [0.01, -16], [0.12, -26], [0.35, -70]]], ['brown', 'lowpass', 900, 200, 0.7, [[0, -60], [0.01, -12], [0.3, -70]]]),
   blast2: rec(note(70, 0, -10, 0.32, 36), ['crackle', 'bandpass', 1700, 1000, 1, [[0, -60], [0.01, -16], [0.14, -26], [0.38, -70]]], ['brown', 'lowpass', 800, 180, 0.7, [[0, -60], [0.01, -12], [0.32, -70]]]),
+  // A rocket has passed you: a hiss whose band falls away over a falling motor tone.
+  whoosh1: rec(['white', 'bandpass', 3200, 700, 2.5, [[0, -60], [0.03, -9], [0.12, -15], [0.28, -80]]], ['triangle', 'lowpass', 420, 230, 0, [[0, -80], [0.03, -24], [0.28, -80]]]),
+  whoosh2: rec(['white', 'bandpass', 2800, 600, 2.5, [[0, -60], [0.03, -9], [0.14, -15], [0.32, -80]]], ['triangle', 'lowpass', 380, 200, 0, [[0, -80], [0.03, -24], [0.32, -80]]]),
+  // A whole salvo missed: a longer falling hiss, a low settle, one rising pluck.
+  dodge1: rec(['white', 'bandpass', 3600, 500, 2, [[0, -60], [0.04, -8], [0.2, -16], [0.45, -80]]], ['triangle', 'lowpass', 440, 200, 0, [[0, -80], [0.04, -22], [0.45, -80]]], note(98, 0.02, -16, 0.3, 65), note(587, 0.18, -24, 0.35, 784)),
+  dodge2: rec(['white', 'bandpass', 3200, 450, 2, [[0, -60], [0.04, -8], [0.22, -16], [0.48, -80]]], ['triangle', 'lowpass', 392, 180, 0, [[0, -80], [0.04, -22], [0.48, -80]]], note(87, 0.02, -16, 0.3, 58), note(659, 0.18, -24, 0.35, 880)),
+  // Your rocket lands on an enemy: one tight hit: a tick, a short low punch, a zap snapped off, a pinch of debris.
+  strike1: rec(click(0, 2600, -6), note(130, 0, -8, 0.16, 48), zap(0, 1400, 180, 0.09, -14, 'square', 2), ['crackle', 'bandpass', 2400, 1400, 1, [[0, -60], [0.008, -18], [0.07, -28], [0.2, -70]]]),
+  strike2: rec(click(0, 2200, -6), note(115, 0, -8, 0.18, 42), zap(0, 1200, 160, 0.1, -14, 'square', 2), ['crackle', 'bandpass', 2100, 1200, 1, [[0, -60], [0.008, -18], [0.08, -28], [0.22, -70]]]),
   // A Dyson panel placed: a small far clink.
   segment1: rec(...metal(1320, -24, 0.3)),
   segment2: rec(...metal(1480, -24, 0.3)),
@@ -164,17 +173,18 @@ const CUES: Record<Sound, Part[][]> = {
   capture: takes('capture', 3), steal: takes('steal', 2), grip: takes('grip', 3), snap: takes('snap', 2), loose: takes('loose', 2),
   grind: takes('grind', 1),
   shot: takes('shot', 3), launch: takes('launch', 2, 0.35), shield: takes('shield', 3, 0.9), segment: takes('segment', 3), link: takes('link', 2), warp: takes('warp', 2, 0.5), rocket: takes('rocket', 2, 0.5), blast: takes('blast', 2, 0.6),
+  whoosh: takes('whoosh', 2, 0.6), dodge: takes('dodge', 2, 0.7), strike: takes('strike', 2, 0.9),
   chime: takes('chime', 3), tier: takes('tier', 3), milestone: takes('milestone', 3), achieve: takes('achieve', 2), setback: takes('setback', 2), comet: takes('comet', 1),
 };
 // Higher survives when voices run out.
 const PRIORITY: Record<Sound, number> = {
-  hit: 0, shot: 0, grind: 0, segment: 0, eat: 1, snap: 1, grip: 1, launch: 1, crack: 2, capture: 2, steal: 2, loose: 2, shield: 2, warp: 2, rocket: 1, blast: 2,
+  hit: 0, shot: 0, grind: 0, segment: 0, eat: 1, snap: 1, grip: 1, launch: 1, crack: 2, capture: 2, steal: 2, loose: 2, shield: 2, warp: 2, rocket: 1, blast: 2, whoosh: 1, dodge: 2, strike: 2,
   boom: 3, link: 3, chime: 3, tier: 3, milestone: 3, achieve: 3, setback: 3, comet: 3, death: 4, eaten: 4,
 };
 // s between two of a kind: the rate limit (the first of a burst plays; callers pass the loudest when they can).
 const GAP: Record<Sound, number> = {
   eat: 0.06, hit: 0.06, crack: 0.09, death: 0, eaten: 0, boom: 0.4, shot: 0.05, grind: 0.12, segment: 0.1, snap: 0.08, grip: 0.1,
-  capture: 0.15, steal: 0.15, loose: 0.3, launch: 0.3, shield: 0.12, link: 1, warp: 0.25, rocket: 0.15, blast: 0.12,
+  capture: 0.15, steal: 0.15, loose: 0.3, launch: 0.3, shield: 0.12, link: 1, warp: 0.25, rocket: 0.15, blast: 0.12, whoosh: 0.4, dodge: 1, strike: 0.1,
   chime: 0.3, tier: 0.3, milestone: 0.3, achieve: 0.3, setback: 0.3, comet: 0.3,
 };
 const UI: Sound[] = ['chime', 'tier', 'milestone', 'achieve', 'setback', 'comet']; // banners: never ducked, steady pitch
@@ -193,7 +203,7 @@ const HEADROOM = 2; // the soft clipper bends smoothly up to this many times ful
 const VARY_DB = 1.5; // random level per play, +- this much
 const STREAK_S = 1.2; // meals closer together than this are a streak...
 const STREAK_MAX = 5; // ...climbing a semitone each, up to this many
-const FALL: Partial<Record<Sound, number>> = { crack: 0.88, death: 0.8 }; // pitch at the end of the sound: a sag reads as loss
+const FALL: Partial<Record<Sound, number>> = { crack: 0.88, death: 0.8, whoosh: 0.75 }; // pitch at the end of the sound: a sag reads as loss (a whoosh: going away)
 const BIG: Sound[] = ['death', 'eaten', 'boom']; // these duck the rest
 const DUCK = 0.4; // gain of everything else under a big moment (-8 dB)...
 const DUCK_HOLD = 0.35; // ...held this long, then

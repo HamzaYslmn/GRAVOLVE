@@ -2,8 +2,6 @@ import './tip.css';
 import { PERIOD } from './panel.ts';
 import { pick, type TipRect } from './pick.ts';
 
-export { pick, type TipRect };
-
 // One shared HUD tooltip. The cards stay pointer-events:none, so the mouse is hit-tested by hand: a passive window
 // pointermove only stores the point; update() tests the cards' rects, and only inside one its [data-tip] elements
 // (innermost wins, ui/pick.ts). Text comes from text(key, el) while shown, refreshed every PERIOD. A line "a\tb" is a

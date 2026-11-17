@@ -1,7 +1,7 @@
 // The field's large-scale maps as plain numbers (no Pixi), so test/asteroid/web.test.ts can run them in Node.
 // Cosmic web: matter lies along filaments with wide empty voids between them. Both maps are read at (x, y) / S like the
 // other region maps (field.ts REGION_GROW), so a void spans about as many screens at every size.
-import { clamp, fbm, hashSeed, rng, smoothstep } from '../../core/rng.ts';
+import { between, clamp, fbm, hashSeed, rng, smoothstep } from '../../core/rng.ts';
 
 const WEB = 40000; // world units per noise unit at the start size: one cell ≈ 32 start screens
 const WEB_CUT = [0.72, 0.87]; // ridge values: void below the first, full filament above; voids cover ~40% of the map
@@ -101,7 +101,6 @@ export function place(x: number, y: number, seed: number, w = web(x, y, seed), c
     : meteors > 0.5 ? 'meteors' : a > 0.5 ? region : 'belt';
   return { biome, kuiper, rapids, meteors, region, a };
 }
-export const biomeAt = (x: number, y: number, seed: number, w?: number, calm?: number) => place(x, y, seed, w, calm).biome;
 
 /** Kind shares [rock, metal, ice, gas] at a place. */
 export function kindMix(p: Place) {
@@ -148,7 +147,7 @@ export function groupDrift(x: number, y: number, seed: number) {
     }
   const r = rng(hashSeed(bi, bj, seed + 62));
   if (r() < STILL) return [0, 0];
-  const a = r() * Math.PI * 2, v = GROUP_SPEED[0] + r() * (GROUP_SPEED[1] - GROUP_SPEED[0]);
+  const a = r() * Math.PI * 2, v = between(GROUP_SPEED, r);
   return [Math.cos(a) * v, Math.sin(a) * v];
 }
 /** Belt drift at a point: a unit vector along the belt times how much belt is there (0..1). */

@@ -8,7 +8,7 @@ import { dashRing, type Fx } from '../../render/fx';
 import { YOU } from '../../render/tech';
 import { absorb, drop, keepShape, mixRgb, shed, unmoon, type Body } from '../asteroid/body';
 import { G_WORLD, youPull } from '../asteroid/rules';
-import { APPROACH, catchStep, FEED, handsOff, LANE, matchWindow, moonCap, MOON, MOON_SHARE, moonSlots, pickSlot, STOLEN_S } from './rules';
+import { APPROACH, catchStep, FEED, handsOff, LANE, matchWindow, moonCap, MOON, MOON_SHARE, moonSized, moonSlots, pickSlot, STOLEN_S } from './rules';
 import { clamp } from '../../core/rng';
 import type { Foe } from '../civilization/ships';
 
@@ -109,7 +109,7 @@ export function createMoons(layer: Container, me: Body, input: Controls, glow: T
   const mine = (b: Body) => moons.some((m) => m.b === b);
   /** Could `b` be caught at all (size and the lane are checked after)? Not you, a moon (yours, or your star's planet; a rival's rock on its circle can be stolen), a rival world or core, a great comet, nor a body just let go. A living rival world's guard moon can (stolen). */
   const catchable = (b: Body) => b !== me && b.m > 0 && (!b.moon || me.guard?.own?.(b) === false) && !b.rival && !handsOff(b) && now - (released.get(b) ?? -Infinity) >= RECAPTURE_S;
-  const sizeOk = (b: Body) => { const cap = moonCap(b.m, b.r, me.m, me.r); return b.m >= Math.min(MOON_SHARE[0] * me.m, 0.25 * cap) && b.m <= 1.01 * cap; };
+  const sizeOk = (b: Body) => moonSized(b.m, b.r, me.m, me.r);
   /** The free body under a world point (within max(1.4 r, PICK_PX)), anywhere on its last LAG_S of path (a fast one has moved since the click): not you or your moons. Several: the heaviest that fits a slot, else the heaviest. */
   function under(p: Vec, near: Body[]): Body | undefined {
     let best: Body | undefined, bd = -Infinity;

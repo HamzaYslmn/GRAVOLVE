@@ -1,8 +1,8 @@
 // node test/civilization/slots.test.ts: one HUD slot per fleet class (src/evolution/civilization/slots.ts): count / cap,
-// one pip per ship from each class's own reload, your rocket magazine, its look on the priority (orders.ts status `by`), the fuel line's flow, any counter's track, the energy balance.
+// one pip per ship from each class's own reload, your rocket magazine, its look on the priority (orders.ts status `by`), fuelLeft, any counter's track, the energy balance.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { balance, flow, FLOW_S, fuelLeft, MAKE, slots, SLOTS, track, USE, type Flow, type Power, type Track } from '../../src/evolution/civilization/slots.ts';
+import { balance, fuelLeft, MAKE, slots, SLOTS, track, USE, type Power, type Track } from '../../src/evolution/civilization/slots.ts';
 import { status, type Fleet } from '../../src/evolution/civilization/orders.ts';
 import { ARMS, FLEET, ROCKET, salvo } from '../../src/evolution/civilization/rules.ts';
 
@@ -38,21 +38,6 @@ for (const T of [1, 3, 5]) {
 }
 assert.deepEqual(slots(fleet as never, [], [], mag(0, 3, ROCKET.reload / 4)).rocket.pips, [0.25, 0, 0], 'an empty magazine of 3: the first refilling');
 
-// Fuel flow: the first sample is raw; a steady burn holds; a step reaches ~63% at FLOW_S; inflow is what the stock gained plus the burn, never negative.
-assert.deepEqual(flow(undefined, 40, 0.02, 0.5), { fuel: 40, use: 0.02, gain: 0 });
-assert.deepEqual(flow({ fuel: 1, use: 9, gain: 9 }, 40, 0.02, 0), { fuel: 40, use: 0.02, gain: 0 }, 'dt 0 restarts');
-let q: Flow = flow(undefined, 50, 0.03, 0);
-for (let t = 0; t < 200; t += 0.5) q = flow(q, q.fuel - 0.03 * 0.5, 0.03, 0.5);
-assert.ok(Math.abs(q.use - 0.03) < 1e-12 && q.gain < 1e-9 && q.gain >= 0, `a steady burn holds: ${JSON.stringify(q)}`);
-q = flow(undefined, 50, 0, 0);
-for (let t = 0; t < FLOW_S - 1e-9; t += 0.5) q = flow(q, 50, 0.1, 0.5);
-assert.ok(Math.abs(q.use / 0.1 - (1 - Math.exp(-1))) < 0.01, `a step reaches ~63% at FLOW_S: ${q.use / 0.1}`);
-q = flow(undefined, 10, 0, 0);
-for (let t = 0; t < 60; t += 0.5) q = flow(q, q.fuel + 0.05 * 0.5, 0.01, 0.5);
-assert.ok(q.gain > 0.04, `a rising stock shows inflow: ${q.gain}`);
-q = flow(undefined, 10, 0, 0);
-for (let t = 0; t < 60; t += 0.5) q = flow(q, q.fuel - 1, 0, 0.5);
-assert.ok(q.gain === 0, 'a falling stock with no burn: inflow 0, never negative');
 assert.ok(fuelLeft(30, 0.5) === 60 && fuelLeft(30, 0) === Infinity && fuelLeft(30, 1e-7) === Infinity, 'fuelLeft: s at the burn, Infinity idle');
 
 // Track: any cumulative counter's rise; a steady slope converges, lumpy spend (got − stock) never reads negative, the first sample is 0.
@@ -70,9 +55,6 @@ for (let i = 0; i < 400; i++) {
 }
 assert.ok(low >= 0 && Math.abs(sp!.v - 0.2) < 0.08, `lumpy spend: never negative, near 4 u / 20 s: ${sp!.v}`);
 assert.equal(track({ x: 10, v: 0 }, 0, 0.5).v, 0, 'a counter that fell reads 0, never negative');
-// The fuel line is track with the burn: same inflow as the old formula.
-const fq = flow({ fuel: 10, use: 0.01, gain: 0.02 }, 10.1, 0.03, 0.5), k = 1 - Math.exp(-0.5 / FLOW_S);
-assert.ok(Math.abs(fq.gain - (0.02 + k * (0.2 + 0.03 - 0.02))) < 1e-15 && Math.abs(fq.use - (0.01 + k * 0.02)) < 1e-15, `flow: ${JSON.stringify(fq)}`);
 
 // Balance: "using U of C". The screenshot world: inner heat 0.8 + reactors 1.0 of a 2.5 capacity, 1.8 used.
 const pw = (o: Partial<Power>): Power => ({ geo: 0, solar: 0, dyson: 0, fuel: 0, people: 0, shield: 0, yard: 0, mend: 0, rockets: 0, ...o });
@@ -91,4 +73,4 @@ assert.equal(balance(pw({ geo: 1, people: 2 })).capacity, 1, 'no capacity passed
 
 const hud = readFileSync(new URL('../../src/evolution/civilization/hud.ts', import.meta.url), 'utf8');
 assert.ok(hud.includes('SLOTS.map(') && hud.includes('q.pips.length') && hud.includes("setProperty('--p'") && !hud.includes('class="slots"'), 'hud.ts draws one pip group per class, one pip per ship from slots.ts pips');
-console.log('slots: one per class, pips by own reload, the rocket magazine, priority on/off per class, fuel flow, track, balance');
+console.log('slots: one per class, pips by own reload, the rocket magazine, priority on/off per class, fuelLeft, track, balance');

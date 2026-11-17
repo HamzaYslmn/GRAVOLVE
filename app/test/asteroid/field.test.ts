@@ -3,18 +3,16 @@
 // so guard moons are caught. Prints a digest (count, hits, hash of rounded x, y, m): a refactor keeps it identical.
 // `--bench`: field.update at rest (cost line; run on an idle machine).
 import assert from 'node:assert/strict';
-import { registerHooks } from 'node:module';
+import { tsResolve } from '../helpers.ts';
 
-registerHooks({ // src imports leave out '.ts' (Vite resolves them)
-  resolve: (spec, ctx, next) => next(ctx.parentURL?.includes('/src/') && /^\.\.?\//.test(spec) && !/\.[a-z]+$/.test(spec) ? `${spec}.ts` : spec, ctx),
-});
+tsResolve();
 const { Container, Texture } = await import('pixi.js');
 const { rng } = await import('../../src/core/rng.ts');
 const { createAsteroidField } = await import('../../src/evolution/asteroid/field.ts');
 const { absorb, drop, rockBody, tickBody } = await import('../../src/evolution/asteroid/body.ts');
 const { makeRival, tendMoon } = await import('../../src/evolution/asteroid/rival.ts');
 const { roster } = await import('../../src/evolution/rivals/ledger.ts');
-const { AGE_GOAL, airR, COMP, radiusOf, START_R } = await import('../../src/evolution/asteroid/rules.ts');
+const { AGE_GOAL, airR, bakes, COMP, radiusOf, START_R } = await import('../../src/evolution/asteroid/rules.ts');
 type Body = import('../../src/evolution/asteroid/body.ts').Body;
 type Field = ReturnType<typeof createAsteroidField>;
 type Hit = import('../../src/evolution/asteroid/body.ts').Hit & { ma: number; ka: number; kb: number };
@@ -135,6 +133,35 @@ if (process.argv.includes('--bench')) {
     assert.ok(hit.shattered && hit.broke && da >= 1.1 && da <= 3.3, 'the staged impact shatters both at the heavier\'s CLASH_D');
   }
   assert.ok(meets >= 5, 'most forced clashes meet');
+
+  // Late world (a 1e6 world parked 300 s at the real view, pinned): field bodies light next to you stay atlas rocks
+  // (ROUND_SHARE), so few spheres share the screen; a great comet is small (≤ 0.3 × you: fast things are small).
+  let greats = 0;
+  for (const seed of [292, 8211, 16130]) {
+    Math.random = rng(seed * 31 + 7);
+    const M = 1e6, W = { rock: 0.7, gas: 0.3 }, p = rockBody({ texture: Texture.EMPTY, comp: W }, radiusOf(M, W), 0, 700);
+    p.motion.drag = 0;
+    const f = createAsteroidField(new Container(), atlas as never, Texture.EMPTY, spheres, seed, p, () => {}, () => {});
+    const v = (p.r / START_R) ** 0.8, hw = (HALF[0] / 1.02) * v, hh = (HALF[1] / 1.02) * v, seen = new Set<Body>();
+    let peak = 0;
+    for (let t = 0; t < 300 && p.m && !p.view.destroyed; t += DT) {
+      [p.m, p.r, p.motion.vx, p.motion.vy, p.heat] = [M, radiusOf(M, W), 0, 0, 0];
+      f.update(p.motion, hw, hh, DT, () => {}, hw);
+      let round = 0;
+      for (const b of f.bodies) {
+        if (b.meteor && b.comet && b.held && !seen.has(b)) {
+          seen.add(b);
+          greats++;
+          assert.ok(b.m <= 0.3 * M, 'a great comet is ≤ 0.3 × you');
+        }
+        if (!b.meteor && Math.abs(b.motion.x - p.motion.x) < hw && Math.abs(b.motion.y - p.motion.y) < hh && bakes(b.m, b.r, b.comp, b.diff, b.rough, b.jag, b.rival || b.moon ? 0 : M)) round++;
+      }
+      peak = Math.max(peak, round);
+    }
+    console.log(`late world ${seed}: at most ${peak} spheres in view (1e6, 300 s parked)`);
+    assert.ok(peak <= 2, 'few spheres share a late world\'s screen'); // measured 1/1/0 (2026-11-17); the absolute rule gave 7/12/3
+  }
+  assert.ok(greats > 0, 'a great comet passed');
 
   // Giants you leave behind pass out of meteor reach and are gone for good (m 0): nothing keeps a ghost of them.
   Math.random = rng(3);

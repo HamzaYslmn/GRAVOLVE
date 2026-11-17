@@ -1,4 +1,4 @@
-// node test/ui/tip.test.ts: the tooltip's hit rule (src/ui/pick.ts pick, re-exported by ui/tip.ts): among the rects
+// node test/ui/tip.test.ts: the tooltip's hit rule (src/ui/pick.ts pick, used by ui/tip.ts): among the rects
 // under the point the deepest wins, a tie at the same depth goes to the later one (drawn on top); edges count.
 import assert from 'node:assert/strict';
 import { pick, type TipRect } from '../../src/ui/pick.ts';

@@ -237,6 +237,8 @@ export const MOON = 0x9fdcff; // your moons' blue (moons, the target panel)
 export const MOON_R = 0.45; // R: a moon is never wider than this (neighbouring rings, 1.25 R apart, never touch: stretched rocks included)
 /** The most mass a moon (mass `m`, radius `r`) may hold round you (`M`, `R`): MOON_SHARE[1] of you and no wider than MOON_R · R (same shape: its loose radius goes with ∛m). */
 export const moonCap = (m: number, r: number, M: number, R: number) => Math.min(MOON_SHARE[1] * M, m * (uncapR(MOON_R * R) / uncapR(r)) ** 3);
+/** The size gate of a catch (planet/moons.ts, the target panel's moon-size light). */
+export const moonSized = (m: number, r: number, M: number, R: number) => { const cap = moonCap(m, r, M, R); return m >= Math.min(MOON_SHARE[0] * M, 0.25 * cap) && m <= 1.01 * cap; };
 /** Held and never caught: a great comet, a rival civilization's world. A living rival world's guard moon (rival.ts tendMoon) is held too, and can be stolen. */
 export const handsOff = (b: { held?: boolean; comet?: boolean; pulls?: boolean }) => !!b.held && (!!b.comet || !!b.pulls);
 // Holding Command on a moon grinds it down: FEED of your mass a second streams onto you as dust (no hit, no heat), so

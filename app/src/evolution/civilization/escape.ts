@@ -1,7 +1,22 @@
-import { JUMP_S, PIRATE_CLASS } from './rules.ts';
+import { JUMP_S, PIRATE_CLASS, RETREAT } from './rules.ts';
 
-// Pirate ship shields and the rout: when a leaving fleet is beaten down or pressed, its ships spool their drives and jump
-// out one by one (pirates.ts flies it, bolts.ts draws it). Pure, Node-safe (escape.test.ts).
+// Pirate captains, ship shields and the rout: when a leaving fleet is beaten down or pressed, its ships spool their drives
+// and jump out one by one (pirates.ts flies it, bolts.ts draws it). Pure, Node-safe (escape.test.ts).
+
+/** A fleet's captain (user, 2026-11-17): world values `you` / `rival` (rocks 0.5–2.5), the `retreat` share of ships lost at which it leaves, × the raid and stay timers, × its chase patience (both leash clocks). Caps, sizes and pacing are every captain's. */
+export type Captain = { chance: number; you: number; rival: number; retreat: number; raid: number; stay: number; chase: number };
+export const CAPTAINS = {
+  reaver: { chance: 0.3, you: 3, rival: 2, retreat: RETREAT, raid: 1, stay: 1, chase: 1 }, // the baseline: every factor 1
+  butcher: { chance: 0.25, you: 5, rival: 3, retreat: 0.75, raid: 1.3, stay: 1, chase: 1.5 }, // worlds over rocks, fights to a quarter of its ships
+  hound: { chance: 0.2, you: 4, rival: 2, retreat: 0.5, raid: 1.5, stay: 1.2, chase: 3 }, // follows a fleeing world 3× as long
+  feint: { chance: 0.15, you: 3, rival: 2, retreat: 0.2, raid: 1, stay: 1, chase: 0.25 }, // tests the waters: leaves at its first losses or when you run
+  scavenger: { chance: 0.1, you: 1.5, rival: 1, retreat: 0.3, raid: 0.7, stay: 1, chase: 1 }, // hesitant: a rich rock outranks you, short raids
+} satisfies Record<string, Captain>;
+/** The captain for a roll `u` in [0, 1), by chance. */
+export function captain(u: number): Captain {
+  for (const c of Object.values(CAPTAINS)) if ((u -= c.chance) < 0) return c;
+  return CAPTAINS.reaver;
+}
 
 export const ROUT = 0.2; // living share of the fleet under which a leaving fleet is routed
 export const ROUT_S = 8; // s from the rout to the first jump

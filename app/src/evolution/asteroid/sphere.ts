@@ -1,5 +1,5 @@
 import { RenderTexture, Sprite, UniformGroup, type Renderer } from 'pixi.js';
-import { clamp, smoothstep } from '../../core/rng';
+import { clamp, clamp01, smoothstep } from '../../core/rng';
 import { BAKE_FRAGMENT_HEAD, bakeMesh } from '../../render/bake';
 import type { Body } from './body';
 import { bakes, breakFaces, faceFit, jagStage, ROUND_M, shapeOf, surfaceSeed, type Comp, type Element } from './rules';
@@ -34,7 +34,7 @@ type Surface = {
   city?: number; // 0..1 city-light coverage: its own additive bake (cityLights), not part of the surface key
 };
 const surfaces = new WeakMap<Body, Surface>();
-const step = (x: number, n: number) => Math.round(clamp(x, 0, 1) * n) / n;
+const step = (x: number, n: number) => Math.round(clamp01(x) * n) / n;
 /** Your world's surface state (quantised here); its sphere re-bakes with a crossfade when a step changes. */
 export function setSurface(b: Body, s: Surface) {
   const sea = step(s.sea, 8);
@@ -209,7 +209,7 @@ export function createSpheres(renderer: Renderer) {
   const edges = new WeakMap<Body, number>(); // each body's baked edge radius (share of the texture half size)
   const keys = new WeakMap<Body, string>(); // the surface state each body was last baked with
   const fades = new WeakMap<Body, { s: Sprite; t: number; e: number }>(); // a new surface bake fading in over the core (e: the old bake's edge)
-  let budget = 1, nth = Math.floor(Math.random() * 9973), count = 0; // count: bakes so far (dev: __g().spheres.bakes)
+  let budget = 1, nth = Math.floor(Math.random() * 9973), count = 0, you = 0; // count: bakes so far (dev: __g().spheres.bakes); you: begin's mass
   const look = (b: Body) => keyOf(surfaces.get(b)) + jagStage(b.jag); // what a bake shows: surface state and debris step
 
   function bake(b: Body, tex?: RenderTexture, lights = 0) {
@@ -230,7 +230,7 @@ export function createSpheres(renderer: Renderer) {
     // With a surface state, water shows as seas and frost instead of the plain crust's ice patches.
     (u.uMix as Float32Array).set([surf ? 0 : s.ice, s.metal, 1 - round, Math.round(16 - 12 * hot)]);
     (u.uSurf as Float32Array).set(surf ? [surf.sea > 0 ? GROUND[0] + GROUND[1] * probit(surf.sea) : -1, +surf.frozen, surf.frost, surf.lava] : [-1, 0, 0, 0]);
-    (u.uSurf2 as Float32Array).set(surf ? [Math.min(1, surf.life), clamp((surf.life - 2) / 4, 0, 1), 1, 0] : [0, 0, 0, 0]);
+    (u.uSurf2 as Float32Array).set(surf ? [Math.min(1, surf.life), clamp01((surf.life - 2) / 4), 1, 0] : [0, 0, 0, 0]);
     const rgb = [16, 8, 0].map((sh) => ((b.tint >> sh) & 255) / 255), mean = (rgb[0] + rgb[1] + rgb[2]) / 3 || 1;
     (u.uHue as Float32Array).set(rgb.map((v) => v / mean));
     (u.uHist as Float32Array).set([hot, smoothstep(0.2, 0.4, s.ice), 0.6, lights ? 1 + lights : 0]);
@@ -244,9 +244,9 @@ export function createSpheres(renderer: Renderer) {
   }
 
   return {
-    /** Starts a frame: one bake allowed; textures of sprites that are gone are freed. */
-    begin() {
-      budget = 1;
+    /** Starts a frame: one bake allowed (`m`: your mass, the round-off share's unit; the last living one is kept, so the death card bakes nothing new); textures of sprites that are gone are freed. */
+    begin(m = 0) {
+      [budget, you] = [1, m > 0 ? m : you];
       for (const [s, tex] of live) {
         if (!s.destroyed) continue;
         live.delete(s);
@@ -259,7 +259,7 @@ export function createSpheres(renderer: Renderer) {
       const R = b.r / b.k; // body-local radius
       let core = b.parts[0]?.core ? b.parts[0] : b.parts.find((p) => p.core);
       if (!core) {
-        if (!(bakes(b.m, b.r, b.comp, b.diff, b.rough, b.jag) || !b.parts.length) || budget <= 0) return void (b.rough && sink(b, dt, R));
+        if (!(bakes(b.m, b.r, b.comp, b.diff, b.rough, b.jag, animate || b.rival || b.moon || surfaces.has(b) ? 0 : you) || !b.parts.length) || budget <= 0) return void (b.rough && sink(b, dt, R));
         const f = fades.get(b);
         if (f) [f.s.destroy(), fades.delete(b)];
         // Rounding off is a process, not a swap: the sphere fades in under the pile while the rocks sink into it,

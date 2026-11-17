@@ -8,7 +8,7 @@ const levels = (px: number, parts: Part[]) => widths(px, parts).map((w, i) => fi
 const total = (px: number, parts: Part[]) => widths(px, parts).reduce((a, b) => a + b, 0);
 
 // The screenshot: Rock hogged the bar, Metal showed only an icon, Rad was invisible (asteroid/hud.ts ELEMENTS order).
-// Bars: your card 232 px, the target card 200 px (asteroid/hud.ts MIX_ME, MIX_TARGET); labels 10 px with 12 px icons.
+// Bars: your card 232 px, the target card 200 px (asteroid/hud.ts MIX_TARGET); labels 10 px with 12 px icons.
 const shot: Part[] = [[0.08, 'Metal', '8%'], [0.56, 'Rock', '56%'], [0.24, 'Water', '24%'], [0.108, 'Gas', '11%'], [0.012, 'Rad', '1%']];
 assert.ok(Math.abs(total(232, shot) - 228) < 1e-9, `your card fills 232 px less 4 gaps: ${total(232, shot)}`);
 assert.deepEqual(levels(232, shot), [2, 3, 3, 2, 2], 'your card: Rock and Water named; Metal, Gas and Rad icon · value');

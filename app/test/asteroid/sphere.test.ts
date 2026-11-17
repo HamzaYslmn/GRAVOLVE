@@ -2,11 +2,9 @@
 // and halos behind a body (they stay behind it, the rival halo keeps the first slot it is sized by), and a sphere stored
 // without its texture and chipped below ROUND_M is baked again when it comes back, never left invisible but solid.
 import assert from 'node:assert/strict';
-import { registerHooks } from 'node:module';
+import { tsResolve } from '../helpers.ts';
 
-registerHooks({ // src imports leave out '.ts' (Vite resolves them)
-  resolve: (spec, ctx, next) => next(ctx.parentURL?.includes('/src/') && /^\.\.?\//.test(spec) && !/\.[a-z]+$/.test(spec) ? `${spec}.ts` : spec, ctx),
-});
+tsResolve();
 const { DOMAdapter, Sprite, Texture } = await import('pixi.js');
 const gl = new Proxy({}, { get: (_t, k) => (k === 'getShaderPrecisionFormat' ? () => ({ precision: 23 }) : typeof k === 'string' && k === k.toUpperCase() ? 1 : () => null) });
 DOMAdapter.set({ ...DOMAdapter.get(), createCanvas: () => ({ getContext: () => gl, width: 1, height: 1 }) as never });

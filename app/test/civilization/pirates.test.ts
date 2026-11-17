@@ -2,91 +2,14 @@
 // bodies, crack and haul rocks, leave, evade, retreat and keep the raiding rules.
 import assert from 'node:assert/strict';
 import { slotRadius } from '../../src/core/orbits.ts';
-import { beltM, book, fighterGun, q, R, report, seeded, SR, watch } from './fakes.ts';
-import { ACC, BURST, GAP, GEE, GUN, GUN_ARC, H_TOP, H_TURN, inArc, jink, jinkStep, leadAt, M_TOP, M_TURN, P_ACC, P_TOP, P_TURN, RATE, SPECK, startJink, thrust, TURN, want, type Craft } from '../../src/evolution/civilization/flight.ts';
-import { createShots, menace, pull, SHOTS, trigger, type Hull } from '../../src/evolution/civilization/guns.ts';
-import { createPirates } from '../../src/evolution/civilization/pirates.ts';
+import { alive, beltM, book, fighterGun, inFlight, q, R, raid10, report, rock, seeded, SR, U, watch, world, type PirateWorld as W } from './fakes.ts';
+import { ACC, BURST, GAP, GEE, GUN, GUN_ARC, H_TOP, H_TURN, inArc, jink, jinkStep, leadAt, M_TOP, M_TURN, P_ACC, P_TOP, P_TURN, RATE, startJink, thrust, TURN, want, type Craft } from '../../src/evolution/civilization/flight.ts';
+import { createShots, menace, pull, SHOTS, trigger } from '../../src/evolution/civilization/guns.ts';
 import { CHASE_S, fleetSize, HOLD, KEPT, PIRATE_CLASS, SHIELD_K, shieldRegen, shieldShot, STEAL, type Shield } from '../../src/evolution/civilization/rules.ts';
-import type { Foe } from '../../src/evolution/civilization/ships.ts';
 
 const models = { pirates: book() };
 
-// Pirate fleets (pirates.ts, the real thing in a fake world): you (radius R) at the origin, bodies that drift under
-// gravity (everything pulls; your surface gravity 0.55 R/s², the game's), merge or bounce when they touch, moons
-// on kinematic slots, field.spawn adding bodies (those under 0.001 of you dropped, as the field does), rounds in the real
-// pool swept each frame, contacts as combat.ts runs them. View 30 × 17 R (half sizes), ship radius 0.086 R; seeded.
 {
-  type B = { m: number; r: number; motion: { x: number; y: number; vx: number; vy: number }; comp: Record<string, number>; view: { destroyed: boolean; parent: object | null }; tint: number; moon?: boolean };
-  let peak = 0; // most rounds in flight at once over every run (guns.ts SHOTS)
-  const world = (seed: number, o: { moons?: number; civ?: boolean; stock?: number; still?: boolean } = {}) => {
-    const rnd = seeded(seed), bodies: B[] = [], noop = () => {};
-    const mk = (x: number, y: number, vx: number, vy: number, m: number, comp: Record<string, number>): B => ({ m, r: R * Math.cbrt(m), motion: { x, y, vx, vy }, comp, view: { destroyed: false, parent: {} }, tint: 0 });
-    const me = mk(0, 0, 0, 0, 1, { rock: 0.5, ice: 0.3, gas: 0.2 });
-    const moons = Array.from({ length: o.moons ?? 0 }, (_, k) => {
-      const b = { ...mk(0, 0, 0, 0, 0.0017, { rock: 1 }), r: 0.12 * R, moon: true }, rad = slotRadius(R, k);
-      bodies.push(b);
-      return { b, slot: k, a: k * 1.7, rad, w: ((1.1 + (0.5 * k) / 3) * R) / rad };
-    });
-    const place = () => moons.forEach((m) => Object.assign(m.b.motion, { x: Math.cos(m.a) * m.rad, y: Math.sin(m.a) * m.rad, vx: -Math.sin(m.a) * m.rad * m.w, vy: Math.cos(m.a) * m.rad * m.w }));
-    place();
-    const parts = new Map<B, { m0: number; got: number[] }>(); // a cracked rock (`from`): its mass then and its pieces
-    const field = { spawn: (x: number, y: number, vx: number, vy: number, m: number, comp: Record<string, number>, from?: B) => { const b = mk(x, y, vx, vy, m, comp); if (from) parts.set(from, parts.get(from) ?? { m0: from.m, got: [] }).get(from)!.got.push(m); if (m >= 1e-3 * me.m) bodies.push(b); return b; } };
-    const stock = { ore: o.stock ?? 50, vol: 0 }, lines = { moveTo: () => lines, lineTo: () => lines, stroke: () => lines };
-    const civ = o.civ ? { state: { active: true }, shieldTake: () => false, gain: noop, stocks: stock, steal: (n: number) => { const ore = Math.min(stock.ore, n); stock.ore -= ore; return { ore, vol: 0 }; } } : undefined;
-    const ctx = {
-      me, fx: { flash: noop, burst: noop, popup: noop, ember: noop }, lines, field: () => field, sfx: () => undefined, news: noop, cam: { x: 0, y: 0, halfW: 30 * R, halfH: 17 * R, seenW: 30 * R, seenH: 17 * R, zoom: 1 }, near: bodies, civ,
-      moons: { list: () => moons.map((m) => ({ body: m.b, slot: m.slot })) }, mine: [] as Foe[], miners: [] as Foe[], shots: createShots(SHOTS, seeded(seed + 99)), put: noop, draw: noop, wreck: noop,
-      kill: (b: B) => void ((b.m = 0), (b.view.destroyed = true)), shed: (b: B, dm: number) => void (b.m -= dm),
-      onScreen: (x: number, y: number, r = 0) => Math.abs(x - ctx.cam.x) < ctx.cam.seenW + r && Math.abs(y - ctx.cam.y) < ctx.cam.seenH + r,
-      diag: () => Math.hypot(ctx.cam.halfW, ctx.cam.halfH), shipR: () => SR,
-    };
-    const rivals = { list: [], foes: () => [], watch: noop, shieldTake: () => false };
-    const pirates = createPirates(ctx as unknown as Parameters<typeof createPirates>[0], rivals as unknown as Parameters<typeof createPirates>[1], rnd);
-    const frame = (dt: number, more?: () => void) => {
-      pirates.update(dt, civ as never);
-      const loose = bodies.filter((b) => !b.moon && b.m > 0), G = 0.55 * R ** 3;
-      if (!o.still) for (const b of loose) for (const q of [me, ...loose]) {
-        const dx = q.motion.x - b.motion.x, dy = q.motion.y - b.motion.y, d2 = Math.max(dx * dx + dy * dy, (b.r + q.r) ** 2), a = q === b ? 0 : (G * q.m) / d2 / Math.sqrt(d2);
-        [b.motion.vx, b.motion.vy] = [b.motion.vx + dx * a * dt, b.motion.vy + dy * a * dt];
-      }
-      for (const b of loose) [b.motion.x, b.motion.y] = [b.motion.x + b.motion.vx * dt, b.motion.y + b.motion.vy * dt];
-      // Rock on rock (the field's rule, simplified): slower than half their mutual escape speed they merge, else they bounce;
-      // a rock reaching your surface is gone (eaten).
-      if (!o.still) for (let i = 0; i < loose.length; i++) {
-        const a = loose[i];
-        if (a.m && Math.hypot(a.motion.x - me.motion.x, a.motion.y - me.motion.y) < me.r + a.r) [a.m, a.view.destroyed] = [0, true];
-        for (let j = i + 1; j < loose.length; j++) {
-          const b = loose[j], dx = b.motion.x - a.motion.x, dy = b.motion.y - a.motion.y, d = Math.hypot(dx, dy) || 1e-9;
-          if (!a.m || !b.m || d >= a.r + b.r) continue;
-          const nx = dx / d, ny = dy / d, close = (a.motion.vx - b.motion.vx) * nx + (a.motion.vy - b.motion.vy) * ny;
-          if (close <= 0) continue; // already parting
-          if (close < 0.5 * Math.sqrt((2 * G * (a.m + b.m)) / (a.r + b.r))) {
-            const [k, l] = a.m >= b.m ? [a, b] : [b, a], m = k.m + l.m;
-            [k.motion.vx, k.motion.vy] = [(k.motion.vx * k.m + l.motion.vx * l.m) / m, (k.motion.vy * k.m + l.motion.vy * l.m) / m];
-            [k.m, k.r, l.m, l.view.destroyed] = [m, R * Math.cbrt(m), 0, true];
-          } else {
-            const ja = (2 * b.m * close) / (a.m + b.m), jb = (2 * a.m * close) / (a.m + b.m); // an elastic bounce along the line of centres
-            [a.motion.vx, a.motion.vy, b.motion.vx, b.motion.vy] = [a.motion.vx - ja * nx, a.motion.vy - ja * ny, b.motion.vx + jb * nx, b.motion.vy + jb * ny];
-          }
-        }
-      }
-      moons.forEach((m) => (m.a += m.w * dt));
-      place();
-      more?.();
-      const all = [me, ...bodies.filter((b) => b.m > 0)];
-      const hulls: Hull[] = [...pirates.foes().map((q) => ({ x: q.x, y: q.y, vx: q.vx, vy: q.vy, r: SR, team: 'pirate' as const, kill: q.kill })), ...ctx.mine.map((q) => ({ ...q, r: SR, team: 'you' as const }))];
-      peak = Math.max(peak, ctx.shots.n);
-      ctx.shots.step(dt, all, hulls, SPECK * SR, noop);
-      pirates.contacts(all as never, dt);
-      for (let i = bodies.length - 1; i >= 0; i--) if (!bodies[i].m) bodies.splice(i, 1);
-    };
-    return { ctx, me, bodies, mk, pirates, frame, stock, rnd, parts };
-  };
-  type W = ReturnType<typeof world>;
-  const alive = (w: W) => (w.pirates.fleet?.ships ?? []).filter((s) => !s.dead);
-  const rock = (w: W, a: number, d = 15) => w.bodies.push(w.mk(Math.cos(a) * d * R, Math.sin(a) * 0.8 * d * R, 0.1 * R, 0, 0.04, { rock: 0.4, metal: 0.4, ice: 0.2 }));
-  const U = (n: number) => Math.sqrt((n - 1 + 0.5) / 14); // the fleetSize roll for n ships
-
   // 1. A hauler in every group: 1000 rolls launched for real: 1–14 ships, at least one hauler, a marauder only from 10.
   {
     const counts: number[] = [];
@@ -186,7 +109,7 @@ const models = { pirates: book() };
       [deaths, cracked, hauled, shoved] = [deaths + w.pirates.deaths.body, cracked + w.pirates.stats.cracked, hauled + w.pirates.stats.hauled, shoved + w.pirates.stats.shoved];
     }
     console.log(`own pieces (40 runs: 10 ships, 5 rocks of 1.5–6% at 14–17 R, 60 s, gravity and merging): ${deaths} body deaths, ${cracked} cracks, ${hauled} pieces hauled, ${shoved} shoves (own pieces drifting onto a ship, nudged off)`);
-    console.log(`rounds in flight: at most ${peak} of ${SHOTS} so far (keep-out raids, the 4% rock, own pieces)`);
+    console.log(`rounds in flight: at most ${inFlight.peak} of ${SHOTS} so far (keep-out raids, the 4% rock, own pieces)`);
     assert.equal(deaths, 0, 'no ship dies on a body while they crack and haul');
   }
 
@@ -277,11 +200,8 @@ const models = { pirates: book() };
 
   // 7. Retreat: half the ships killed, or every hauler, and they leave.
   for (const what of ['half', 'haulers'] as const) {
-    const w = world(9), dt = 1 / 60;
-    rock(w, 1.1);
-    w.pirates.launch(U(10));
-    for (let t = 0; t < 8; t += dt) w.frame(dt);
-    const doomed = what === 'half' ? alive(w).filter((s) => s.kind !== 'hauler').slice(0, Math.ceil(alive(w).length / 2)) : alive(w).filter((s) => s.kind === 'hauler');
+    const w = world(9), dt = 1 / 60, half = raid10(w, dt);
+    const doomed = what === 'half' ? half : alive(w).filter((s) => s.kind === 'hauler');
     for (const s of doomed) s.kill(true); // a rocket's direct hit
     let t = 0;
     for (; t < 1 && w.pirates.fleet?.state !== 'leave'; t += dt) w.frame(dt);
@@ -314,11 +234,7 @@ const models = { pirates: book() };
     const w = world(12), dt = 1 / 60, news: string[] = [];
     let wrecks = 0;
     Object.assign(w.ctx, { wreck: () => void wrecks++, news: (k: string) => void news.push(k) });
-    rock(w, 1.1);
-    w.pirates.launch(U(10));
-    for (let t = 0; t < 8; t += dt) w.frame(dt);
-    const ships = alive(w);
-    for (const s of ships.filter((q) => q.kind !== 'hauler').slice(0, Math.ceil(ships.length / 2))) s.kill(true);
+    for (const s of raid10(w, dt)) s.kill(true);
     const fl = w.pirates.fleet!, follow = () => {
       const a = alive(w);
       if (a.length) [w.ctx.cam.x, w.ctx.cam.y] = [a.reduce((t, s) => t + s.x, 0) / a.length, a.reduce((t, s) => t + s.y, 0) / a.length];
@@ -370,7 +286,7 @@ const models = { pirates: book() };
   // they steal from the start. A rich store (500 u), an attack due for 60 s, 3 seeds, shield levels 1 and 2.
   {
     const harm = (L: number, seed: number, store = 500, up = true) => {
-      const sh: Shield = { level: L, s: SHIELD_K * L }, w = world(seed, { moons: 4, civ: true, stock: store }), dt = 1 / 60, civ = w.ctx.civ as unknown as { shieldTake: (k: number, share: number) => boolean; stocks: { ore: number } };
+      const sh: Shield = { level: L, s: SHIELD_K * L }, w = world(seed, { moons: 4, civ: true, stock: store }), dt = 1 / 60, civ = w.ctx.civ as unknown as { shieldTake: (k: number) => boolean; stocks: { ore: number } };
       civ.shieldTake = (k) => { const held = up && sh.s > 0; if (up) shieldShot(sh, k); return held; };
       w.pirates.launch(U(6));
       let down = 0, chip = 0, first = Infinity;

@@ -1,6 +1,6 @@
 import { Container, Sprite } from 'pixi.js';
 import { motion, updateEntity, type Entity, type Vec } from '../../core/entity';
-import { clamp, smoothstep } from '../../core/rng';
+import { clamp, clamp01, smoothstep } from '../../core/rng';
 import { heatOfK, K_PER_HEAT } from '../../core/water';
 import { GLOW_K, GLOW_R, rockGlow, rockView, roundGlow, type Rock } from './atlas';
 import { tintBy } from './web';
@@ -193,7 +193,7 @@ export function heatGlow(b: Body) {
     if (b.hot) for (const g of b.hot.splice(0)) g.destroy();
     return;
   }
-  const w = Math.sqrt(clamp((b.heat - HOT) / (MOLTEN - HOT), 0, 1)), tint = mixRgb(RED, EMBER, w, false), pool = (b.hot ??= []);
+  const w = Math.sqrt(clamp01((b.heat - HOT) / (MOLTEN - HOT))), tint = mixRgb(RED, EMBER, w, false), pool = (b.hot ??= []);
   let n = 0;
   for (const p of b.parts) {
     const t = p.core ? (b.jag ? undefined : roundGlow) : rockGlow.get(p.s.texture); // a round halo would fill debris break faces
@@ -210,7 +210,7 @@ export function heatGlow(b: Body) {
 }
 
 /** How round (settled) a pile of this mass gets: 0 loose .. 1 at ~3000 mass. */
-const roundness = (m: number) => clamp(Math.log10(m) / 3.5, 0, 1);
+const roundness = (m: number) => clamp01(Math.log10(m) / 3.5);
 
 /** Distance between the surfaces of two bodies (negative when they overlap). */
 export const gap = (a: Body, b: Body) => Math.hypot(b.motion.x - a.motion.x, b.motion.y - a.motion.y) - a.r - b.r;
@@ -220,7 +220,7 @@ export const phys = (b: Body): Phys => ({ m: b.m, comp: b.comp, heat: b.heat, ru
 
 // Visual settling follows the shape rule (rules.ts roundR): loose at the start, 0.65 by the time the body is
 // baked at half its round-off radius (sphere.ts). phys() uses `roundness` instead (looseness for the collision rules).
-const settle = (b: Body) => 0.65 * clamp((2 * b.r) / roundR(b.comp), 0, 1) ** 1.5;
+const settle = (b: Body) => 0.65 * clamp01((2 * b.r) / roundR(b.comp)) ** 1.5;
 /** How far from the centre (local units) a part may sit: heavier piles pull parts deeper, toward round. */
 function settleLimit(b: Body) {
   const R = b.r / b.k;

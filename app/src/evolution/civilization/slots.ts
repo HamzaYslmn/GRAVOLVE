@@ -56,23 +56,16 @@ export function balance(power: Power, energy?: number) {
   return { used, capacity, idle: Math.max(0, capacity - made), short: Math.max(0, used - capacity), sources, uses };
 }
 
-export const FLOW_S = 45; // s the fuel rates are averaged over
+const FLOW_S = 45; // s the fuel rates are averaged over
 const ease = (a: number, b: number, dt: number) => a + (1 - Math.exp(-dt / FLOW_S)) * (b - a);
 /** A sampled total (`x`) and how fast it rises, u/s smoothed over FLOW_S. */
 export type Track = { x: number; v: number };
 /**
- * Smoothed rise of any cumulative counter (income `got`; spend as `got − stock`), `plus` u/s added to the raw rate. Never
- * negative (a fall reads 0); the first sample or dt 0 restarts at 0.
+ * Smoothed rise of any cumulative counter (income `got`; spend as `got − stock`). Never negative (a fall reads 0); the
+ * first sample or dt 0 restarts at 0.
  */
-export function track(t: Track | undefined, x: number, dt: number, plus = 0): Track {
-  return !t || dt <= 0 ? { x, v: 0 } : { x, v: ease(t.v, Math.max(0, (x - t.x) / dt + plus), dt) };
-}
-export type Flow = { fuel: number; use: number; gain: number }; // last stock (u), smoothed burn and inflow (u/s)
-
-/** The fuel line's rates, smoothed over FLOW_S: inflow is what the stock gained plus what burned (`track` with the burn). */
-export function flow(f: Flow | undefined, fuel: number, burn: number, dt: number): Flow {
-  if (!f || dt <= 0) return { fuel, use: burn, gain: 0 };
-  return { fuel, use: ease(f.use, burn, dt), gain: track({ x: f.fuel, v: f.gain }, fuel, dt, burn).v };
+export function track(t: Track | undefined, x: number, dt: number): Track {
+  return !t || dt <= 0 ? { x, v: 0 } : { x, v: ease(t.v, Math.max(0, (x - t.x) / dt), dt) };
 }
 /** s the spare fuel lasts at `use` u/s; Infinity while nothing burns. */
 export const fuelLeft = (spare: number, use: number) => (use < 1e-6 ? Infinity : spare / use);

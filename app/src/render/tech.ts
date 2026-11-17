@@ -3,14 +3,14 @@ import { BAKE_FRAGMENT_HEAD, bakeMesh } from './bake';
 import { ART_H, ART_W, ENGINES, SHIP_ART } from './shipArt';
 
 // The tech page: one mipmapped 1024² texture baked once, so one ParticleContainer draws every ship, satellite and grain.
-// Cells: fleet (baked in colour: tint white), stations, veil (shield shell), ripple (shield hit), ring (radio pulse),
+// Cells: fleet (baked in colour: tint white), veil (shield shell), ripple (shield hit), ring (radio pulse),
 // dot (satellites, grains, lights), hex (a shield lattice cell), panel (a solar farm field); all but the fleet are white art,
 // coloured by tint.
 
 const PAGE = 1024;
 export const SHIP_PX = 28; // art px across a fleet cell: a fighter ≈ 14 long, a carrier ≈ 24 (classes to scale)
 export const SHIP_SCALE = 0.4; // a fleet cell in radii of your world: ships are world-sized (every faction the same), not screen-sized
-export const SHIP_MIN_PX = 8; // ...but a cell never shrinks under this many screen px when zoomed far out (a fighter ≥ 4 px)
+const SHIP_MIN_PX = 8; // ...but a cell never shrinks under this many screen px when zoomed far out (a fighter ≥ 4 px)
 /** World units per art px of a ship (and of what belongs to it: plumes, tracers, satellites) around a player world of radius R. */
 export const shipUnit = (R: number, zoom: number) => Math.max(SHIP_SCALE * R, SHIP_MIN_PX / zoom) / SHIP_PX;
 /** A ship's hit and touch radius in world units (raiders are 14 art px long): rounds, rockets and bodies read it. */
@@ -21,7 +21,7 @@ const FLEET_Y = 512; // the fleet fills the page's lower half, 8 cells a row
 const UNIT = 256; // the bake quad's size; smaller cells draw it scaled down (the shader reads vPos / 256)
 
 const fragment = /* glsl */ `${BAKE_FRAGMENT_HEAD}
-uniform vec4 uCell; // kind (0 station, 1 veil, 2 ripple, 3 ring, 4 dot, 5 hex, 6 panel), -, station seed, -
+uniform vec4 uCell; // kind (1 veil, 2 ripple, 3 ring, 4 dot, 5 hex, 6 panel), -, -, -
 
 float sdBox(vec2 p, vec2 b) { vec2 d = abs(p) - b; return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0); }
 float hexDist(vec2 p) { p = abs(p); return max(dot(p, normalize(vec2(1.0, 1.732))), p.x); }
@@ -30,19 +30,6 @@ void main() {
   vec2 p = vPos / ${UNIT}.0 * 2.0 - 1.0;
   float d = length(p);
   float kind = uCell.x;
-  if (kind < 0.5) {
-    // Station: a ring on a cross; filled mid-grey, bright outline and hub, so the tint reads at 8 px.
-    float h1 = rnd(vec2(uCell.z, 3.0), 3.0);
-    float sd = min(abs(d - 0.55 - 0.08 * h1) - 0.07, min(sdBox(p, vec2(0.72, 0.06)), sdBox(p, vec2(0.06, 0.72))));
-    sd = min(sd, d - 0.16);
-    float px = 2.0 / 64.0;
-    float fill = smoothstep(px, -px, sd);
-    float rim = smoothstep(px * 2.5, 0.0, abs(sd + px * 1.2));
-    float v = fill * 0.62 + rim * 0.38 + exp(-d * d / 0.01) * 0.6;
-    float a = clamp(max(fill, rim), 0.0, 1.0);
-    finalColor = vec4(vec3(min(1.0, v)) * a, a);
-    return;
-  }
   if (kind < 1.5) {
     // Veil: mottled along the ring (it turns; sampled on a circle, so no seam at ±π), a soft rim, a faint inner fill.
     float ang = atan(p.y, p.x);
@@ -96,10 +83,10 @@ void main() {
 type Art = typeof SHIP_ART;
 /** Each faction's ships by class (render/shipArt.ts): one cell, baked in colour. */
 export type Fleet = { [F in keyof Art]: Record<keyof Art[F], Texture> };
-export type TechPage = { source: Texture; fleet: Fleet; stations: Texture[]; veil: Texture; ripple: Texture; ring: Texture; dot: Texture; hex: Texture; panel: Texture };
+export type TechPage = { source: Texture; fleet: Fleet; veil: Texture; ripple: Texture; ring: Texture; dot: Texture; hex: Texture; panel: Texture };
 let page: TechPage | undefined;
 
-/** Bakes the page once (kept for the session; every run reuses it). ~25 draws into one texture. */
+/** Bakes the page once (kept for the session; every run reuses it). ~21 draws into one texture. */
 export function techPage(renderer: Renderer): TechPage {
   if (page) return page;
   const uniforms = new UniformGroup({ uCell: { value: new Float32Array(4), type: 'vec4<f32>' }, uSeed: { value: 13, type: 'f32' } });
@@ -107,8 +94,8 @@ export function techPage(renderer: Renderer): TechPage {
   holder.addChild(mesh);
   const rt = RenderTexture.create({ width: PAGE, height: PAGE, autoGenerateMipmaps: true });
   let first = true;
-  const cell = (x: number, y: number, size: number, kind: number, seed = 0) => {
-    (uniforms.uniforms.uCell as Float32Array).set([kind, 0, seed, 0]);
+  const cell = (x: number, y: number, size: number, kind: number) => {
+    (uniforms.uniforms.uCell as Float32Array).set([kind, 0, 0, 0]);
     uniforms.update();
     mesh.position.set(x, y);
     mesh.scale.set(size / UNIT);
@@ -116,7 +103,6 @@ export function techPage(renderer: Renderer): TechPage {
     first = false;
     return new Texture({ source: rt.source, frame: new Rectangle(x, y, size, size) });
   };
-  const stations = [0, 1, 2, 3].map((s) => cell(s * 64, 0, 64, 0, s + 1));
   const veil = cell(256, 0, 256, 1), ripple = cell(0, 256, 128, 2), ring = cell(128, 256, 128, 3), dot = cell(256, 256, 64, 4), hex = cell(320, 256, 64, 5), panel = cell(384, 256, 64, 6);
   holder.destroy({ children: true });
   // The fleet: each ship's SVG as Pixi Graphics, drawn into its cell at one scale (so classes stay to scale).
@@ -132,7 +118,7 @@ export function techPage(renderer: Renderer): TechPage {
   renderer.render({ container: art, target: rt, clear: false });
   art.destroy({ children: true });
   rt.source.updateMipmaps();
-  page = { source: new Texture({ source: rt.source }), fleet, stations, veil, ripple, ring, dot, hex, panel };
+  page = { source: new Texture({ source: rt.source }), fleet, veil, ripple, ring, dot, hex, panel };
   return page;
 }
 

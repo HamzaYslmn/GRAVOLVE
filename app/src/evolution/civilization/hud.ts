@@ -34,11 +34,11 @@ const IDLE: Record<NonNullable<CivState['homeIdle']>, [string, string]> = {
   busy: ['miners busy', 'paused: your miners have moons or rocks to work'], vol: ['volatiles full', 'volatiles full (20)'],
   ice: ['world needs water', 'your world needs its water'], metal: ['no metal to spare', 'your world needs its metal (or has none)'], asleep: ['no life', 'no life'],
 };
-// Fleet classes: name, art (ships 2:1, the rocket square), what the count shows, the tooltip.
+// Fleet classes: name, art (ships 2:1, the rocket square), the tooltip.
 const DOSE_MAX = 3;
 const svg = (box: string, body: string) => `<svg class="art" viewBox="${box}" aria-hidden="true">${body}</svg>`;
 const LINE = 'fill="none" stroke="currentColor" stroke-width="1"';
-const SHIP: Record<string, { name: string; art: string; count?: (q: Slot) => string; tip: (q: Slot) => string }> = {
+const SHIP: Record<string, { name: string; art: string; tip: (q: Slot) => string }> = {
   probe: { name: 'Probes', art: svg('20 18 130 64', SHIP_ART.you.probe), tip: (q) => `Probes ${q.n}/${q.cap}: weak, slow lasers; one per tier. ${FLEET.probe.ore} ore.` },
   fighter: { name: 'Fighters', art: svg('20 18 130 64', SHIP_ART.you.fighter), tip: (q) => `Fighters ${q.n}/${q.cap}: fast, light guns; 2, plus one per 20 metal your miners bring in, up to 6. ${FLEET.fighter.ore} ore.` },
   frigate: { name: 'Frigates', art: svg('20 18 130 64', SHIP_ART.you.frigate), tip: (q) => `Frigates ${q.n}/${q.cap}: slow heavy lasers that break big rocks (to ${FLEET.frigate.breaks * 100}% of you); one from tier 3, two from tier 5. ${FLEET.frigate.ore} ore.` },
@@ -111,7 +111,7 @@ export function createCivHud(panel: HTMLElement) {
       case 'shield': return `Shield level ${s.level} of ${SHIELD_LEVELS}, ${Math.round((100 * Math.max(0, s.shield)) / Math.max(1e-6, s.shieldMax))}% charged. A shell just outside your world: it stops hits it can pay for and burns up its share of bigger ones.\nUpkeep ${SHIELD_E} E/s per level; mending draws ${WORK_E} E/s.${s.level < SHIELD_LEVELS ? `\nNext level: ${shieldCost(s.level + 1).ore} ore and ${shieldCost(s.level + 1).vol} volatiles.` : ''}`;
       case 'energy': return `Using ${num(b.used)} of ${num(b.capacity)} E/s${b.short > 0 ? `, short by ${num(b.short)}` : ''}.\nSources\n${[...b.sources.filter((x) => SRC[x.k]).map((x) => tr(SRC[x.k][0], x.e)), tr('Idle reactor', b.idle)].join('\n')}\nUses\n${b.uses.filter((x) => USES[x.k]).map((x) => tr(USES[x.k], x.e)).join('\n')}\nEnergy feeds your people (10 bn per E/s the shield leaves). Short of it, builds, reloads and mending slow${s.fed < 1 ? ` (now ${Math.round(s.fed * 100)}%)` : ''}; nothing dies at once.`;
       case 'short': return b.short > 0 ? `Short ${num(b.short)} E/s: uses past what you make. Builds, reloads and mending run at ${Math.round(s.fed * 100)}%.` : null;
-      case 'stocks': return `What your people store, net change a minute (averaged over 45 s).\n${STOCK.map((k) => `${k === 'ore' ? 'Ore' : k === 'vol' ? 'Volatiles' : 'Fuel'}\t${perMin(rate(k).net)}`).join('\n')}`;
+      case 'stocks': return `What your people store, net change a minute (averaged over 45 s).\n${STOCK.map((k) => `${STOCK_NAME[k]}\t${perMin(rate(k).net)}`).join('\n')}`;
       case 'ore': return `Ore ${Math.floor(s.ore)}, ${perMin(o.net)}.\nHome mines\t${perMin(o.home)}\nMining & other\t${perMin(o.other)}\nSpent\t${perMin(-o.out)}\nBuilds: probe ${FLEET.probe.ore}, fighter ${FLEET.fighter.ore}, frigate ${FLEET.frigate.ore}, shield level 10 × level. Rockets ${ROCKET.ore} each. Enemy rounds through your shield burn ore.`;
       case 'vol': return `Volatiles ${Math.floor(s.vol)}, ${perMin(v.net)}: water your people store.\nHome mines\t${perMin(v.home)}\nMining & other\t${perMin(v.other)}\nSpent\t${perMin(-v.out)}\nA shield level costs 10; home mines dig water only while you hold under 20.`;
       case 'fuel': {
@@ -204,7 +204,7 @@ export function createCivHud(panel: HTMLElement) {
       for (const k of keys) {
         const q = s.slots[k], g = $(`.ship.${k}`), was = shown[k];
         g.className = `row ship ${k} ${s.active ? q.look : 'none'}`; // an empty magazine is 'none' (slots.ts)
-        text(g.querySelector('.v')!, SHIP[k].count?.(q) ?? `${q.n}/${q.cap}`);
+        text(g.querySelector('.v')!, `${q.n}/${q.cap}`);
         const hollow = Math.max(0, q.cap - q.pips.length), key = `${q.pips.length}/${hollow}`;
         if (was?.key !== key) {
           g.querySelector('.pips')!.innerHTML = '<i></i>'.repeat(q.pips.length) + '<i class="e"></i>'.repeat(hollow);

@@ -2,11 +2,9 @@
 // touch): two rocks alone, plain mutual gravity, tickBody, at 30/60/144 Hz. A skimming rock must rub to a stop (friction,
 // relief) and merge in seconds, not on frame one and not never; heat comes from the energy the contact lost.
 import assert from 'node:assert/strict';
-import { registerHooks } from 'node:module';
+import { tsResolve } from '../helpers.ts';
 
-registerHooks({ // src imports leave out '.ts' (Vite resolves them)
-  resolve: (spec, ctx, next) => next(ctx.parentURL?.includes('/src/') && /^\.\.?\//.test(spec) && !/\.[a-z]+$/.test(spec) ? `${spec}.ts` : spec, ctx),
-});
+tsResolve();
 const { Texture } = await import('pixi.js');
 const { phys, resolve, rockBody, sweep, tickBody } = await import('../../src/evolution/asteroid/body.ts');
 const { COMP, G_WORLD, rank, radiusOf, V_STICK } = await import('../../src/evolution/asteroid/rules.ts');

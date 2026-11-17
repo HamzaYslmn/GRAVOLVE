@@ -60,7 +60,7 @@ const SHOWER = 0.1;
 const SHOWER_AT = [20, 30];
 const SHOWER_SHARE = [0.02, 0.1];
 const MISS = 4;
-// Meteors are sized from you (at most M_MAX: never planets; Age II METEOR_SHARE_AGE2) and cross the screen in METEOR_CROSS s.
+// Meteors are sized from you (Age II METEOR_SHARE_AGE2) and cross the screen in METEOR_CROSS s.
 const METEOR_SHARE = [0.01, 0.2];
 const METEOR_SHARE_AGE2 = [0.001, 0.01]; // a world: fast things stay small (under BURN_MAX, shooting stars), never a moon-sized hit
 const METEOR_CROSS = [0.8, 1.3]; // s to cross the screen width
@@ -141,8 +141,8 @@ const GIANT_MASS = [20, 200]; // × your mass
 const GIANT_MAX = 0.9e7; // below a brown dwarf: never a star
 const GIANT_DRIFT = 0.05;
 const GREAT_MEAN = 240;
-const GREAT_MASS = [0.5, 3]; // × your mass
-const GREAT_SPEED = [1.5, 3]; // your diameters/s
+const GREAT_MASS = [0.05, 0.3]; // × your mass: fast things are small; its coma GREAT_COMA × its radius still reads big
+const GREAT_SPEED = [1.5, 3], GREAT_COMA = 6; // your diameters/s
 const GREAT_CRUMBS = 40; // ice crumbs a great comet sheds while near you, one every SHED_S
 const SHED_S = 0.4;
 const VIEW_W = 1280 / 1.02; // world units across a 1280-px screen at the start zoom; the view grows with size^0.8 (player.ts)
@@ -164,7 +164,7 @@ function pickKind(shares: number[], rnd: () => number) {
 const floorAt = (m: number) => Math.max(FLOOR * START_M * (m / START_M) ** FLOOR_GROW, SPECK * m);
 
 /** A rock that burnt up in your air (or burnt partly: `whole` false): where it met your limb and its direction (unit), for the streak. */
-export type Burn = (b: Body, x: number, y: number, ux: number, uy: number, whole: boolean) => void;
+type Burn = (b: Body, x: number, y: number, ux: number, uy: number, whole: boolean) => void;
 
 export function createAsteroidField(layer: Container, atlas: Rock[], glow: Texture, spheres: Spheres, seed: number, player: Body, onHit: (h: Hit) => void, onBurn: Burn) {
   let rocks: Body[] = [];
@@ -246,13 +246,13 @@ export function createAsteroidField(layer: Container, atlas: Rock[], glow: Textu
     if (Math.hypot(x0 - start.x, y0 - start.y) < 2 * CALM + span) return;
     const [bx, by] = beltFlow(x0 / S, y0 / S, seed), a = rnd() * Math.PI * 2, sp = (4 + rnd() * 12) * Math.sqrt(scale), drift = BELT_FLOW * Math.sqrt(scale);
     const pl = placeAt(x0, y0), [rx, ry] = rapidsFlow(x0 / S, y0 / S, seed, pl.rapids), slow = 1 - (1 - KUIPER_SLOW) * pl.kuiper, rapids = RAPIDS_FLOW * 2 * START_R * Math.sqrt(scale);
-    const vx = (bx * drift + Math.cos(a) * sp) * slow + rx * rapids, vy = (by * drift + Math.sin(a) * sp) * slow + ry * rapids; // rapids carry these too
+    const vx = (bx * drift + Math.cos(a) * sp) * slow, vy = (by * drift + Math.sin(a) * sp) * slow; // put adds the rapids: none round a body heavier than you (flow 0)
     const mix = kindMix(pl);
     const k = pickKind(mix, rnd);
     const one = (kind: number) => KINDS.map((_, i) => (i === kind ? 1 : 0)); // every member of one kind
-    const put = (b: Body, ux: number, uy: number) => {
-      [b.motion.vx, b.motion.vy, b.home] = [ux, uy, key];
-      if (pl.rapids > 0.5) flowing.add(b);
+    const put = (b: Body, ux: number, uy: number, flow = rapids) => {
+      [b.motion.vx, b.motion.vy, b.home] = [ux + rx * flow, uy + ry * flow, key];
+      if (flow && pl.rapids > 0.5) flowing.add(b);
       add(b);
     };
     /** Small rocks on circular orbits around `core` (plain gravity), moving with it at (ux, uy). */
@@ -260,7 +260,7 @@ export function createAsteroidField(layer: Container, atlas: Rock[], glow: Textu
       const dir = rnd() < 0.5 ? 1 : -1;
       for (let i = n; i > 0; i--) {
         const t = rnd() * Math.PI * 2, d = core.r * (2.2 + rnd() * 4), v = Math.sqrt((G_WORLD * core.m) / d) * dir;
-        put(rock(Math.max(lo * logBetween([1, 8], rnd), you * logBetween([0.005, 0.03], rnd)), core.motion.x + Math.cos(t) * d, core.motion.y + Math.sin(t) * d, mix, rnd), ux - Math.sin(t) * v, uy + Math.cos(t) * v);
+        put(rock(Math.max(lo * logBetween([1, 8], rnd), you * logBetween([0.005, 0.03], rnd)), core.motion.x + Math.cos(t) * d, core.motion.y + Math.sin(t) * d, mix, rnd), ux - Math.sin(t) * v, uy + Math.cos(t) * v, 0);
       }
     };
     if (place === 'field') {
@@ -272,16 +272,16 @@ export function createAsteroidField(layer: Container, atlas: Rock[], glow: Textu
       for (let i = 0; i < n; i++) {
         const core = i < cores, t = rnd() * Math.PI * 2, d = span * (core ? 0.3 * rnd() : rnd() ** 0.7); // denser toward the middle
         const m = core ? you * logBetween(FIELD_CORE, rnd) : lo2 * (1 - rnd() * (1 - cut)) ** (-1 / SLOPE);
-        put(rock(m, x0 + Math.cos(t) * d, y0 + Math.sin(t) * d, shares, rnd), vx + (rnd() - 0.5) * jit, vy + (rnd() - 0.5) * jit);
+        put(rock(m, x0 + Math.cos(t) * d, y0 + Math.sin(t) * d, shares, rnd), vx + (rnd() - 0.5) * jit, vy + (rnd() - 0.5) * jit, 0);
       }
       return;
     }
     if (place === 'giant') {
       // Drifts on its own (no belt flow).
       const core = rock(you * logBetween(GIANT_MASS, rnd), x0, y0, mix, rnd);
-      if (core.m < 2 * you || Math.hypot(x0 - start.x, y0 - start.y) < 2 * CALM + 8 * core.r) return void core.view.destroy({ children: true });
+      if (core.m < 2 * you || Math.hypot(x0 - start.x, y0 - start.y) < 2 * CALM + 8 * core.r) return void drop(core);
       const t = rnd() * Math.PI * 2, v = GIANT_DRIFT * 2 * core.r * rnd();
-      put(core, Math.cos(t) * v, Math.sin(t) * v);
+      put(core, Math.cos(t) * v, Math.sin(t) * v, 0);
       moonlets(core, core.motion.vx, core.motion.vy, 8 + Math.floor(rnd() * 16));
       return;
     }
@@ -295,7 +295,7 @@ export function createAsteroidField(layer: Container, atlas: Rock[], glow: Textu
       }
     } else if (kind < 0.75) {
       const M = you * logBetween([1.2, 4], rnd), core = rock(M, x0, y0, mix, rnd);
-      put(core, vx, vy);
+      put(core, vx, vy, 0);
       moonlets(core, vx, vy, 6 + Math.floor(rnd() * 14));
     } else {
       // Stream: ice debris along one line, all moving along it.
@@ -320,8 +320,8 @@ export function createAsteroidField(layer: Container, atlas: Rock[], glow: Textu
     b.view.addChildAt(s, 0);
   }
   /** A comet's cyan coma; a comet keeps its own look (never baked round: body.ts keepShape). */
-  function coma(b: Body) {
-    glowBehind(b, 0x9ff0ff, 0.32, 3.5);
+  function coma(b: Body, size = 3.5) {
+    glowBehind(b, 0x9ff0ff, 0.32, size);
     keepShape(b);
   }
 
@@ -368,17 +368,17 @@ export function createAsteroidField(layer: Container, atlas: Rock[], glow: Textu
       if (proto) body.diff = 0.5; // protoplanets melted once: round, with lava plains (sphere.ts)
       const fromStart = Math.hypot(x - start.x, y - start.y);
       if (fromStart < SAFE + body.r || (body.m > you && fromStart < CALM)) {
-        body.view.destroy({ children: true });
+        drop(body);
         continue;
       }
-      // Shared drifts (belt flow, rapids, the moving group this spot belongs to) plus the rock's own scatter.
-      const [bx, by] = beltFlow(x / S, y / S, seed), [rx, ry] = rapidsFlow(x / S, y / S, seed, pl.rapids), [gx, gy] = groupDrift(x / S, y / S, seed);
+      // Shared drifts (belt flow, rapids but never for a body heavier than you: big things drift; the moving group this spot belongs to) plus the rock's own scatter.
+      const rp = m > you ? 0 : pl.rapids, [bx, by] = beltFlow(x / S, y / S, seed), [rx, ry] = rapidsFlow(x / S, y / S, seed, rp), [gx, gy] = groupDrift(x / S, y / S, seed);
       const slow = 1 - (1 - KUIPER_SLOW) * pl.kuiper, root = Math.sqrt(scale), rapids = RAPIDS_FLOW * 2 * START_R;
-      const loose = (1 - 0.75 * Math.hypot(bx, by)) * (gx || gy ? GROUP_JITTER : 1) * (1 + (RAPIDS_SCATTER - 1) * pl.rapids) * slow;
+      const loose = (1 - 0.75 * Math.hypot(bx, by)) * (gx || gy ? GROUP_JITTER : 1) * (1 + (RAPIDS_SCATTER - 1) * rp) * slow;
       body.motion.vx = (bx * BELT_FLOW * slow + rx * rapids + gx * slow) * root + Math.cos(a) * speed * loose;
       body.motion.vy = (by * BELT_FLOW * slow + ry * rapids + gy * slow) * root + Math.sin(a) * speed * loose;
       body.home = key;
-      if (pl.rapids > 0.5) flowing.add(body);
+      if (rp > 0.5) flowing.add(body);
       add(body);
     }
     if (rnd() < DISCOVERY * perScreen * rare3) discover(cx, cy, key, rnd, lo, you, scale);
@@ -414,7 +414,7 @@ export function createAsteroidField(layer: Container, atlas: Rock[], glow: Textu
       const speed = (2 * halfW) / between(METEOR_CROSS, mrnd);
       const side = from + (mrnd() - 0.5) * 0.8; // a shower comes from roughly one side
       const [sx, sy, ux, uy] = enter(side, dist, mrnd() < aimed ? 0.6 * Math.min(halfW, halfH) : WIDE * Math.hypot(halfW, halfH), mrnd);
-      meteor(sx, sy, ux * speed, uy * speed, Math.min(M_MAX, player.m * logBetween(age2 ? METEOR_SHARE_AGE2 : METEOR_SHARE, mrnd)));
+      meteor(sx, sy, ux * speed, uy * speed, player.m * logBetween(age2 ? METEOR_SHARE_AGE2 : METEOR_SHARE, mrnd));
     }
   }
   /** The forced first shower (SHOWER_AT): lines across the screen, each missing a still you by MISS radii up to 0.6 of the short half-view. */
@@ -423,7 +423,7 @@ export function createAsteroidField(layer: Container, atlas: Rock[], glow: Textu
     for (let k = 3 + Math.floor(mrnd() * 2); k > 0; k--) {
       const speed = (2 * halfW) / between(METEOR_CROSS, mrnd), dir = from + Math.PI + (mrnd() - 0.5) * 0.6, ux = Math.cos(dir), uy = Math.sin(dir);
       const o = (mrnd() < 0.5 ? -1 : 1) * between([MISS * player.r, wide], mrnd), back = dist + speed * k * between([0.15, 0.4], mrnd); // staggered: one after another
-      meteor(pm.x - uy * o - ux * back, pm.y + ux * o - uy * back, ux * speed, uy * speed, Math.min(M_MAX, player.m * logBetween(SHOWER_SHARE, mrnd)));
+      meteor(pm.x - uy * o - ux * back, pm.y + ux * o - uy * back, ux * speed, uy * speed, player.m * logBetween(SHOWER_SHARE, mrnd));
     }
   }
   /** A meteor of mass m at (sx, sy) flying at (vx, vy): of the local region's material, a quarter of them old piles, tumbling. */
@@ -450,8 +450,7 @@ export function createAsteroidField(layer: Container, atlas: Rock[], glow: Textu
     const lo = floorAt(player.m), m = Math.max(3 * lo, player.m * logBetween(COMET_MASS, krnd));
     const b = rock(m, sx, sy, [0, 0, 1, 0], krnd, COMP.icy), speed = between(COMET_SPEED, krnd) * 2 * player.r;
     [b.motion.vx, b.motion.vy] = [ux * speed, uy * speed];
-    b.meteor = true; // a passer-by: not kept by chunks
-    b.comet = true;
+    [b.meteor, b.comet] = [true, true]; // a passer-by: not kept by chunks
     coma(b);
     fresh.push(b);
   }
@@ -492,7 +491,7 @@ export function createAsteroidField(layer: Container, atlas: Rock[], glow: Textu
     b.spin = (grnd() - 0.5) * 0.3;
     // A passer-by (not kept by chunks), out of the field's gravity (held) so its line can't bend into you.
     [b.meteor, b.comet, b.held] = [true, true, true];
-    coma(b);
+    coma(b, GREAT_COMA);
     fresh.push(b);
     greats.push({ b, shed: SHED_S, left: GREAT_CRUMBS });
   }
@@ -520,7 +519,7 @@ export function createAsteroidField(layer: Container, atlas: Rock[], glow: Textu
     const e = first ? undefined : next(crew, lastOut), big = player.m * RIVAL_MASS[0] > M_MAX;
     const hunter = big && (e ? e.m > EATEN_MARGIN * player.m : rrnd() < BIG_HUNTER);
     const m = e ? e.m : first ? player.m * logBetween(FIRST_HUNTER, rrnd) : big ? player.m * logBetween(hunter ? HUNTER_MASS : BIG_RIVAL_MASS, rrnd) : Math.min(M_MAX, player.m * logBetween(RIVAL_MASS, rrnd));
-    const b = makeRival(spawn(m, x, y, rrnd, e && { ...e.comp }), glow, a + Math.PI + (rrnd() - 0.5), hunter ? HUNTER_CHASE : undefined);
+    const b = makeRival(spawn(m, x, y, rrnd, e && { ...e.comp }), glow, a + Math.PI + (rrnd() - 0.5), hunter ? HUNTER_CHASE : undefined, (first || hunter) && !e);
     if (e) [b.heat, b.diff, b.rival!.entry, e.out, lastOut] = [e.heat, e.diff, e, true, e];
     b.home = keyAt(x, y);
     fresh.push(b);
@@ -734,7 +733,6 @@ export function createAsteroidField(layer: Container, atlas: Rock[], glow: Textu
     }
   }
 
-
   /**
    * Keep chunks around the view loaded; move every body; resolve contacts. `contacts` runs after this frame's collisions,
    * before the field drops what died. `natural`: your natural view's long half size (world units); zoomed out, what you
@@ -748,7 +746,7 @@ export function createAsteroidField(layer: Container, atlas: Rock[], glow: Textu
     // Zoomed out, the view itself is the look-around: the margin shrinks by what the view grew, to one chunk at least.
     const seen = Math.max(halfW, halfH), margin = Math.max(CHUNK, Math.max(MIN_MARGIN * CHUNK, LOAD_MARGIN * Math.min(natural, seen)) - Math.max(0, seen - natural));
     const keep = Math.ceil((UNLOAD_EXTRA * margin) / CHUNK);
-    const pv = Math.hypot(player.motion.vx, player.motion.vy) || 1, ahead = Math.min(LOAD_AHEAD * pv, AHEAD_MAX * Math.min(natural, Math.max(halfW, halfH))) / pv;
+    const pv = Math.hypot(player.motion.vx, player.motion.vy) || 1, ahead = Math.min(LOAD_AHEAD * pv, AHEAD_MAX * Math.min(natural, seen)) / pv;
     const ax = player.motion.vx * ahead, ay = player.motion.vy * ahead;
     chunks.update(at(center.x - halfW - margin + Math.min(0, ax)), at(center.x + halfW + margin + Math.max(0, ax)), at(center.y - halfH - margin + Math.min(0, ay)), at(center.y + halfH + margin + Math.max(0, ay)), keep, GEN_BUDGET * Math.max(1, dt * 60), {
       screen: [at(center.x - halfW), at(center.x + halfW), at(center.y - halfH), at(center.y + halfH)],

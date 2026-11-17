@@ -6,9 +6,8 @@ import { clamp } from '../core/rng';
 import { overCard } from './tip';
 
 // The soft reticle: replaces the OS cursor over the game while you have a weapon (rockets on
-// Fire). The cooldown is a ring that fills around it; full = ready. No aim line, numbers or mode switch. Two weapons may
-// each own one (only one shows at a time); the OS cursor stays hidden while any is shown.
-let showing = 0;
+// Fire). The cooldown is a ring that fills around it; full = ready. No aim line, numbers or mode switch. The OS
+// cursor stays hidden while it shows.
 
 function createReticle(canvas: HTMLElement) {
   const el = document.createElement('div');
@@ -24,8 +23,7 @@ function createReticle(canvas: HTMLElement) {
       const show = !!at;
       if (show !== shown) {
         [shown, el.hidden] = [show, !show];
-        showing += show ? 1 : -1;
-        canvas.classList.toggle('no-cursor', showing > 0); // a class, not the inline style: Pixi writes the inline cursor itself
+        canvas.classList.toggle('no-cursor', show); // a class, not the inline style: Pixi writes the inline cursor itself
       }
       if (!at) return;
       const r = canvas.getBoundingClientRect();
@@ -35,8 +33,7 @@ function createReticle(canvas: HTMLElement) {
       el.classList.toggle('ready', p >= 100);
     },
     destroy() {
-      if (shown) showing--;
-      canvas.classList.toggle('no-cursor', showing > 0);
+      canvas.classList.remove('no-cursor');
       el.remove();
     },
   };

@@ -55,7 +55,7 @@ export function createInput(surface: HTMLElement, toWorld: (sx: number, sy: numb
   let press: { at: Pt | 'cursor'; t: number; by: string } | null = null; // a Command being held down
   const claims: Claim[] = [];
   const owner = (e: PointerEvent) => claims.find((c) => c.hit(e.clientX, e.clientY)) ?? null;
-  let click: { x: number; y: number; t: number; c: Claim } | null = null; // a left press the HUD owns: a release within PINCH_PX of it is its tap, however long it took
+  let click: { x: number; y: number; c: Claim } | null = null; // a left press the HUD owns: a release within PINCH_PX of it is its tap, however long it took
   const world = (at: Pt | 'target' | 'cursor'): Aim => (typeof at === 'string' ? at : toWorld(at.x, at.y));
   const commandDown = (at: Pt | 'cursor', by: string) => (press = { at, t: now(), by });
   const commandUp = (by: string) => {
@@ -106,7 +106,7 @@ export function createInput(surface: HTMLElement, toWorld: (sx: number, sy: numb
     if (e.pointerType === 'mouse') {
       [cursor, lastKind] = [local(e), 'mouse'];
       const c = e.button === 0 || e.button === 2 ? owner(e) : null;
-      if (c) return void (e.button === 0 && (click = { x: e.clientX, y: e.clientY, t: e.timeStamp, c })); // the HUD's: no Fire, no Command
+      if (c) return void (e.button === 0 && (click = { x: e.clientX, y: e.clientY, c })); // the HUD's: no Fire, no Command
       if (e.button === 0) fire = { at: cursor, t: now() };
       else if (e.button === 2) commandDown(cursor, 'mouse');
       return;

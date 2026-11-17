@@ -96,6 +96,13 @@ assert.ok(!bakes(3000, radiusOf(3000, COMP.metallic), COMP.metallic, 0, 0, 1), '
 assert.ok(!bakes(3000, radiusOf(3000, COMP.icy), COMP.icy), 'an icy giant asteroid stays a rock');
 assert.ok(!bakes(4000, r4k, COMP.metallic, 0, 1, 1), 'rough wins while solid');
 assert.ok(bakes(4000, r4k, COMP.metallic, 0.3, 1, 1), 'molten bakes anything');
+// Round-off relative to you (ROUND_SHARE 5%; debris BURN_MAX 1%): a field body light next to you stays an atlas rock.
+const rs = (m: number) => radiusOf(m, COMP.stony);
+assert.ok(bakes(5000, rs(5000), COMP.stony) && bakes(5000, rs(5000), COMP.stony, 0, 0, undefined, 1e4), 'past ROUND_M, beside a small you: round');
+assert.ok(!bakes(5000, rs(5000), COMP.stony, 0, 0, undefined, 1e6), 'under 5% of you: a rock');
+assert.ok(bakes(6e4, rs(6e4), COMP.stony, 0, 0, undefined, 1e6), 'over 5% of you: round');
+assert.ok(!bakes(1e4, rs(1e4), COMP.stony, 0, 0, undefined, 1e6), '1% of you: a rock');
+assert.ok(bakes(1e4, rs(1e4), COMP.stony, 0, 0, 1, 1e6) && !bakes(5e3, rs(5e3), COMP.stony, 0, 0, 1, 1e6), 'a shard reads jagged from 1% of you');
 
 // Burst placement (body.ts burst, rules.ts burstRing): no two pieces of a shattered body touch at birth (siblings that
 // overlap merge at once) nor in their first second flying out along their rays.

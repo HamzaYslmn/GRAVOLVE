@@ -92,7 +92,7 @@ export function createStarStage(layer: Container, me: Body, renderer: Renderer, 
     const field = kit.field(), rnd = rng(salt);
     let best = { a: rnd() * Math.PI * 2, fill: Infinity };
     for (let i = 0; i < 8; i++) {
-      const a = best.a + (i * Math.PI) / 4, fill = field?.fillAt(origin.x + Math.cos(a) * FIRST, origin.y + Math.sin(a) * FIRST) ?? 0;
+      const a = best.a + (i * Math.PI) / 4, fill = field.fillAt(origin.x + Math.cos(a) * FIRST, origin.y + Math.sin(a) * FIRST);
       if (fill < best.fill) best = { a, fill };
     }
     stars.set('0,0', make('0,0', origin.x + Math.cos(best.a) * FIRST, origin.y + Math.sin(best.a) * FIRST, rnd));
@@ -156,10 +156,8 @@ export function createStarStage(layer: Container, me: Body, renderer: Renderer, 
 
   /** A star's gravity on loose bodies (starPull, out to PULL_X R★): they fall in and burn. */
   function pull(s: Star, dt: number) {
-    const field = kit.field();
-    if (!field) return;
     const reach = PULL_X * s.R, g = starMu(s.M) * dt;
-    for (const b of field.bodies) {
+    for (const b of kit.field().bodies) {
       if (!b.m || b.moon || b.held) continue;
       const dx = s.m.x - b.motion.x, dy = s.m.y - b.motion.y, d2 = dx * dx + dy * dy;
       if (d2 > reach * reach) continue;
@@ -171,9 +169,7 @@ export function createStarStage(layer: Container, me: Body, renderer: Renderer, 
 
   /** Bodies that fall into a star burn up (checked every EAT_S s). */
   function eat(s: Star) {
-    const field = kit.field();
-    if (!field) return;
-    for (const b of field.bodies) {
+    for (const b of kit.field().bodies) {
       if (!b.m || b.moon || b.held) continue;
       const d = Math.hypot(b.motion.x - s.m.x, b.motion.y - s.m.y);
       if (d > s.R + 0.3 * b.r) continue;
@@ -250,7 +246,7 @@ export function createStarStage(layer: Container, me: Body, renderer: Renderer, 
     const L = lay(s), at = o.target / s.R, goal = band ? orbitGoal(band, L.orbit) : clamp(at, ...L.orbit); // the range moves as your moons grow
     ride(o, pm, s, starMu(s.M), goal, ORBIT_RATE, dt);
     me.view.position.set(pm.x, pm.y);
-    colonies.update(dt, zoom, planets, s, cover, at, [L.orbit[0], L.ring(capacity(s.M) - 1, at)], L.reach, kit.field()?.bodies ?? []);
+    colonies.update(dt, zoom, planets, s, cover, at, [L.orbit[0], L.ring(capacity(s.M) - 1, at)], L.reach, kit.field().bodies);
     carry(planets, s, starMu(s.M), dt, (k) => L.ring(k, at));
     dyson.update(s, pm, colonies.speed, dt); // more living planets build faster (concept 4)
     return o.dist / s.R;
@@ -265,7 +261,7 @@ export function createStarStage(layer: Container, me: Body, renderer: Renderer, 
     if (before < FLARE_RISE && s.flareT >= FLARE_RISE) {
       const kelvin = flareK(s.glow, cover, x);
       kit.fx.flash(s.m.x + Math.cos(s.flareAt) * s.R, s.m.y + Math.sin(s.flareAt) * s.R, s.R * 1.2, 16, s.R);
-      if (kelvin > 0.5 && !civ.shieldTake(kelvin, 0, pm.x - (dx / d) * me.r, pm.y - (dy / d) * me.r)) {
+      if (kelvin > 0.5 && !civ.shieldTake(kelvin, pm.x - (dx / d) * me.r, pm.y - (dy / d) * me.r)) {
         me.heat += kelvin / K_PER_HEAT;
         flareDose = FLARE_S;
       }
@@ -292,8 +288,7 @@ export function createStarStage(layer: Container, me: Body, renderer: Renderer, 
     if ((eatT -= dt) > 0) return;
     eatT = EAT_S;
     for (const s of stars.values()) if (s.view) eat(s);
-    const field = kit.field();
-    if (yours?.owned && orbit && field && catchPlanet(planets, yours, starMu(yours.M), field.bodies, orbit.dir, lay(yours).catch(orbit.target / yours.R))) {
+    if (yours?.owned && orbit && catchPlanet(planets, yours, starMu(yours.M), kit.field().bodies, orbit.dir, lay(yours).catch(orbit.target / yours.R))) {
       const b = planets[planets.length - 1].b;
       grow(yours, yours.M * (1 + GROW));
       kit.fx.flash(b.motion.x, b.motion.y, b.r * 3, 8, b.r * 2);
@@ -380,8 +375,7 @@ export function createStarStage(layer: Container, me: Body, renderer: Renderer, 
         [s.build, s.haulers.length] = [undefined, 0]; // a segment in flight would land past the sphere
       } else grow(s, Number(cmd));
     },
-    /** Stars and your system planets (test hooks). */
-    stars,
+    /** Your system planets (test hook). */
     planets,
     /**
      * `aimed`: the HUD has a body target (the star shows in the target panel only without one); `pressure`: your air (atm).

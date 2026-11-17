@@ -23,19 +23,22 @@ world `SEED` in `main.ts` drives backdrop, field and rock shapes; each run deriv
 
 ### Spawn masses
 
-- **Belt:** N(>m) ∝ m^-0.6 up to M_MAX 10^4; floor max(0.02 × start × (you/start)^0.45, 0.001 × you). Below 0.001 × you
-  (`SPECK`) nothing spawns, no fragment is made, loaded rocks are dropped. Past M_MAX × (you / M_MAX)^-0.25 (`THIN`).
-- Protoplanets 0.5% (2,000–10^4, round). Radioactive 3% of single rocks, green cast and strong green glow (user).
+- **Belt:** N(>m) ∝ m^-0.6 up to M_MAX 10^4; floor max(0.02 × start × (you/start)^0.45, 0.0001 × you). Below 0.0001 × you
+  (`SPECK`; 2026-11-17, was 0.001) nothing spawns, no fragment is made, loaded rocks are dropped. Past M_MAX × (you /
+  M_MAX)^-0.25 (`THIN`).
+- Protoplanets 0.5% (2,000–10^4, round only while ≥ 5% of you: `ROUND_SHARE`). Radioactive 3% of single rocks, green cast
+  and strong green glow (user).
 - **Tail** above M_MAX: N(>q) = 0.43 · min(1, (you/550)^-0.34) · q^-0.6 per screen, q in [max(0.01, M_MAX/you), 1.15];
   nothing in it can eat you; `THIN` is the late-tier pace knob.
 - **Encounters:** 0.25 per screen at 1.5–6× you; rare things roll per screen (chance / scale^1.6); big things drift, never
   aimed.
 - **Piles:** at 300–1000 mass half are rubble piles, 15% of those contact binaries; elsewhere 12–50% by mass.
 - **Motion:** shared drifts where it spawns (belt flow, rapids, moving group) plus 4–26 start units/s × √scale scatter.
+  Nothing heavier than you rides the rapids, nor a group round one (moon hosts, giants, asteroid fields): big things drift.
 
 ### Biomes
 
-`web.ts` `place` / `biomeAt`, checked in order: start area (belt) → void (web < 0.1) → Kuiper → rapids → meteor belt →
+`web.ts` `place(...).biome`, checked in order: start area (belt) → void (web < 0.1) → Kuiper → rapids → meteor belt →
 the strongest material region above 0.5 → belt.
 
 | Biome | Name | Kinds [rock, metal, ice, gas] (`kindMix`) | Map share |
@@ -53,7 +56,8 @@ Shares: `web.test.ts`, 3 seeds, 2026-11-16.
 
 - **Kuiper belt:** every void's rim (web 0.1–0.7 with a void within 2.5–5k). Lore (user): an old star swept the space
   clean. Sparse, slow (× 0.35), big icy bodies (slope 0.45), comets × 3, radioactive 15% of single rocks (the dead star).
-- **Rapids:** ridge bands on filaments flowing at 9 start D/s × √scale, scatter × 2; ride by matching, crossing hurts;
+- **Rapids:** ridge bands on filaments flowing at 9 start D/s × √scale, scatter × 2, for bodies up to your mass (user,
+  2026-11-17); ride by matching, crossing hurts;
   rocks leaving downstream come back upstream off screen (`recycle`).
 - **Meteor belt:** ridge bands, fill ≥ 0.4 then × 1.6, slope 1.0, meteors × 4 inside (user, 2026-11-14).
 - **Moving clusters** (`groupDrift`, ~1600 region units): half still, half drifting together at 10–25 start units/s.

@@ -54,7 +54,7 @@ function tip(w: WorldState, comp: Comp) {
 }
 
 /** The tooltip for `key`, from the latest world state. */
-function tipFor(key: string, w: WorldState, comp: Comp): string | null {
+function tipFor(key: string, w: WorldState): string | null {
   const m = w.mass, civ = w.civ, life = Math.round((100 * w.lifeProgress) / LIFE_S), next = nextMoonMass(m);
   switch (key) {
     case 'age': return w.star?.owned ? 'Age III: your star. Build a Dyson sphere around it.' : 'Age II: worlds. Give life water, warmth, air and a magnetic field until an intelligent species appears.';
@@ -77,14 +77,13 @@ function tipFor(key: string, w: WorldState, comp: Comp): string | null {
   return null;
 }
 /** The limit row's tooltip: the limit shown first, the other one under it while it matters. */
-const limTip = (key: string, w: WorldState, comp: Comp) => [tipFor(key, w, comp), tipFor(key === 'lim-gas' ? 'lim-boil' : 'lim-gas', w, comp)].filter(Boolean).join('\n\n') || null;
+const limTip = (key: string, w: WorldState) => [tipFor(key, w), tipFor(key === 'lim-gas' ? 'lim-boil' : 'lim-gas', w)].filter(Boolean).join('\n\n') || null;
 
 export function createWorldHud() {
   const host = document.getElementById('game-hud')!; // the stage HUD's root: hides with it under the game over card
   const card = host.querySelector<HTMLElement>('.me')!;
   host.dataset.stage = 'planet'; // shows the World header, hides Age I's rows (asteroid/hud.css)
   const el = document.createElement('div');
-  el.className = 'world2';
   el.innerHTML = `<div class="cells clim">${cell('temp', 'temp', 'Temp', 'scale')}${cell('air', 'air', 'Air', 'scale')}${cell('water', 'water', 'Water', 'scale')}${cell('magnet', 'magnet', 'Field')}</div>
     <div class="row moons" data-tip="moons">${icon('orbit')}<em class="lb">Moons</em><span class="pips"></span><span class="v"></span></div>
     ${row('boil lim', 'temp', 'Seas boil', 'scale', 'lim-boil')}${row('gasl lim', 'gas', 'Gas world', 'scale', 'lim-gas')}`;
@@ -101,14 +100,14 @@ export function createWorldHud() {
     v.textContent = text;
     v.className = `v ${cls}`;
   };
-  let pips = '', sum = '', last: [WorldState, Comp] | undefined;
-  const untip = addTips((key) => (!last ? null : key.startsWith('lim-') ? limTip(key, ...last) : tipFor(key, ...last)));
+  let pips = '', sum = '', last: WorldState | undefined;
+  const untip = addTips((key) => (!last ? null : key.startsWith('lim-') ? limTip(key, last) : tipFor(key, last)));
 
   return {
     /** Your card (the civilization's sections go in here: civilization/hud.ts). */
     panel: card,
     update(dt: number, w: WorldState, comp: Comp) {
-      last = [w, comp];
+      last = w;
       if (!due(dt)) return;
       c$('.age').textContent = w.star?.owned ? 'Age III' : 'Age II';
       c$('.head .name').textContent = w.name;
@@ -117,7 +116,6 @@ export function createWorldHud() {
       // The goal bar (the star's while one is near: star/hud.ts): the civilization's tier, the gas line's brown dwarf, or life
       // (red under a civilization that lost it: people dwindle until it refills).
       const gas = w.envelope || w.gasLine, lost = !!w.civ && !w.civ.active, life = `${Math.round((100 * w.lifeProgress) / LIFE_S)}%`;
-      card.classList.toggle('nolife', lost);
       if (!card.hasAttribute('data-star')) {
         const [to, left, f] = w.civ?.active ? ['Civilization', `T${w.civ.tier}/${TIER_MAX}`, w.civ.tier / TIER_MAX]
           : lost ? ['No life · dying out', life, w.lifeProgress / LIFE_S]
@@ -180,7 +178,6 @@ export function createWorldHud() {
     destroy() {
       host.dataset.stage = 'asteroid';
       card.querySelector('.age')!.textContent = 'Age I';
-      card.classList.remove('nolife');
       card.querySelector('.goal')!.classList.remove('lost', 'stalled');
       nodes.forEach((n) => n.remove());
       untip();

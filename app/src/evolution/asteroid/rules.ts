@@ -4,7 +4,7 @@
 // Departures from the doc: touching a heavier body slowly eats you (no 5 s capture window); durability is a
 // weighted geometric mean of phases (weak phases cost more than their share); loose piles are weaker; radii are capped at
 // R_CAP (stylised scale: no planet as big as a star), while the doc's sizes grow without limit.
-import { clamp, rng, smoothstep } from '../../core/rng.ts';
+import { clamp, clamp01, rng, smoothstep } from '../../core/rng.ts';
 import { K_PER_HEAT } from '../../core/water.ts';
 
 // Elements: metal, rock (all stony kinds; the doc's carbon is folded in), ice (water), gas, and a trace of
@@ -45,13 +45,15 @@ export function roundShape(r: number, c: Comp, diff = 0) {
 /** The drawn roundness: roundShape, less a debris piece's jag (Body.jag: 1 a fresh break, flat-faced .. 0 relaxed). */
 export const shapeOf = (r: number, c: Comp, diff = 0, jag = 0) => roundShape(r, c, diff) * (1 - jag);
 export const ROUND_M = 10 ** 3.5; // Planetoid (AGE_GOAL): every asteroid tier, icy ones too, stays an irregular atlas rock
+export const ROUND_SHARE = 0.05; // × your mass: lighter field bodies stay atlas rocks however heavy (user, 2026-11-17: everywhere is planet)
 /**
- * Does a body bake into a sphere (sphere.ts)? From ROUND_M up, once past half its round-off radius or molten (diff ≥ 0.3);
- * a debris piece (`jag` set) at any radius. A `rough` body (its count of kept parts: a comet, a small fragment, a rock pile
- * you caught; body.ts keepShape) only once molten.
+ * Does a body bake into a sphere (sphere.ts)? From ROUND_M and ROUND_SHARE of `you` up (BURN_MAX for a debris piece, so a
+ * small wreck's shards still read jagged), once past half its round-off radius or molten (diff ≥ 0.3); a debris piece
+ * (`jag` set) at any radius. A `rough` body (its count of kept parts: a comet, a small fragment, a rock pile you caught;
+ * body.ts keepShape) only once molten. `you` 0: the absolute rule (your own body, rival worlds, moons).
  */
-export const bakes = (m: number, r: number, c: Comp, diff = 0, rough = 0, jag?: number) =>
-  m >= ROUND_M && (diff >= 0.3 || (!rough && (jag !== undefined || r >= 0.5 * roundR(c))));
+export const bakes = (m: number, r: number, c: Comp, diff = 0, rough = 0, jag?: number, you = 0) =>
+  m >= Math.max(ROUND_M, (jag !== undefined ? BURN_MAX : ROUND_SHARE) * you) && (diff >= 0.3 || (!rough && (jag !== undefined || r >= 0.5 * roundR(c))));
 
 // Debris (Body.jag): a heavy piece of a shattered body is jagged, flat break faces on its outline, and rounds over time:
 // gravity relaxes it in JAG_S s at its round-off radius (faster bigger, × r/roundR up to 3×; never below half of it), a
@@ -64,9 +66,9 @@ export function relaxJag(jag: number, r: number, c: Comp, heat: number, dt: numb
   return Math.max(0, jag - rate * dt);
 }
 /** `jag` after the body swallowed a meal that is `share` of the merged mass. */
-export const mergeJag = (jag: number, share: number) => jag * (1 - clamp(share, 0, 1));
+export const mergeJag = (jag: number, share: number) => jag * (1 - clamp01(share));
 /** The drawn step of a jag (ceil: any jag left still shows the first step; 0 = round). */
-export const jagStage = (jag = 0) => Math.ceil(clamp(jag, 0, 1) * JAG_STEPS) / JAG_STEPS;
+export const jagStage = (jag = 0) => Math.ceil(clamp01(jag) * JAG_STEPS) / JAG_STEPS;
 /** The n-th body's surface seed, 1..9973: consecutive bodies get far-apart seeds (the bake's noise and faces). */
 export const surfaceSeed = (n: number) => 1 + ((n * 6151) % 9973);
 /** A piece's break faces: 4–6 half-plane cuts [nx, ny, distance (edge radii)], deeper with more jag; none at jag 0. */
@@ -136,10 +138,10 @@ export const BURN_HEAT = 0.25;
 export const BURN_MAX = 0.01;
 /** The air's edge round a world of radius R, where small bodies burn (field.ts burn): outside any shield shell (1.28 R at most), so air, shell, ground meet in that order. */
 export const airR = (R: number) => 1.35 * R;
-export const SPECK = 1e-3; // × your mass: lighter rocks are below a pixel once you are big; none spawn and loaded ones are dropped (field.ts)
+export const SPECK = 1e-4; // × your mass: lighter rocks are a pixel or two across once you are big (1e-3 until 2026-11-17); none spawn and loaded ones are dropped (field.ts)
 export const burnShare = (p: number) => BURN * Math.sqrt(clamp(p, 0, 10));
 /** Share of a fast arrival with `s` = its mass / yours that reaches the ground through air that burns up `sb`. */
-export const reachGround = (s: number, sb: number) => (sb > 0 ? clamp((s - sb) / (3 * sb), 0, 1) : 1);
+export const reachGround = (s: number, sb: number) => (sb > 0 ? clamp01((s - sb) / (3 * sb)) : 1);
 // Past vaporizing (doc: heat > 8) more impact energy only makes vapour; without a cap a crumb splashing at speed
 // reached heat in the thousands and warmed whatever ate it.
 export const MAX_HEAT = 10;

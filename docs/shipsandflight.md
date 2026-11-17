@@ -92,7 +92,7 @@ body takes the effect (pirates: also their fleet's rocks, `Gun.takes`). A pirate
 |---|---|---|---|---|---|---|
 | Fighter | 9 R off surface | ±0.2 | 22 R/s, 0.68 s (15 R) | yours 2 × 8 at 16/s, 1.5 s cool; probes 1 × 3 at 4/s, 5 s; rival patrols 6 at 10/s, 0.6 s apart | ±0.04 | breaks a small body; a big one gets 1/6 kick |
 | Frigate lance | target; world from post | ±0.1 | 22 R/s, 2.7 s (~60 R) | 3 bolts 0.15 s apart / 10 s; on a world after 1.5 s glow, clear line only | ±0.01 | rock ≤ 8 pieces; world 7.5 K a bolt; any ship it meets dies |
-| Rocket | 2 × mining reach | guided | 12 R/s, 16 R/s², nose ≤ 2.6 rad/s | Rockets | Rockets | [civilizationgameplay.md](civilizationgameplay.md) → Rockets |
+| Rocket | 3 × mining reach | guided | 9 R/s, 11.7 R/s², nose ≤ 2.8 rad/s | Rockets | Rockets | [civilizationgameplay.md](civilizationgameplay.md) → Rockets |
 | Pirate raider | 6 R off surface | ±0.25 | 20 R/s, 0.5 s | 3 at 6/s, 0.9 s apart, closing | ±0.06 | their rock; your shield (`PIRATE_K`), stock, a chip |
 | Pirate marauder | 9 R off surface | ±0.2 | 20 R/s, 0.62 s | 5 at 5/s, 1.5 s apart | ±0.04 | as raider; 3 hits on a rock |
 | Rival wave fighter | 8 R | ±0.25 | 22 R/s, 0.68 s | 3 a run at 6/s | ±0.06 | your frigate first, ships, miners, else 0.2 K on your shield then 0.2 u ore |
@@ -110,21 +110,31 @@ sudden 90° turn). Yours on Fire (`combat.ts`), rival worlds' from their pad (`r
 
 - **Launch:** from the shooter's surface, `pad` ±0.7 rad off the aim (±0.3 at a ship; less inside 10 R), sides
   alternating, off the pad at 2 R/s; it pitches over at once.
-- **Real thrust** (`guide`, 2026-11-17; flight.ts untouched): in its launch frame it wants the lead velocity (12 R/s),
-  the error closed over 0.2 s (`TAU`); the nose turns ≤ 2.6 rad/s toward that push (plus a 0.2 × `acc` pull back onto
-  its path, `TRIM`), and the motor pushes 16 R/s² along the nose only. The path lags the nose: it slips through turns
-  (up to 1.4 rad) and needs > 1.1 s for a 90° swing at speed (turning radius ≥ 9 R). Lock lost for good past 1.6 rad off
-  its velocity or when the target is gone; unlocked it flies straight. A point shot steers to the clicked point (still in
-  the launch frame: where you clicked, while you coast), passes over it and flies on.
-- **Fuel is range:** distance flown = the fire range (2 × mining reach, `fireReach`); turning costs range; then it
-  fizzles.
+- **Real thrust** (`guide`, user 2026-11-17: true from a moving world, slower): in its target's frame (the target's
+  velocity read over `lag` 0.25 s, so a burn away cannot outrun it) it wants the lead velocity (9 R/s; never below 0.3 × that in a turn, never shedding
+  speed), the error closed over 0.2 s (`TAU`); the nose turns ≤ 2.8 rad/s toward that push (plus a 0.2 × `acc` pull back
+  onto its path, `TRIM`), and the motor pushes 11.7 R/s² along the nose only. The path lags the nose: it slips through
+  turns and needs > 1.1 s for a 90° swing at speed. A lock holds while the target lives; then it flies straight.
+- **The seeker lets go** (`blind` 0.57 s; user, 2026-11-18: a small margin to dodge, bots and players alike): when its
+  time to the target's surface drops under `blind`, a locked rocket (not a point shot's ray) aims at the target's place
+  and velocity of that moment, coasting on (`aim`); once past that point it looks again. The lock, fuze and hit still read
+  the real target. A steady target is always hit; a 7.5 R/s² world moves its own radius in that time, a 5 R/s² one does
+  not (guns.test.ts).
+- **Point shot** (`combat.ts`): flies the world-fixed ray from the launch point through the click (a point 5 R on it),
+  keeping your forward speed toward the aim. Past your mining reach its scan (`guns.ts` `spot`) locks the nearest enemy
+  ship, rocket or your priority within 0.6 rad of its path, 12 R and 0.6 × its fuel left, with a turn under half its
+  tightest; then at 9 R/s in that target's frame. Plain rocks and rival worlds lock only by a click.
+- **Fuel is range:** distance flown in the target's or the launch frame (the lesser) = the fire range (3 × mining reach,
+  `fireReach`); turning costs range; then it fizzles. Rival worlds arm pad and lance within 2 × (`armReach`).
 - **Hits:** any body stops it (not its own world or moons). Within 0.6 R of a ship: the direct hit (`kill(true)`, through
   a pirate's shield), others within 0.6 R the blast. To rounds a small target (0.12 × a ship's hit radius); a locked
   rocket can stop an enemy rocket.
-- Checked (guns.test.ts, 2026-11-17, real thrust): nose ≤ 2.6 rad/s, push ≤ 15.7 R/s², slip up to 1.39 rad, top 12.5
-  R/s at 30–240 fps; straight shot within 0.3 R of range, no slip; point shots pass within 0.21 R of the point from either
-  pad; on a ship orbiting 3 R/s 100%, crossing 7 R/s 100%, closing 6 R/s 100%, crossing 10 R/s 0% (no undefeatable
-  rocket), a 6 R/s crosser breaking 90° at 0.6 s 21%; a 45° path swing at speed 1.32 s; a fighter stops 35% of inbound
+- Checked (guns.test.ts, 2026-11-17, target's frame): nose ≤ 2.80 rad/s, push ≤ 11.7 R/s², slip up to 1.06 rad; top
+  9.61 R/s (1.07 ×) from a still world at a ship, 15.3 R/s against a 3.6 R/s shooter; straight shot within 0.3 R of range,
+  no slip; from 5 R/s a clicked still rock at 2–20 R hit 224 of 224; point shots from rest within 0.39 R of the click
+  (top 10.6 R/s: the motor never brakes), from a world moving ≤ 5 R/s within 1.55 R of the ray past the mining reach, a
+  sideways near click passed wide (2.6 R at 5 R); on a ship orbiting 3 R/s, crossing 6 or 10 R/s, closing 6 R/s and a
+  6 R/s crosser breaking 90° at 0.6 s all 100%; a 45° path swing at speed 1.40 s; a fighter stops 39% of inbound
   rockets; lift-off burn ≥ 0.81. Rival dodge and salvos at you: [aliencivilizations.md](aliencivilizations.md) → Fighting
   a rival world.
 
@@ -134,11 +144,14 @@ sudden 90° turn). Yours on Fire (`combat.ts`), rival worlds' from their pad (`r
 hue the faction.
 
 - Bolts: a glow quad in the gun's tint along its path round a white core, never under a few px. Fighters cyan, rivals
-  violet, pirates orange, probes pale blue; marauder shells larger; lances long bolts with a halo.
+  violet, pirates orange, probes pale blue; marauder shells larger; lances long bolts with a halo. Sizes (2026-11-17,
+  shorter and thinner: 75% width, 60% length): bright middle ≥ 2.1 px round and pirate, 1.7 probe, 3.0 shell, 3.6 lance;
+  glow ≥ 4.4 px round, 7.6 lance (guns.test.ts).
 - Rockets (`render/shipArt.ts`, baked; cyan trim yours, violet rivals'): pale 4:1 tube, nose a quarter of its length, two
-  swept fins, a band; `ROCKET.len` 0.07 in the ships' unit (0.7× the smallest ship at every zoom). Pad flash and dust; a
-  flame that grows with thrust (long off the pad and in turns), embers streaming back from the nozzle; a hit bursts (`blast`), a shot-down one flares, out of fuel fizzles
-  grey. Worst glow frame 327 of 400 quads (2026-11-17).
+  swept fins, a band; `ROCKET.len` 0.095 in the ships' unit (0.95× the smallest ship at every zoom; 2026-11-17). Pad
+  flash and dust; a flame that grows with thrust (long off the pad and in turns; width floor `w` 2.5 px, was 1.5), embers
+  streaming back from the nozzle; a hit bursts (`blast`), a shot-down one flares, out of fuel fizzles grey.
+  Worst glow frame 327 of 400 quads (2026-11-17).
 - A flash at launch; hits flash and throw sparks back along the path; one quiet `hit` sound per burst, ≤ every 0.25 s.
 
 ### Rival ships away from home [J]
@@ -218,10 +231,11 @@ User, 2026-11-14: collisions with consequences, yet ships fly round what is in t
 
 ### Ship art
 
-- `render/shipArt.ts`: an SVG per faction and class (you and rivals: probe, miner, fighter, frigate, colonizer, carrier,
-  rocket; pirates: raider, hauler, marauder), baked once in colour into the 1024² tech page (`Graphics.svg`, 128 × 80
-  cells, one scale; `SHIP_PX` 28 art px a cell, a fighter ≈ 14). One draw call for all ships. Stations stay shader art;
-  Dyson haulers are star-page art (`star/look.ts`).
+- `render/shipArt.ts`: an SVG per faction and class (you: probe, miner, fighter, frigate, colonizer, carrier, rocket;
+  rivals: probe, miner, fighter, frigate, rocket; pirates: raider, hauler, marauder), baked once in colour into the 1024²
+  tech page (`Graphics.svg`, 128 × 80 cells, one scale; `SHIP_PX` 28 art px a cell, a fighter ≈ 14). One draw call for
+  all ships. Dyson haulers are star-page art (`star/look.ts`). Rival colonizer and carrier art deleted (user, 2026-11-17:
+  never drawn).
 - Spec (user: "design better 2D"; one-winged looked weird): bold symmetric silhouettes, nose → cockpit → hull → engine
   axis, three hull tones plus an accent, glowing nozzles. Each faction told apart by silhouette, a signature detail and
   palette, readable at 8–14 px.
@@ -280,6 +294,9 @@ Length relative to a fighter (≈ 14 px at the start zoom); Tip = unlock tier.
 - **Ships ≥ 8 px; you cyan, rivals violet** (user, standing).
 - **One flight model, no undodgeable rocket** (concept 8): roles differ only in route and weapon; distance, speed and an
   early burn beat rockets.
+- **Rockets slower and more agile, bolts shorter and thinner** (user, 2026-11-17): rockets 9 R/s, 11.7 R/s², nose 2.8
+  rad/s, 0.095 R long; bolts 75% as wide and 60% as long. Later that day: range 3 × mining reach, flight in the target's
+  frame, point shots on a world-fixed ray that scan past the mining reach.
 - **Ship art** (user, 2026-11-13): "design better 2D".
 - **Flight of all ships** (user, 2026-11-13, concept 7): ships follow their planet as in the old game, not low orbits, so
   early players can hit pirates with moons. Kept: ships fly relative to their world; enemy ships away die on any touch.

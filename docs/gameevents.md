@@ -15,10 +15,10 @@ Independent Poisson clocks, no director yet (as in the old game).
 
 | Stream | Code | Rate | Note |
 |---|---|---|---|
-| Meteors | `field.ts` `meteors` | mean 10 s, 1 in 10 a shower of 2–4; 1–20% of you in Age I, 0.1–1% from Age II (`METEOR_SHARE_AGE2`), ≤ 10^4; cross in 0.8–1.3 s | 12% aimed near you (20% in Age I); Age II × bombardment × max(0.05, density), none aimed in voids |
+| Meteors | `field.ts` `meteors` | mean 10 s, 1 in 10 a shower of 2–4; 1–20% of you in Age I, 0.1–1% from Age II (`METEOR_SHARE_AGE2`; no 10^4 cap since 2026-11-17); cross in 0.8–1.3 s | 12% aimed near you (20% in Age I); Age II × bombardment × max(0.05, density), none aimed in voids |
 | First shower | `SHOWER_AT` | once, 20–30 s into Age I | 3–4 of 2–10%, missing a still player by ≥ 4 radii |
 | World comets | `comets` | mean 75 s (× bombardment in Age II), 1–12%, 3–7 own D/s | never aimed |
-| Great comets | `greatComets` | mean 240 s, 0.5–3× you, 1.5–3 D/s | pass 0.5–0.8 half-diagonals away, `held`, shed ≤ 40 ice crumbs; 5 passes in 1,275 s parked, 0 contacts |
+| Great comets | `greatComets` | mean 240 s, 5–30% of you (2026-11-17, was 0.5–3×: fast things are small), coma 6 × its radius, 1.5–3 D/s | pass 0.5–0.8 half-diagonals away, `held`, shed ≤ 40 ice crumbs; 5 passes in 1,275 s parked, 0 contacts |
 | Age I rivals | `field.ts`, `asteroid/rival.ts` | by travel, none before 15 s | [aliencivilizations.md](aliencivilizations.md) → Age I cores |
 | Giant clash | `giants` | mean 300 s, 3–12× you | Age I only |
 | Discoveries | `discover` | 0.12 per screen | [worldgen.md](worldgen.md) → Places |
@@ -65,12 +65,23 @@ Age II the planet stage attaches its moons. Flight: [shipsandflight.md](shipsand
 | Hauler | max(1, round(n/5)) | 2, 2 | 0.8 × | none; holds 100 u, ≤ 20 u of your stock |
 | Marauder | 1 from 10 ships | 3, 4 | 0.8 × | 9 R, ±0.2 rad, 5 at 5/s, 1.5 s apart, 3 rock hits a round |
 
+- **Captains** (user, 2026-11-17; `escape.ts` `CAPTAINS`): one drawn per fleet at launch. The LIFE gate, attack pacing,
+  fleet sizes, harm caps, stolen stock, shields, rout and jump are every captain's. Patience scales both leash clocks.
+
+| Captain | Chance | World value (you / rival) | Leaves at ships lost | Raid × | Stay × | Patience × | Reads as |
+|---|---|---|---|---|---|---|---|
+| Reaver | 30% | 3 / 2 | 50% | 1 | 1 | 1 | the baseline (every factor 1) |
+| Butcher | 25% | 5 / 3 | 75% | 1.3 | 1 | 1.5 | worlds over rocks, fights down to a quarter of its ships |
+| Hound | 20% | 4 / 2 | 50% | 1.5 | 1.2 | 3 | follows a fleeing world 3× as long |
+| Feint | 15% | 3 / 2 | 20% | 1 | 1 | 0.25 | tests the waters: gone at its first losses or once you run |
+| Scavenger | 10% | 1.5 / 1 | 30% | 0.7 | 1 | 1 | hesitant: a rich rock outranks you, short raids |
+
 - **Lifecycle:** cruise → work (a rock) or raid (a world) → leave. Appears 1.05 half-diagonals out on a lane within 0.4
   half-widths of the centre (it crosses the screen); two empty lanes and it leaves.
-- **Targets** every 0.5 s: value / (1 + distance / 10 R) over what is on screen within 0.75 half-diagonals: you 3 (only
-  while an attack is due and you are awake), a rival world 2, a rock of 0.5–25% 0.5 + ice and metal share + ≤ 1 for
-  neighbours, a loose 0.1–0.5% piece 0.4 (hauler room). Never moons, meteors, comets, fast or held bodies, or rocks whose
-  runs would cross your moon system. Kept ≥ 4 s.
+- **Targets** every 0.5 s: value / (1 + distance / 10 R) over what is on screen within 0.75 half-diagonals: you (only
+  while an attack is due and you are awake) and a rival world by captain, a rock of 0.5–25% 0.5 + ice and metal share +
+  ≤ 1 for neighbours, a loose 0.1–0.5% piece 0.4 (hauler room). Never moons, meteors, comets, fast or held bodies, or
+  rocks whose runs would cross your moon system. Kept ≥ 4 s.
 - **Jobs:** gun (strafing runs, ≤ 3 a target), haul (brake beside a claimed piece, 0.8 s tractor, aboard), guard (a
   stand-off 3.5 R past the target, out of bodies and your moon system), form. An enemy ship within 6 R of a hauler or 4 R
   of the fleet draws ≤ 2 raiders until dead or 9 R off.
@@ -82,13 +93,14 @@ Age II the planet stage attaches its moons. Flight: [shipsandflight.md](shipsand
 - **Harm caps** (user, 2026-11-13): a shielded world loses 3 K a round; an open one 1 u of stock into a hauler (≤ 20 u
   each); with both gone a chip of 0.02% of your mass as water or air, ≤ 2% a raid.
 - **Evasion:** a hauler drops its line and runs 2 s to a guard; a body on course scatters the fleet 2 s. Below 10 R/s only
-  haulers can be rammed; from 10 R/s raiders too; flying off at ≥ 10 R/s escapes a raid (2026-11-15).
+  haulers can be rammed; from 10 R/s raiders too; flying off at ≥ 10 R/s escapes a raid (2026-11-15; a hound's last ≤ 14 s at 20 R/s).
 - **Fighting back:** ram, drag them through a belt (bodies closing > 3 × cruise are not dodged), a rocket's direct hit,
   rounds and blasts (shield, then hull); your defence ships and rival patrols hunt them. A tractoring hauler is nearly
   stopped. A destroyed hauler bursts 80% of its hold into 1–4 pieces and returns your stolen stock × 1.5 ("Loot
   recovered"). Wrecks within your fire range also give salvage: [civilizationgameplay.md](civilizationgameplay.md) → Stocks.
-- **Leaving:** holds full, after 60–90 s, half the ships or every hauler lost, or a raid ends (20–40 s, the leash, the
-  target gone): they form round the haulers and fly straight out (±0.3 rad); gone past 1.3 half-diagonals.
+- **Leaving:** holds full, after 60–90 s × stay, the captain's share of ships or every hauler lost, or a raid ends (20–40
+  s × raid, the target gone, or the leash: you over 1.8 half-diagonals off for 3 s, or outpacing 1.5 × their cruise for
+  20 s in all, both × patience): they form round the haulers and fly straight out (±0.3 rad); gone past 1.3 half-diagonals.
 - **Rout and jump** (user, 2026-11-17; `escape.ts`): a leaving fleet is routed under 20% of its ships (from 6 ships up) or
   while pressed (hit or killed in the last 3 s, or you within 12 R closing faster than a quarter of their cruise); routed
   it flies at full cruise. 8 s after the rout (14 s after leaving at most) each ship on screen spools 0.9 s (haulers
@@ -107,6 +119,13 @@ Checked (pirates.test.ts, Node, fake world):
 - 2026-11-17: a raider's first round is soaked, the second kills; shields back after 6 s; a direct rocket hit kills a
   shielded ship; a half-killed fleet of 10 routs and its 5 survivors jump 10.4 s after leaving. Browser: 14 ships jumping
   on screen, frame mean 1.75 ms (1.83 before).
+- 2026-11-17, captains (captains.test.ts, raid length pinned off so only the leash ends it; 3 seeds): you just
+  outpacing them, the raid ends after reaver 20.5 s, butcher 30.5, hound 60.5, feint 5.5, scavenger 20.5; at 20 R/s
+  after 6.5–8.0, 8.0–9.5, 12.5–14.0, 4.5–5.5, 6.5–8.0 s. An attack due with rich rocks in sight, 15 s in (6 seeds):
+  butcher and hound on you 6 of 6, reaver and feint 3, scavenger 0 (at the rocks). A fleet of 10 leaves after losing
+  reaver 5, butcher 8, hound 5, feint 2, scavenger 3. Open raids on an empty store (18 visits each, with 4 moons or by
+  rich rocks): at most 2.000% of your water and air a raid (the cap; scavenger 1.395%); 2 scavenger visits raided you
+  twice (the cap is per raid), 1.395% in all.
 
 Standing rule: **pirates never destroy a world or kill you** ([README.md](README.md)). Cost:
 [techandperformance.md](techandperformance.md).
@@ -161,7 +180,7 @@ All Planned unless marked Built; sizes relative to you.
 | Asteroid | Comet breakup | 3–6 nuclei to chase for ice | 2–12%; ~1 / 4 min |
 | Asteroid | Hot vein | 5–10 glowing green rocks in a dark stretch; reward to redesign | 0.5–3%; ~1 / 5 min |
 | Forging | Planet clash (major opener) | two young worlds collide beside you; harvest water and core debris | 0.5–3×; mean 180 s |
-| Forging | Great comet — **Built** as a stream | tails and ice crumbs; catch it as an icy moon | 0.5–3×, mean 240 s |
+| Forging | Great comet — **Built** as a stream | tails and ice crumbs; catch it as an icy moon | 5–30%, mean 240 s |
 | Forging | Comet storm (major) | 5–12 comets in parallel over 30–45 s | 1–8%; ~1 / 6 min |
 | Forging | Rogue planet (major) | a dark wanderer drags a wake and tugs moons | 2–8×, ≤ 1.5 D/s; ~1 / 6 min |
 | Forging | Easy moon | a slow binary, one moon-sized | 0.5–5%; ~1 / 4 min |
@@ -220,6 +239,8 @@ Standing ([README.md](README.md)): fun first; danger is seen, never told; fast t
 - **Ship shields, rout and jump** (user, 2026-11-17): light shields; a losing, pressed fleet jumps to light speed with a
   cinematic effect; jumped ships drop nothing.
 - **Salvage** (user, 2026-11-17): [civilizationgameplay.md](civilizationgameplay.md) → Stocks.
+- **Pirate captains** (user, 2026-11-17): each fleet its own personality (five captains, 75% the baseline or harsher);
+  caps, timers' base ranges, pacing and fleet sizes unchanged.
 
 Pending (events plan, 2026-11-13; "yes" = the game master's default):
 

@@ -7,17 +7,17 @@ import { AGE_GOAL, G_WORLD, need, V_STICK } from './rules';
 import { wrap } from '../../core/orbits';
 import { want, type Entry } from '../rivals/ledger';
 import { markFreed } from '../planet/moons';
+import { contest, CORE, coreOf, huntYou, threat, worldOf, type Core, type World } from './persona';
 
 // Rival cores: asteroids that steer like you and play by your rules. They hunt rocks they can safely swallow, run from
-// anything heavier, and hunt you once they outweigh you. Not missiles: they look around only every second or so and head
-// for a rough guess of where prey will be (a sidestep makes them overshoot), they are weaker than you, and after a few
-// seconds of chasing they tire and drift. A violet halo tells them apart from rocks.
+// anything heavier, and hunt you once they outweigh you, each by its persona (persona.ts). Not missiles: they look around
+// only every second or so and head for a rough guess of where prey will be (a sidestep makes them overshoot), they are
+// weaker than you, and after a few seconds of chasing they tire and drift. A violet halo tells them apart from rocks.
 
 const THINK = [0.6, 1.1]; // s between looks around; between looks they keep their plan
 const SENSE = 30; // own radii they see (about half a screen at the start size)
-const MEAL = 0.8; // they go for bodies up to this share of their mass
+const MEAL = 0.8; // a world goes for bodies up to this share of its mass (a core: its persona's meal)
 const CRUMBS = 0.02; // and ignore anything below this share
-const HUNT_YOU = 3; // how much more they want you than a rock of your mass
 const LEAD = [0, 0.6]; // s of the prey's motion they guess ahead (a rough guess, different each look)
 const CHASE = 7; // own diameters/s when the prey is far
 const CLOSE = 0.5 * V_STICK; // own diameters/s left when they arrive: slow enough to stick
@@ -33,7 +33,6 @@ const HALO = 0xb48cff; // rivals violet (render/tech.ts VIOLET)
 const DODGE_S = 2;
 // A named rival past AGE_GOAL forges a world (rivals/ledger.ts): it never hunts you, makes slow feeding trips for what its
 // weakest condition needs (rocks rich in that element count up to ×3), and eats nothing while it is too hot.
-const TRIP = 1.5; // own diameters/s at most on a feeding trip
 const WORLD_CRUISE = 1; // own diameters/s drifting
 const WORLD_RUN = 3; // own diameters/s backing away from a threat (a world never races)
 const WANT_EL = { water: 'ice', air: 'gas', field: 'metal', rock: 'rock' } as const;
@@ -43,6 +42,7 @@ export type Rival = {
   tire: number; stamina: number; rest: number;
   chase: number; // own diameters/s at full chase (CHASE; slower for big ones that hunt you)
   entry?: Entry; // a named roster rival (rivals/ledger.ts); wild cores have none
+  core?: Core; world?: World; // personas (persona.ts), set at its first steer (the entry lands after makeRival)
   moon?: Body; moonA: number; moonD: number; // a living world's guard moon (tendMoon): the body, its angle and distance
 };
 
@@ -53,10 +53,10 @@ function sizeHalo(b: Body) {
 }
 
 /** Makes `b` a rival heading off at angle `heading`: its own steering and a violet halo behind its parts. */
-export function makeRival(b: Body, glow: Texture, heading: number, chase = CHASE) {
+export function makeRival(b: Body, glow: Texture, heading: number, chase = CHASE, scripted = false) {
   const rival: Rival = {
     think: 0, aim: { x: 0, y: 0 }, flee: { x: 0, y: 0 }, steer: { x: 0, y: 0 }, heading,
-    tire: 0, stamina: between(STAMINA), rest: 0, chase, moonA: 0, moonD: 0,
+    tire: 0, stamina: between(STAMINA), rest: 0, chase, moonA: 0, moonD: 0, core: scripted ? CORE.grazer : undefined, // the field's scripted hunters keep today's core
   };
   b.rival = rival;
   b.control = () => rival.steer;
@@ -117,8 +117,12 @@ export function steerRival(b: Body, around: Body[], you: Body, dt: number) {
   const R = b.rival!, m = b.motion, D = 2 * b.r;
   m.accel = POWER * thrustOf(b);
   sizeHalo(b);
-
   const world = !!R.entry && b.m >= AGE_GOAL, plan = world ? want(R.entry!) : 'rock';
+  if (!R.core) {
+    R.core = coreOf(R.entry?.temper, Math.random());
+    if (!world) R.stamina *= R.core.stamina; // makeRival's draw (a world keeps today's rhythm)
+  }
+  const C = R.core, W = (R.world ??= worldOf(R.entry?.temper));
   if ((R.think -= dt) <= 0) {
     R.think = between(THINK);
     R.prey = undefined;
@@ -139,12 +143,14 @@ export function steerRival(b: Body, around: Body[], you: Body, dt: number) {
           R.flee.y += side ? (-my / s) * w : (vx / Math.sqrt(v2)) * w;
         }
       }
-      if (o.m > b.m) {
+      if (threat(world ? W.nerve : C.nerve, o.m, b.m, world ? W : undefined, o === you, along / d / D)) {
         const w = Math.max(0, 1 - gap / (0.5 * range)); // only close threats count
         R.flee.x -= (dx / d) * w;
         R.flee.y -= (dy / d) * w;
-      } else if (o.m <= MEAL * b.m && o.m >= CRUMBS * b.m && !(world && (o === you || plan === 'none'))) {
-        const k = world ? 1 + 2 * (o.comp[WANT_EL[plan as keyof typeof WANT_EL]] ?? 0) : o === you ? HUNT_YOU : need(b.comp, o.comp);
+      } else if (o.m <= (world ? MEAL : C.meal) * b.m && o.m >= CRUMBS * b.m && !(world && (o === you || plan === 'none'))) {
+        const gy = you.m ? Math.hypot(o.motion.x - you.motion.x, o.motion.y - you.motion.y) - o.r - you.r : Infinity; // to your surface
+        const k = world ? (1 + 2 * (o.comp[WANT_EL[plan as keyof typeof WANT_EL]] ?? 0)) * contest(W, gy, range)
+          : o === you ? huntYou(C, R.entry?.spite ?? 0) : need(b.comp, o.comp);
         const score: number = (o.m * k) / (Math.max(0, gap) + b.r);
         if (score > best) [best, R.prey] = [score, o];
       }
@@ -156,14 +162,15 @@ export function steerRival(b: Body, around: Body[], you: Body, dt: number) {
   }
 
   // Desired velocity: running wins over hunting as the threat gets closer.
-  const fear = Math.min(1, Math.hypot(R.flee.x, R.flee.y));
+  const f = Math.hypot(R.flee.x, R.flee.y), fear = Math.min(1, f);
   let wx = 0, wy = 0;
   const p = R.prey;
   if (R.rest > 0) R.rest -= dt;
   else if (p?.m) {
-    if ((R.tire += dt) > R.stamina) [R.rest, R.tire, R.stamina] = [between(REST), 0, between(STAMINA)];
+    const [rx, sx] = world ? [1, 1] : [C.rest, C.stamina]; // a world keeps today's rhythm
+    if ((R.tire += dt) > R.stamina) [R.rest, R.tire, R.stamina] = [between(REST) * rx, 0, between(STAMINA) * sx];
     const dx = R.aim.x - m.x, dy = R.aim.y - m.y, d = Math.hypot(dx, dy) || 1;
-    const speed = Math.min((world ? Math.min(R.chase, TRIP) : R.chase) * D, CLOSE * D + BRAKE * Math.max(0, d - b.r - p.r));
+    const speed = Math.min((world ? Math.min(R.chase, W.trip) : R.chase * C.chase) * D, CLOSE * D + BRAKE * Math.max(0, d - b.r - p.r));
     wx = (dx / d) * speed;
     wy = (dy / d) * speed;
   } else R.tire = Math.max(0, R.tire - dt);
@@ -173,7 +180,6 @@ export function steerRival(b: Body, around: Body[], you: Body, dt: number) {
     wy = Math.sin(R.heading) * (world ? WORLD_CRUISE : CRUISE) * D;
   }
   if (fear > 0) {
-    const f = Math.hypot(R.flee.x, R.flee.y);
     wx = wx * (1 - fear) + (R.flee.x / f) * (world ? WORLD_RUN : RUN) * D * fear;
     wy = wy * (1 - fear) + (R.flee.y / f) * (world ? WORLD_RUN : RUN) * D * fear;
   }

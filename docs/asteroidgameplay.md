@@ -112,8 +112,10 @@ Bake costs: [techandperformance.md](techandperformance.md).
 - **Atlas:** 128 rocks at startup, 256 px each; materials (user) earthy rock 50%, silver metal 20%, ice 20%, gassy 10%;
   metal angular, ice shards, gas misty blobs, rock potatoes; metal gets a cold-white sheen (`METAL_GLOW`).
 - **Piles:** meals glue on where they touched; tints drift to the composition colour.
-- **Round-off:** `roundR` = 75 − 25·ice units; one sphere only from `ROUND_M` 10^3.5 past half the round-off radius, or with
-  a molten past (user, 2026-11-15: every asteroid tier stays irregular).
+- **Round-off:** `roundR` = 75 − 25·ice units; one sphere only from `ROUND_M` 10^3.5 and `ROUND_SHARE` 5% of you past half
+  the round-off radius, or with a molten past (user, 2026-11-15: every asteroid tier stays irregular). The share is checked
+  when a body would bake (`spheres.begin(you)`, the last living mass kept); a baked body stays round. Your own body, rival
+  worlds and cores, and moons and system planets (`moon`) keep the absolute rule.
 
 #### Rough bodies
 
@@ -122,9 +124,9 @@ rocks until molten; a captured comet keeps coma and tail; a small fragment is an
 
 #### Debris
 
-User, 2026-11-15: a shattered planet doesn't split into spheres at once. A piece ≥ 10^3.5 (`Body.jag`) bakes with its
-parent's crust and 4–6 flat faces, rounding in `JAG_S` 90 s at its round-off radius (45 s at 2×, 30 s from 3×, 5 s
-molten). The target panel calls it a "fragment".
+User, 2026-11-15: a shattered planet doesn't split into spheres at once. A piece ≥ 10^3.5 and ≥ `BURN_MAX` 1% of you
+(`Body.jag`; 2026-11-17) bakes with its parent's crust and 4–6 flat faces, rounding in `JAG_S` 90 s at its round-off
+radius (45 s at 2×, 30 s from 3×, 5 s molten). The target panel calls it a "fragment".
 
 #### Spheres
 
@@ -199,6 +201,18 @@ fragments, two new rock materials, comet families).
 Standing: [README.md](README.md). Age I only:
 
 - Slow hits barely heat. Atlas materials 50 / 20 / 20 / 10%. The game area is your natural view. No cracks.
+- **Round-off relative to you** (user, 2026-11-17: everywhere is planet): spawns scale with you but `ROUND_M` did not, so
+  from 3e6 every field body in view was a sphere. Now only bodies ≥ 5% of you round (debris 1%). Measured 2026-11-17
+  (pinned worlds, random filled spots, 3 seeds; rule counts, spheres baked earlier stay): spheres in view per screen 1.2 /
+  3.6 / 4.2 / 6.4 / 5.8 (max 4 / 20 / 24 / 49 / 42) → 1.3 / 0.6 / 0.4 / 0.8 / 0.8 (max 7 / 3 / 3 / 7 / 7) at 1e5 / 3e5 /
+  1e6 / 3e6 / 1e7; centred on an asteroid field 3 / 9 / 25 / 21 / 26 → 4 / 2 / 4 / 2 / 4. `field.test.ts`: a 1e6 world
+  parked 300 s sees at most 1 / 1 / 0 (the absolute rule 7 / 12 / 3).
+- **Drop floor `SPECK` 1e-4 of you** (2026-11-17, was 1e-3): refills the late belt (the floor term binds from ~1e6, was
+  ~1.6e4). Gate measured 2026-11-17: `npm run bench` (start mass, SPECK idle there) 0.382 → 0.34 ms, 444 bodies; late
+  worlds (random spots, 3 seeds) loaded avg / max 75 / 175 → 133 / 361 at 1e5, 44 / 149 → 101 / 257 at 1e6, 25 / 190 →
+  43 / 208 at 1e7, bodies in view about doubled; field.update at rest ≤ 0.121 ms (worst spot, 1e6); the moving test runs
+  keep their loaded max (463 / 648 / 501 → 463 / 647 / 518) at +9–18% field.update mean (more debris kept). Civ cracks keep
+  the old floor (`civilization/rules.ts` `PIECE_MIN`).
 - **Momentum flight** (user, 2026-11-14): drag 0, braking as slow as speeding up; thrust fades toward 1.2 × the body's
   critical speed (a head-on hit on a peer destroys it), so each body can fly fast enough to die or chip a planet, but not
   speed up forever.

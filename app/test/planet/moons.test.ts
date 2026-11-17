@@ -3,6 +3,7 @@
 // your moon; capture is skill-based, see capture.test.ts). Source checks read moons.ts; the guard-moon block at the end runs it (Pixi headless).
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { tsResolve } from '../helpers.ts';
 
 const read = (f: string) => readFileSync(new URL(`../../src/${f}`, import.meta.url), 'utf8');
 const files = ['evolution/planet/moons.ts', 'evolution/civilization/combat.ts', 'evolution/asteroid/field.ts', 'evolution/civilization/ships.ts', 'evolution/civilization/rivals.ts', 'evolution/asteroid/hud.ts', 'audio/sfx.ts'];
@@ -35,10 +36,7 @@ console.log("moons: no Sling, no rival throw, Command orders and grinds, any fre
 // A living rival world's guard moon (rival.ts tendMoon, held) is stolen like any moon (the user, 2026-11-17): run, not read.
 // Each frame as the game runs it: moons.update, then the field's tendMoon; you are placed kinematically with the moon on
 // your inner ring at its velocity (a perfect pilot; capture.test.ts flies one). A great comet (held + comet) never is.
-const { registerHooks } = await import('node:module');
-registerHooks({ // src imports leave out '.ts' (Vite resolves them)
-  resolve: (spec, ctx, next) => next(ctx.parentURL?.includes('/src/') && /^\.\.?\//.test(spec) && !/\.[a-z]+$/.test(spec) ? `${spec}.ts` : spec, ctx),
-});
+tsResolve();
 const { Container, Texture } = await import('pixi.js');
 const { createMoons } = await import('../../src/evolution/planet/moons.ts');
 const { rockBody } = await import('../../src/evolution/asteroid/body.ts');

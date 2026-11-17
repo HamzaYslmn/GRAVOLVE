@@ -4,14 +4,6 @@ import { swept, touch } from './crash.ts';
 import type { Disc } from './nav.ts';
 import { ROCKET } from './rules.ts';
 
-/** A round in flight: aimed once at launch, then straight (`fly` never steers). */
-type Bolt = { x: number; y: number; vx: number; vy: number; life: number };
-export function fly(b: Bolt, dt: number) {
-  b.x += b.vx * dt;
-  b.y += b.vy * dt;
-  b.life -= dt;
-}
-
 // Guns: one pooled list of rounds for every faction (combat.ts creates it as ctx.shots). A round fires only while the
 // lead point is within the gun's arc of the nose, aimed once (with the burst's aim error), then flies straight. Rounds
 // are swept each frame after the field's collisions: an enemy ship in the way dies; any body stops a round; only the
@@ -24,7 +16,8 @@ export type Team = 'you' | 'rival' | 'pirate';
  * point; also on bodies it `takes`).
  */
 export type Gun = { team: Team; u: number; life: number; arc: number; spread: number; tint: number; look?: 'probe' | 'pirate' | 'shell' | 'lance'; own?: (b: Disc) => boolean; takes?: (b: Disc) => boolean; onBody?: (b: any, x: number, y: number) => void };
-type Shot = Bolt & { gun: Gun; target?: unknown };
+/** A round in flight: aimed once at launch, then straight. */
+type Shot = { x: number; y: number; vx: number; vy: number; life: number; gun: Gun; target?: unknown };
 /** A ship rounds can hit (with its velocity, if known): `kill` breaks it (`heavy`: a rocket's direct hit, through any shield). */
 export type Hull = { x: number; y: number; vx?: number; vy?: number; r: number; team: Team; kill: (heavy?: boolean) => void };
 export const SHOTS = 96; // rounds in flight at most
@@ -36,11 +29,11 @@ export const SHOTS = 96; // rounds in flight at most
 // follow zoomed out. The dot lights DOT_LIT of its quad brightly and DOT_GLOW of it visibly.
 export type Quad = { k: number; px: number; long?: number; a?: number };
 export const BOLT: Record<'round' | NonNullable<Gun['look']>, { glow: Quad; core: Quad; coreTint?: number; halo?: Quad }> = {
-  round: { glow: { k: 20, px: 14, long: 4, a: 0.85 }, core: { k: 10, px: 7, long: 3 } }, // fighters, rival patrols and waves
-  probe: { glow: { k: 16, px: 11, long: 3.5, a: 0.8 }, core: { k: 8, px: 5.5, long: 3 } },
-  pirate: { glow: { k: 20, px: 14, long: 4, a: 0.85 }, core: { k: 10, px: 7, long: 3 }, coreTint: 0xffd9a0 }, // raiders
-  shell: { glow: { k: 28, px: 20, long: 2, a: 0.9 }, core: { k: 13, px: 9, long: 1.5 } }, // marauders
-  lance: { glow: { k: 34, px: 24, long: 3, a: 0.9 }, core: { k: 17, px: 12, long: 4 }, halo: { k: 56, px: 40, a: 0.25 } },
+  round: { glow: { k: 15, px: 10.5, long: 3.2, a: 0.85 }, core: { k: 7.5, px: 5.25, long: 2.4 } }, // fighters, rival patrols and waves
+  probe: { glow: { k: 12, px: 8.5, long: 2.8, a: 0.8 }, core: { k: 6, px: 4.25, long: 2.4 } },
+  pirate: { glow: { k: 15, px: 10.5, long: 3.2, a: 0.85 }, core: { k: 7.5, px: 5.25, long: 2.4 }, coreTint: 0xffd9a0 }, // raiders
+  shell: { glow: { k: 21, px: 15, long: 1.6, a: 0.9 }, core: { k: 10, px: 6.75, long: 1.2 } }, // marauders
+  lance: { glow: { k: 25.5, px: 18, long: 2.4, a: 0.9 }, core: { k: 13, px: 9, long: 3.2 }, halo: { k: 42, px: 30, a: 0.25 } },
 };
 export const JET = 0xfff0c0; // a rocket flame's white-yellow core, both sides
 /** A flash at each round's launch point for `s` s: least(k, px) across (lances and shells least(heavyK, heavyPx)). */
@@ -107,7 +100,9 @@ export function createShots(cap = SHOTS, rnd = Math.random) {
     step(dt: number, bodies: readonly Disc[], hulls: readonly Hull[], minR: number, hit: (s: Shot, x: number, y: number, ship: boolean) => void) {
       for (let i = n - 1; i >= 0; i--) {
         const s = pool[i], x0 = s.x, y0 = s.y;
-        fly(s, dt);
+        s.x += s.vx * dt;
+        s.y += s.vy * dt;
+        s.life -= dt;
         let gone = s.life <= 0;
         for (const f of hulls) {
           if (gone || f.team === s.gun.team || !swept(s.x - f.x, s.y - f.y, (s.vx - (f.vx ?? 0)) * dt, (s.vy - (f.vy ?? 0)) * dt, f.r)) continue;
@@ -193,48 +188,77 @@ export function menace(c: Craft, ships: readonly { x: number; y: number; vx?: nu
 export type Seek = () => { x: number; y: number; vx: number; vy: number; r?: number } | undefined;
 
 // Rockets (rules.ts ROCKET; one pool for every side): off a pad on the shooter's surface ROCKET.pad rad off the aim (padShip
-// at a ship; less from near; sides alternating), then real thrust in its launch frame (the shooter's velocity at launch):
-// the nose turns ≤ turn rad/s toward the push it wants, the motor pushes only along the nose (≤ acc), so the velocity lags
-// the nose and it slips through turns. Its fuel is its range: the distance flown in that frame, so turning costs range.
-// The lock is lost for good once the lead point is more than `cone` off its velocity or the target is gone: it flies
-// straight to the end of its fuel. Any body (bar `own`) stops it; an enemy hull it touches, or one near its locked ship
-// when the fuze fires, takes the direct hit (`kill(true)`: through shields), others within `blast` the blast.
+// at a ship; less from near; sides alternating), then real thrust in its target's frame (`fx, fy`: the target's velocity,
+// read over ROCKET.lag s): the nose turns ≤ turn rad/s toward the push it wants, the motor pushes only along the nose
+// (≤ acc), so the velocity lags the nose and it slips through turns. Its fuel is its range: the distance flown in the
+// target's or the launch frame (the lesser), so turning costs range. A lock holds while its target lives (then it flies
+// straight to the end of its fuel), but the seeker lets go ROCKET.blind s before the hit (guide). A point shot (`scan`) locks what its scan finds. Any body (bar `own`) stops it; an enemy
+// hull it touches, or one near its locked ship when the fuze fires, takes the direct hit (`kill(true)`: through shields),
+// others within `blast` the blast.
 export type Rocket = Craft & {
-  team: Team; R: number; v0x: number; v0y: number; age: number; fuel: number; lock: boolean; fuze: boolean; k: number; dead: boolean; kill: () => void; cls: 'rocket';
-  seek?: Seek; target?: unknown; from?: unknown; own?: (b: Disc) => boolean; hit?: (b: any, x: number, y: number) => void; lit?: boolean;
+  team: Team; R: number; v0x: number; v0y: number; fx: number; fy: number; V: number; age: number; fuel: number; lock: boolean; fuze: boolean; k: number; dead: boolean; kill: () => void; cls: 'rocket';
+  seek?: Seek; aim?: { x: number; y: number; vx: number; vy: number }; scan?: (m: Rocket) => Lock | undefined; target?: unknown; from?: unknown; own?: (b: Disc) => boolean; hit?: (b: any, x: number, y: number) => void; lit?: boolean;
 };
+/** What a rocket locks: where its target is, the target, a ship (`fuze`). */
+export type Lock = { seek: Seek; target?: unknown; fuze?: boolean };
 /**
  * A launch from a shooter at (x, y) moving at (vx, vy), radius `r`, at a target at (tx, ty) moving at (tvx, tvy): `R` its
  * unit (world units a rules.ts R), `range` its fuel (world units, mining.ts fireReach); with `seek` it is guided (`fuze`:
- * the target is a ship), else it flies straight.
+ * the target is a ship), else it flies straight. `scan` (point shots): each frame, what it may lock now.
  */
 export type RocketLaunch = {
   team: Team; x: number; y: number; vx: number; vy: number; r: number; tx: number; ty: number; R: number; range: number;
-  k?: number; seek?: Seek; fuze?: boolean; target?: unknown; from?: unknown; own?: (b: Disc) => boolean; hit?: Rocket['hit'];
+  k?: number; seek?: Seek; scan?: Rocket['scan']; fuze?: boolean; target?: unknown; from?: unknown; own?: (b: Disc) => boolean; hit?: Rocket['hit'];
 };
 const TAU = 0.2; // s: a velocity error is thrust away over this long
 const TRIM = 0.2; // x acc: the pull of the nose back onto its velocity (cruise: nose along the path)
-/** One sub-step of `h` s of a rocket's motor and guidance (rules.ts ROCKET): real thrust, along the nose only. */
+/**
+ * One sub-step of `h` s of a rocket's motor and guidance (rules.ts ROCKET): real thrust, along the nose only. The seeker
+ * lets go `blind` s before it would reach its target's surface: it keeps the target's place and velocity as they are then
+ * (`aim`, coasting on) and flies there; once past that point it looks again. A steady target is where the aim says; one that
+ * burns hard across in that time is not. The lock (fuze, hit) holds throughout; a point shot's ray never lets go.
+ */
 export function guide(m: Rocket, h: number, q = ROCKET) {
   m.age += h;
-  const V = q.speed * m.R, A = q.acc * m.R, wx = m.vx - m.v0x, wy = m.vy - m.v0y; // in the launch frame
-  const vb = wx * wx + wy * wy > 1e-12 ? Math.atan2(wy, wx) : m.heading;
-  let dir = vb; // no lock: straight on
-  if (m.lock) {
-    const t = m.seek?.(), lead = t ? bearing(t.x - m.x, t.y - m.y, t.vx - m.v0x, t.vy - m.v0y, V) : NaN;
-    if (!t || Math.abs(wrap(lead - vb)) > q.cone) m.lock = false;
-    else dir = lead;
+  const V = m.V, A = q.acc * m.R;
+  let t = m.lock ? m.seek?.() : undefined, a = m.aim;
+  if (m.lock && !t) m.lock = false;
+  if (t && !m.scan) {
+    if (a) { // let go: the aim coasts on; past it the seeker looks again
+      [a.x, a.y] = [a.x + a.vx * h, a.y + a.vy * h];
+      if ((a.x - m.x) * (m.vx - a.vx) + (a.y - m.y) * (m.vy - a.vy) <= 0) a = m.aim = undefined;
+    }
+    const dx = t.x - m.x, dy = t.y - m.y, d = Math.hypot(dx, dy);
+    if (!a && (d - (t.r ?? 0)) * d < q.blind * ((m.vx - t.vx) * dx + (m.vy - t.vy) * dy)) a = m.aim = { x: t.x, y: t.y, vx: t.vx, vy: t.vy }; // time to go < blind
+    if (a) t = a;
   }
-  let ax = (Math.cos(dir) * V - wx) / TAU, ay = (Math.sin(dir) * V - wy) / TAU; // the push it wants
-  const a = Math.hypot(ax, ay);
-  if (a > A) [ax, ay] = [(ax * A) / a, (ay * A) / a];
+  if (t) { const k = 1 - Math.exp(-h / q.lag); m.fx += (t.vx - m.fx) * k; m.fy += (t.vy - m.fy) * k; }
+  const wx = m.vx - m.fx, wy = m.vy - m.fy, vb = Math.hypot(wx, wy) > 1e-6 ? Math.atan2(wy, wx) : m.heading; // in the target's frame
+  const dir = t ? bearing(t.x - m.x, t.y - m.y, t.vx - m.fx, t.vy - m.fy, V) : vb;
+  const cx = Math.cos(dir), cy = Math.sin(dir), s = Math.max(wx * cx + wy * cy, V * Math.max(q.slow, Math.cos(wrap(dir - vb))));
+  let ax = (cx * s - wx) / TAU, ay = (cy * s - wy) / TAU; // the push it wants
+  const p = Math.hypot(ax, ay);
+  if (p > A) [ax, ay] = [(ax * A) / p, (ay * A) / p];
   const err = wrap(Math.atan2(ay + TRIM * A * Math.sin(vb), ax + TRIM * A * Math.cos(vb)) - m.heading);
   m.heading += clamp(err, -q.turn * h, q.turn * h);
   const nx = Math.cos(m.heading), ny = Math.sin(m.heading), thr = clamp(ax * nx + ay * ny, 0, A); // the motor gives its share along the nose
-  const ux = wx + nx * thr * h, uy = wy + ny * thr * h;
-  m.fuel -= Math.hypot(ux, uy) * h;
-  [m.vx, m.vy, m.x, m.y] = [ux + m.v0x, uy + m.v0y, m.x + (ux + m.v0x) * h, m.y + (uy + m.v0y) * h];
+  [m.vx, m.vy] = [m.vx + nx * thr * h, m.vy + ny * thr * h];
+  m.fuel -= Math.min(Math.hypot(m.vx - m.fx, m.vy - m.fy), Math.hypot(m.vx - m.v0x, m.vy - m.v0y)) * h;
+  [m.x, m.y] = [m.x + m.vx * h, m.y + m.vy * h];
   m.burn += (thr / A - m.burn) * (1 - Math.exp(-h / 0.1));
+}
+/**
+ * A point shot's scan (combat.ts): the nearest of `foes` the rocket `m` can still make (ROCKET.seek): within `cone` of its
+ * velocity relative to the foe, within min(`range` R, `fuel` × its fuel left), and a turn it can fly (sin θ < `turn` × d / (2w² / acc)).
+ */
+export function spot<F extends { x: number; y: number; vx?: number; vy?: number }>(m: Rocket, foes: readonly F[], q = ROCKET) {
+  const A = q.acc * m.R, S = q.seek;
+  return nearest(foes.filter((f) => {
+    const dx = f.x - m.x, dy = f.y - m.y, d = Math.hypot(dx, dy), wx = m.vx - (f.vx ?? 0), wy = m.vy - (f.vy ?? 0), w = Math.hypot(wx, wy);
+    if (!(d * w > 0)) return false;
+    const c = (dx * wx + dy * wy) / (d * w);
+    return c >= Math.cos(S.cone) && Math.sqrt(Math.max(0, 1 - c * c)) < (S.turn * d * A) / (2 * w * w);
+  }), m.x, m.y, Math.min(S.range * m.R, S.fuel * m.fuel));
 }
 export function createRockets(cap = ROCKET.max, rnd: () => number = Math.random) {
   const live: Rocket[] = [], q = ROCKET;
@@ -246,10 +270,13 @@ export function createRockets(cap = ROCKET.max, rnd: () => number = Math.random)
     launch(o: RocketLaunch) {
       if (live.length >= cap) return undefined;
       side = live.length ? -side : rnd() < 0.5 ? 1 : -1;
-      const dx = o.tx - o.x, dy = o.ty - o.y, d = Math.max(0, Math.hypot(dx, dy) - o.r), a = Math.atan2(dy, dx) + side * (o.fuze ? q.padShip : q.pad) * Math.min(1, d / (q.near * o.R));
+      const dx = o.tx - o.x, dy = o.ty - o.y, D = Math.hypot(dx, dy) || 1, d = Math.max(0, D - o.r), t0 = o.seek?.();
+      const close = ((o.vx - (t0?.vx ?? o.vx)) * dx + (o.vy - (t0?.vy ?? o.vy)) * dy) / D; // the shooter's speed toward the aim, in the target's frame
+      const a = Math.atan2(dy, dx) + side * (o.fuze ? q.padShip : q.pad) * Math.min(1, d / (q.near * o.R)) * ((q.speed * o.R) / Math.max(q.speed * o.R, close + q.lift * o.R)) ** 2;
       const c = Math.cos(a), s = Math.sin(a), m: Rocket = {
         x: o.x + c * (o.r + 0.5 * q.len * o.R), y: o.y + s * (o.r + 0.5 * q.len * o.R), vx: o.vx + c * q.lift * o.R, vy: o.vy + s * q.lift * o.R, heading: a, burn: 1, team: o.team, R: o.R, v0x: o.vx, v0y: o.vy, age: 0,
-        fuel: o.range - 0.5 * q.len * o.R, lock: !!o.seek, fuze: !!o.fuze, k: o.k ?? q.k, dead: false, kill: () => void (m.dead = true), cls: 'rocket', seek: o.seek, target: o.target, from: o.from, own: o.own, hit: o.hit,
+        fx: t0?.vx ?? o.vx, fy: t0?.vy ?? o.vy, V: q.speed * o.R + (o.scan ? Math.max(0, close) : 0), // a point shot keeps your forward speed toward the aim
+        fuel: o.range - 0.5 * q.len * o.R, lock: !!o.seek, fuze: !!o.fuze, k: o.k ?? q.k, dead: false, kill: () => void (m.dead = true), cls: 'rocket', seek: o.seek, scan: o.scan, target: o.target, from: o.from, own: o.own, hit: o.hit,
       };
       live.push(m);
       return m;
@@ -265,6 +292,8 @@ export function createRockets(cap = ROCKET.max, rnd: () => number = Math.random)
         const m = live[i], x0 = m.x, y0 = m.y;
         let at: { x: number; y: number } | undefined, direct: Hull | undefined;
         if (!m.dead) {
+          const l = m.scan?.(m), p = l?.seek(); // a point shot's scan found something: lock it, at full speed in its frame
+          if (l && p) [m.seek, m.target, m.fuze, m.lock, m.fx, m.fy, m.V, m.scan] = [l.seek, l.target, !!l.fuze, true, p.vx, p.vy, q.speed * m.R, undefined];
           for (let k = 0; k < n && m.fuel > 0; k++) guide(m, h, q);
           for (const f of hulls) if (!at && f.team !== m.team && swept(m.x - f.x, m.y - f.y, (m.vx - (f.vx ?? 0)) * T, (m.vy - (f.vy ?? 0)) * T, f.r)) [at, direct] = [{ x: f.x, y: f.y }, f];
           const t = !at && m.fuze && m.lock ? m.seek?.() : undefined, fz = q.fuze * m.R + (t?.r ?? 0);

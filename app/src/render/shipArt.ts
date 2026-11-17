@@ -133,34 +133,6 @@ const RIVAL = finish({
     rh(pair('M41 15 L110 26 L89 40 L59 44Z')) +
     path(pair('M41 15 L110 26 L89 40Z'), '#8a63d6') + path(pair('M41 15 L110 26 L103 27.5 L51 19.5Z M77 9 L112 16 L128 34 L121 29 L109 18.5 L85 12Z'), '#d6bcff') +
     rh('M72 50 L88 40 L105 50 L88 60Z', '#55398a', 0.8) + rCore(88, 8.5, 4),
-
-  // Sharp radial petals frame a green diamond garden and a brief pointed prow.
-  colonizer: `<defs>${linear('rShell', '#3b2763', '#8a63d6')}${garden('rGarden')}</defs>` + rStern(53, 60, 2.5) +
-    rh('M57 50 L83 29 L109 50 L83 71Z', '#3b2763') +
-    rh(pair('M55 23 L60 38 L49 47 L62 44 L73 41 L66 30Z M83 12 L77 29 L73 41 L65 31 L75 25Z M83 12 L91 30 L94 41 L102 31 L92 25Z M109 24 L104 39 L94 41 L107 45 L116 44 L111 36Z')) +
-    path(pair('M55 23 L66 30 L73 41 L60 38Z M83 12 L77 29 L73 41 L75 25Z M109 24 L104 39 L94 41 L102 31Z'), '#8a63d6') +
-    path(pair('M83 12 L92 25 L102 31 L94 41 L91 30Z M55 23 L60 38 L49 47Z'), '#55398a') +
-    rh('M109 44 L125 50 L109 56 L113 50Z', '#55398a', 0.9) +
-    path(pair('M109 44 L125 50 L113 50Z'), '#8a63d6') +
-    path('M61 50 L83 33 L105 50 L83 67Z', 'url(#rGarden)', '#6cf0a0', 1.2) +
-    path(pair('M63 50 L83 35 L76 45Z M87 43 L103 50 L94 48Z'), '#6cf0a0') +
-    path(pair('M67 48 L72 44 L77 48 L73 48 L73 50 L71 50 L71 48Z M89 47 L93 44 L98 48 L94 48 L94 50 L92 50 L92 48Z'), '#1f4a35') + rCore(83, 2, 2.5),
-
-  // Blade crown with two open hangars, inset fighters and three claw points.
-  carrier: RD + rStern(48, 67, 3) +
-    rh('M56 50 L75 42 L88 43 L112 48 L125 48 L132 50 L125 52 L112 52 L88 57 L75 58Z', '#55398a') +
-    rh(pair('M24 19 L66 17 L71 23 L46 22 L64 39 L75 42 L65 44 L43 45 L50 36 L42 26Z')) +
-    path(pair('M24 19 L46 22 L64 39 L65 44 L50 36 L42 26Z'), '#8a63d6') +
-    rh(pair('M43 45 L65 38 L75 40 L101 35 L116 39 L94 45 L83 43 L68 47Z'), '#55398a', 0.8) +
-    rh(pair('M54 7 L82 13 L107 22 L116 39 L100 35 L92 28 L71 23Z')) +
-    path(pair('M54 7 L82 13 L107 22 L92 28 L71 23Z'), '#8a63d6') + path(pair('M54 7 L82 13 L107 22 L102 23 L80 15.5 L62 10.5Z M24 19 L66 17 L64 19.5 L32 20.5Z'), '#d6bcff') +
-    path(pair('M107 22 L116 39 L100 35 L92 28Z'), '#55398a') +
-    rh(pair('M114 40 L126 34 L151 41 L135 41 L128 47 L117 47 L131 39Z'), '#55398a', 0.9) +
-    path(pair('M126 34 L151 41 L135 41Z'), '#8a63d6') +
-    rh('M124 50 L134 45 L155 50 L134 55Z', 'url(#rShell)', 0.9) +
-    [73, 83, 93].map((x) => path(pair(`M${x} 28 L${x + 5} 30 L${x} 32 L${x + 1.5} 30Z`), '#d6bcff')).join('') +
-    rh('M74 50 L87 39 L100 50 L87 61Z', '#55398a', 1) +
-    rh('M78 50 L87 44 L96 50 L87 56Z', '#3b2763', 0.7) + rCore(87, 6, 3),
   rocket: rocket('#b48cff', '#3b2763'),
 });
 
@@ -244,7 +216,7 @@ export const SHIP_ART = { you: YOU, rival: RIVAL, pirate: PIRATE };
 const at = (scale: number, ...e: number[][]) => e.map(([x, y, s]) => [n(80 + (x - 80) * scale), n(50 + (y - 50) * scale), n(s * scale)]);
 export const ENGINES: { [F in keyof typeof SHIP_ART]: Record<keyof (typeof SHIP_ART)[F], number[][]> } = {
   you: { probe: [[62, 50, 2.5]], miner: [[51, 50, 3]], fighter: [[46, 50, 3]], frigate: [[26, 43, 2.8], [26, 57, 2.8]], colonizer: [[42, 50, 3]], carrier: [[14, 50, 3.3]], rocket: [[12, 50, 3]] },
-  rival: { probe: [[68, 50, 1.7]], miner: [[58, 50, 2.2]], fighter: [[57, 50, 2.2]], frigate: [[47, 50, 2.6]], colonizer: [[53, 50, 2.5]], carrier: [[48, 50, 3]], rocket: [[12, 50, 3]] },
+  rival: { probe: [[68, 50, 1.7]], miner: [[58, 50, 2.2]], fighter: [[57, 50, 2.2]], frigate: [[47, 50, 2.6]], rocket: [[12, 50, 3]] },
   pirate: { raider: at(PIRATE_SCALE.raider, [48, 43, 3.4], [48, 57, 3]), hauler: at(PIRATE_SCALE.hauler, [40, 43, 3.4], [40, 57, 3.4]), marauder: [[20, 35, 3.6], [20, 50, 3.2], [20, 65, 3]] },
 };
 export const ART_W = 160;

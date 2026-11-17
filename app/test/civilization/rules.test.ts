@@ -1,19 +1,20 @@
 // node test/civilization/rules.test.ts: population, energy and dose (by tier), tier, mining (the weighted mix),
 // shield, fleet caps, rockets, a sample run (tiers, builds and bare moons printed), planetary combat
 // (ARMS: weapon fire on shields, the stun, landings, time-to-break table, a rival's rock), the shield as a shell (a damage
-// table), its burn-up rule, shield layers, the siege switch, rival level and mass by temper.
+// table), its burn-up rule, shield layers, the siege switch, rival level and mass by persona, the quiet clock.
 import assert from 'node:assert/strict';
-import { airR, burnShare, collide, COMP, pieceShares, radiusOf, shellPass, SPECK, V_STICK, type Phys } from '../../src/evolution/asteroid/rules.ts';
+import { airR, burnShare, collide, COMP, pieceShares, radiusOf, shellPass, V_STICK, type Phys } from '../../src/evolution/asteroid/rules.ts';
 import { GAP, RATE } from '../../src/evolution/civilization/flight.ts';
 import { pull, trigger } from '../../src/evolution/civilization/guns.ts';
 import { EXTINCT, magnet, PLANET_M, SUPER_M } from '../../src/evolution/planet/rules.ts';
 import { sunlight } from '../../src/evolution/star/rules.ts';
+import { PROFILE } from '../../src/evolution/rivals/ledger.ts';
 import {
   buildSpeed, capacity, cityLevel, dose, energy, fedCapacity, GEO, geo, killRate, RADIO_LIMIT, radioDose, radioLimit, lack, mineable, mineMix, MINE_RATE, NEED, P0, popHit, popStep,
   ASLEEP_FALL, FLEET, shellR, fleetCap, FRAG, ROCKET, shieldFed, shieldMax, upkeep, units, type Ore,
   FUEL_E, FUEL_LOW, fuelBurn, reactor, REACTOR, refine, SOLAR, solar, solarWings, UNIT, WORK_E, SHIELD_FLOOR, SHIELD_K, shieldCost, shieldHolds, shieldMeet, shieldPunch, shieldRegen, SHIELD_STOP, START_SHIPS, tier, TIER_MAX,
-  BEATEN, pace, RIVAL_PACE, RIVAL_SALVO, SALVAGE, fleetSize, HIT_MIN, intercept, RIVAL_LEAD, RIVAL_MASS, RIVAL_HIT_MAX, rivalLevel,
-  CUT, CUT_SPREAD, cutSpread, edible, KEEP, pieceSize, split, strikeK, type Shield,
+  BEATEN, pace, RIVAL_PACE, RIVAL_SALVO, SALVAGE, fleetSize, HIT_MIN, intercept, hurry, RIVAL_HIT_MAX, rivalLevel,
+  CUT, CUT_SPREAD, cutSpread, edible, KEEP, PIECE_MIN, pieceSize, split, strikeK, type Shield,
   ARMS, buildOrder, BURN_WAVE, LANDING, raid, rivalFrigates, SHIELD_REGEN, SHIELD_STUN, shieldShot, weaponHit, shieldLayers, siegeWing, SIEGE, sortieStep, CALM_S,
   homeDig, HOME_RICH, HOME_VOL, salvo,
 } from '../../src/evolution/civilization/rules.ts';
@@ -237,7 +238,7 @@ assert.ok(near(units(mineMix(COMP.stony, 0.02 * 1e5, 1e9, ['radio', 'metal', 'ic
   for (const p of [0, 0.1, 0.3, 1, 2, 4]) for (const speed of [1, 2]) {
     const sb = burnShare(p), v = speed * vs, e = edible(sb, v, vs, R), kOf = (s: number) => strikeK(s, v, vs, R, sb, true);
     // What a frigate still breaks: never what you can take safely, nor what would leave no two pieces (1.5: rules.ts FLOOR).
-    const breaks = (s: number) => s >= sb && s * KEEP >= 2 * 1.5 * SPECK && kOf(s) >= HIT_MIN && s >= 0 && s <= FLEET.frigate.breaks;
+    const breaks = (s: number) => s >= sb && s * KEEP >= 2 * 1.5 * PIECE_MIN && kOf(s) >= HIT_MIN && s >= 0 && s <= FLEET.frigate.breaks;
     const out: string[] = [];
     for (const s0 of [0.004, 0.008, 0.015, FRAG, 0.03, 0.1, FLEET.frigate.breaks]) {
       let hits = 0, dust = 0, left = 0;
@@ -246,7 +247,7 @@ assert.ok(near(units(mineMix(COMP.stony, 0.02 * 1e5, 1e9, ['radio', 'metal', 'ic
         const s = q.pop()!;
         if (!breaks(s)) {
           left += s;
-          assert.ok(s >= (1 - CUT_SPREAD) * 1.5 * SPECK || s === s0, `a piece ${s} under the drop floor`);
+          assert.ok(s >= (1 - CUT_SPREAD) * 1.5 * PIECE_MIN || s === s0, `a piece ${s} under the drop floor`);
           continue;
         }
         const c = split(s, pieceSize(sb, v, vs, R), gun(s).pieces);
@@ -404,10 +405,9 @@ assert.ok(cityLevel(0.2) === 0.25 && cityLevel(2.4) === 0.5 && cityLevel(9) === 
   assert.ok(t > 0 && near(Math.hypot(100, 20 * t), 50 * t, 1e-6), 'intercept time');
 }
 assert.ok(rivalLevel(0, 2) === 1 && rivalLevel(300, 2) === 2 && rivalLevel(3000, 2) === 3 && rivalLevel(0, 0) === 1); // yours − 1, +1 per 5 min, ≤ yours + 1
-// By temper (RIVAL_LEAD): a Careful one starts at yours − 1, a Hungry one at yours, a Raider at yours + 1 (the cap); masses never 1.1× you.
-assert.ok(rivalLevel(0, 2, RIVAL_LEAD.careful) === 1 && rivalLevel(0, 2, RIVAL_LEAD.hungry) === 2 && rivalLevel(0, 2, RIVAL_LEAD.raider) === 3 && rivalLevel(600, 2, RIVAL_LEAD.raider) === 3);
-assert.ok(Object.values(RIVAL_MASS).every(([lo, hi]) => lo >= 0.5 && lo < hi && hi < 1.1) && RIVAL_MASS.careful[1] <= RIVAL_MASS.hungry[0]);
-
+assert.ok(rivalLevel(0, 2, PROFILE.careful.lead) === 1 && rivalLevel(0, 2, PROFILE.hungry.lead) === 2 && rivalLevel(0, 2, PROFILE.raider.lead) === 3 && rivalLevel(600, 2, PROFILE.raider.lead) === 3); // by persona (ledger PROFILE lead): Careful yours − 1, Hungry yours, Raider yours + 1 (the cap)
+assert.ok(Object.values(PROFILE).every(({ mass: [lo, hi] }) => lo >= 0.5 && lo < hi && hi < 1.1) && PROFILE.careful.mass[1] <= PROFILE.hungry.mass[0], 'masses never 1.1× you');
+assert.ok(hurry(0) === 1 && hurry(180) === 4 && hurry(1e4) === 4, 'the quiet clock: ×1 at once, ×4 after 3 min with no rival near, no more');
 
 // Pirate fleets: 1–14 ships over a sweep of 10⁴ rolls, mostly few, sometimes many; a hauler per 5 (at least one), a marauder from 10.
 {
@@ -554,9 +554,9 @@ console.log('civilization shield layers and siege: ok');
 }
 // The rocket (ROCKET, guns.ts createRockets): slower than a round (seen coming), its path needs over a second for a 90°
 // swing at full speed (all its thrust sideways: a lower bound), one hit through an open shield lands as one hit on people,
-// a ship target gets the smaller pad, the lock outlasts the pad.
+// a ship target gets the smaller pad.
 {
   assert.ok(ROCKET.speed <= 0.6 * ARMS.round.u && Math.PI / 2 / (ROCKET.acc / ROCKET.speed) >= 1.1, 'a rocket is slower than a round and cannot snap round');
-  assert.ok(ROCKET.k >= LANDING && ROCKET.padShip < ROCKET.pad && ROCKET.cone > ROCKET.pad);
+  assert.ok(ROCKET.k >= LANDING && ROCKET.padShip < ROCKET.pad);
   assert.ok(salvo(1) === 2 && salvo(3) === 3 && salvo(5) === 4, 'your magazine 2/3/4 by tier: at least a rival pair');
 }

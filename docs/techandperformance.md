@@ -40,7 +40,7 @@ Target: browser first, frontend only, very many bodies, low-end hardware.
 |---|---|---|
 | Rock atlas: 128 rocks, 256 px | two mipmapped 2048² pages | ~130 ms, ~45 MB at startup (not re-run) |
 | Well textures: 3 | — | ~23 ms (not re-run) |
-| Tech page: ships (SVG, 128 × 80 cells), stations, shield veil and ripple, ring, dot, hex | 1024², mipmapped | 153 ms (before the pirate-art polish; re-measure) |
+| Tech page: ships (SVG, 128 × 80 cells), shield veil and ripple, ring, dot, hex | 1024², mipmapped | 153 ms (before the pirate-art polish; re-measure) |
 | Star page: 16 draws, white art tinted per star | 1024², mipmapped | not measured |
 
 - **Spheres** (`sphere.ts`): ≤ 1 bake a frame (yours first), re-bake on 6% mass change, freed with their chunk; rough bodies
@@ -58,6 +58,7 @@ Sound toggle and volume (default 20%) gate everything.
 | Eat, bounce, graze, shatter, eaten, death, crash | `eat`, `hit`, `crack`, `eaten`, `death`, `boom` | `feedback.ts`, `main.ts` |
 | Moon captured / stolen; grip / ring lost; knocked loose; grind | `capture` / `steal`; `grip` / `snap`; `loose`; `grind` | `planet/moons.ts` |
 | Guns; rockets | `shot`; `rocket`, `blast` | `combat.ts`, `rivals.ts` |
+| A rocket passes you (once a salvo); a whole salvo missed; your rocket lands on an enemy | `whoosh` (pitch falls away); `dodge`; `strike` (replaces `blast`; loud and pitch by tier) | `combat.ts` `contacts` (`feel.ts` decides; a wreck's `crack` stays silent within 0.1 s of a strike) |
 | Pirate light-speed jump | `warp` (0.9 s whine = the spool, then snap and whoosh; steady pitch) | `pirates.ts` |
 | Ship built, shield level; shield hit | `launch`, `shield` (overwhelmed an octave down) | `civilization/stage.ts` |
 | Star linked; Dyson panel | `link` over `boom`; `segment` | `star/stage.ts`, `dyson.ts` |
@@ -105,8 +106,10 @@ Wins (measured): chunk range skip 0.54 → 0.05 ms; persistent sort-and-sweep br
 
 - Test files (`app/test/`, mirroring `src`): `core/{achievements,chunks,entity,orbits,score,water}`,
   `asteroid/{body,debris,field,rules,sphere,web}`, `planet/{capture,moons,rules}`,
-  `civilization/{crowd,escape,flight,guns,lattice,mining,nav,orders,pirates,rules,slots}`, `rivals/ledger`, `star/rules`,
+  `civilization/{crowd,escape,feel,flight,guns,lattice,mining,nav,orders,pirates,rules,slots}`, `rivals/ledger`, `star/rules`,
   `ui/{panel,tip}`. Procedure: `.claude/CLAUDE.md` → Testing.
+- Hit-stop (`kit.freeze`: Age I impacts 50–150 ms, rocket strikes 25–60 ms) eats game time: a ticked test that counts ticks
+  runs short of the game time it expects; read `run.seconds`, not tick counts. HUD and audio run on wall time.
 
 ## Planned
 

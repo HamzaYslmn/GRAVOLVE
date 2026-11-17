@@ -7,7 +7,8 @@ import { slotRadius } from '../../src/core/orbits.ts';
 import { rng } from '../../src/core/rng.ts';
 import { COMP, density, G_WORLD, pairPull, pullMass, radiusOf, START_R, youPull, type Comp } from '../../src/evolution/asteroid/rules.ts';
 import { catchStep, LANE, MATCH_DRAIN, MATCH_S, matchWindow, moonCap, MOON_SHARE, moonSlots, pickSlot } from '../../src/evolution/planet/rules.ts';
-import { RIVAL_MASS, RIVAL_ROCK } from '../../src/evolution/civilization/rules.ts';
+import { RIVAL_ROCK } from '../../src/evolution/civilization/rules.ts';
+import { PROFILE } from '../../src/evolution/rivals/ledger.ts';
 
 const ROCKY: Comp = { rock: 0.6, metal: 0.15, ice: 0.2, gas: 0.05 };
 /** player.ts thrustOf (that file needs Pixi, so it is restated here): 500 u/s² at the start size, ∝ r^0.4, lighter for dense rock. */
@@ -164,7 +165,7 @@ for (const m of MASSES) {
 // rock is restated: ROCK_ORBIT rival radii + its own radius off the world, ROCK_W rad/s, turning against the world's orbit
 // round you (−turn); RIVAL_ROCK of the rival, a stony body; the world COMP_WORLD. The rival re-places it every frame (no grip).
 const ROCK_ORBIT = 2.6, ROCK_W = 0.6, COMP_WORLD: Comp = { rock: 0.55, metal: 0.15, ice: 0.25, gas: 0.05 };
-const RATIOS = [RIVAL_MASS.careful[0], 0.8, RIVAL_MASS.hungry[1]], ROCK_MASSES = [10 ** 4.6, 10 ** 5.5, 10 ** 6.5];
+const RATIOS = [PROFILE.careful.mass[0], 0.8, PROFILE.hungry.mass[1]], ROCK_MASSES = [10 ** 4.6, 10 ** 5.5, 10 ** 6.5];
 const rival = (w: World, ratio: number) => {
   const m = ratio * w.m, R = radiusOf(m, COMP_WORLD), rm = RIVAL_ROCK * m, rr = radiusOf(rm, COMP.stony);
   return { m, R, rm, rr, d: R * ROCK_ORBIT + rr, k: pairPull(youPull(w.m, w.R), w.m, pullMass(m, w.m), m) }; // k: field.ts pair factor

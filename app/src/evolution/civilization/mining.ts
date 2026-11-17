@@ -27,11 +27,15 @@ export const RESCORE = 2; // s between re-scores
 
 /** The reach ("outermost ring") with `slots` moon slots: the outer slot + RING. */
 export const reach = (slots: number) => slotRadius(1, Math.max(0, slots - 1)) + RING;
-/** A world's Fire range in its R, off its surface: FIRE_REACH × the reach (rockets, yours and rival worlds'; a rival frigate's lance). */
-export const FIRE_REACH = 2;
+/** A world's Fire range in its R, off its surface: FIRE_REACH × the reach (rockets' fuel, yours and rival worlds'). */
+export const FIRE_REACH = 3;
 export const fireRange = (slots: number) => FIRE_REACH * reach(slots);
+/** `b`'s mining reach in world units, off its surface. */
+export const mineReach = (b: Pick<Body, 'm' | 'r'>) => reach(moonSlots(b.m)) * b.r;
 /** `b`'s fire range in world units, off its surface: a rocket's fuel (guns.ts createRockets). */
-export const fireReach = (b: Pick<Body, 'm' | 'r'>) => fireRange(moonSlots(b.m)) * b.r;
+export const fireReach = (b: Pick<Body, 'm' | 'r'>) => FIRE_REACH * mineReach(b);
+/** 2 × the mining reach: a rival world arms its pad and its frigate lance within it (rivals.ts). */
+export const armReach = (b: Pick<Body, 'm' | 'r'>) => 2 * mineReach(b);
 /** Inside the reach; a linked big body holds until LINK_HOLD × reach. */
 export const inReach = (s: Site, slots: number) => s.d <= reach(slots) * (s.linked && s.share >= BIG ? LINK_HOLD : 1);
 

@@ -1,8 +1,9 @@
-// node test/civilization/escape.test.ts: pirate shields soak rounds and mend after a rest (never while spooling); a
+// node test/civilization/escape.test.ts: pirate captains (chances sum to 1, the reaver is the baseline, each leaves
+// before it is routed); pirate shields soak rounds and mend after a rest (never while spooling); a
 // leaving fleet is routed under 20% or when pressed, jumps ROUT_S s later (JUMP_S at most), haulers first; the spool
 // fires once and ends at JUMP.spool at any frame rate, at once off screen.
 import assert from 'node:assert/strict';
-import { delay, JUMP, jumpAt, LEAD, mend, MEND, pressed, PRESS_S, REST, ROUT, ROUT_S, routAt, soak, spool, SPREAD, type Warp } from '../../src/evolution/civilization/escape.ts';
+import { CAPTAINS, captain, delay, JUMP, jumpAt, LEAD, mend, MEND, pressed, PRESS_S, REST, ROUT, ROUT_S, routAt, soak, spool, SPREAD, type Warp } from '../../src/evolution/civilization/escape.ts';
 import { JUMP_S, PIRATE_CLASS, RETREAT } from '../../src/evolution/civilization/rules.ts';
 
 const ship = (kind: Warp['kind']): Warp => ({ x: 0, y: 0, heading: 0, kind, dead: false, sh: PIRATE_CLASS[kind].shield, calm: 99, flare: 0, spool: 0 });
@@ -32,12 +33,22 @@ const ship = (kind: Warp['kind']): Warp => ({ x: 0, y: 0, heading: 0, kind, dead
   assert.equal(s.sh, 0, 'a spooling ship has no shield');
 }
 
-// Thresholds for n0 = 1..14: the fleet leaves (RETREAT) before it is routed by share (ROUT); the share rule only fires from n0 6.
+// Captains: chances sum to 1, the reaver is the baseline, every retreat in (0, 1), the roll reaches all five in its shares.
 {
+  const all = Object.values(CAPTAINS), got = new Map(all.map((c) => [c, 0]));
+  assert.ok(Math.abs(all.reduce((a, c) => a + c.chance, 0) - 1) < 1e-9, 'chances sum to 1');
+  assert.deepEqual(CAPTAINS.reaver, { chance: 0.3, you: 3, rival: 2, retreat: RETREAT, raid: 1, stay: 1, chase: 1 }, 'the reaver is the baseline (every factor 1)');
+  assert.ok(all.every((c) => c.retreat > 0 && c.retreat < 1), 'every retreat in (0, 1)');
+  for (let i = 0; i < 1000; i++) got.set(captain(i / 1000), got.get(captain(i / 1000))! + 1);
+  assert.ok(all.every((c) => Math.abs(got.get(c)! / 1000 - c.chance) <= 0.001), 'captain(u) covers all five in their shares');
+}
+
+// Thresholds for n0 = 1..14, every captain: the fleet leaves (its retreat) before it is routed by share (ROUT); the share rule only fires from n0 6.
+for (const c of Object.values(CAPTAINS)) {
   const share: number[] = [];
   for (let n0 = 1; n0 <= 14; n0++) {
-    const leaveAt = Math.floor((1 - RETREAT) * n0), routBy = Math.ceil(ROUT * n0) - 1; // living ships at which each fires
-    assert.ok(leaveAt >= routBy, `n0 ${n0}: leave at ${leaveAt} alive before the rout at ${routBy}`);
+    const leaveAt = Math.floor((1 - c.retreat) * n0), routBy = Math.ceil(ROUT * n0) - 1; // living ships at which each fires
+    assert.ok(leaveAt >= routBy, `retreat ${c.retreat}, n0 ${n0}: leave at ${leaveAt} alive before the rout at ${routBy}`);
     if (routBy >= 1) share.push(n0);
   }
   assert.equal(share[0], 6, 'the share rule needs a fleet of 6');

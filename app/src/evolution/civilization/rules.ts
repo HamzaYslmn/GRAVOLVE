@@ -7,7 +7,7 @@
 //   - Dose: the radioactive rock in your world plus outside radiation the magnetic field and air hold back. Above 1 people die.
 //   - Stocks: fuel (mined radioactive ore), ore (mined metal) and volatiles (mined water), from moons, free bodies and beaten rival worlds, and slowly your own world.
 //   - Tier: grows as the people double; miners work faster with it.
-import { BURN_MAX, impactHeat, MOLTEN, reachGround, SPECK, worldHeat, type Comp } from '../asteroid/rules.ts';
+import { BURN_MAX, impactHeat, MOLTEN, reachGround, worldHeat, type Comp } from '../asteroid/rules.ts';
 import { clamp } from '../../core/rng.ts';
 import { K_PER_HEAT } from '../../core/water.ts';
 import { PLANET_M } from '../planet/rules.ts';
@@ -126,12 +126,16 @@ export type Wreck = keyof typeof SALVAGE;
 // ---- Rockets (guns.ts createRockets; one rocket for you and rival worlds): yours on Fire (combat.ts), `ore` each from a
 // magazine of salvo(T), one refilled every `reload` s × the energy fed (stage.ts). In its unit R: off a pad ±`pad` rad off
 // the aim (`padShip` at a ship; sides alternate so a world can sidestep one; × distance / `near` R inside that) at `lift`
-// R/s, then real thrust (guns.ts guide): `acc` R/s² along the nose only, to `speed` R/s (slower than a round: seen
-// coming); the nose turns ≤ `turn` rad/s, the path lags it (a 90° swing ≥ 1.1 s); lock lost for good past `cone`; fuel = the fire
-// range (mining.ts fireReach); bursts within `fuze` R of a locked ship, `blast` R; `k` K on a world; `size` × a ship's
+// R/s, then real thrust (guns.ts guide): `acc` R/s² along the nose only, to `speed` R/s relative to its target (slower than
+// a round: seen coming; the target's velocity read over `lag` s); the nose turns ≤ `turn` rad/s, the path lags it (a 90°
+// swing ≥ 1.1 s), never under `slow` × speed in a turn; a lock holds while its target lives, but `blind` s before the hit
+// the seeker lets go, flies to where the target was heading and looks again once past it (a steady one is hit, a hard burn
+// across slips it). A point shot flies the world-fixed ray through the click (a point `ahead` R on); past your mining reach it locks the nearest foe it can make
+// (`seek`: within `cone` rad of its path, `range` R and `fuel` × its fuel left, a turn under `turn` × its tightest). Fuel =
+// the fire range (mining.ts fireReach); bursts within `fuze` R of a locked ship, `blast` R; `k` K on a world; `size` × a ship's
 // radius to rounds; `len` R long, drawn in the ships' unit (bolts.ts), smaller than any ship. A free body ≤ `share` of you
 // breaks into `pieces`; a bigger one or a rival's rock loses `chip.bite` of your mass and warms `chip.k` K (ships.ts chip).
-export const ROCKET = { speed: 12, acc: 16, lift: 2, turn: 2.6, cone: 1.6, pad: 0.7, padShip: 0.3, near: 10, fuze: 0.6, blast: 0.6, k: 20, ore: 5, reload: 6, size: 0.12, max: 12, len: 0.07, share: 0.25, pieces: 8, chip: { bite: 0.0025, k: 40 } };
+export const ROCKET = { speed: 9, acc: 11.7, lift: 2, turn: 2.8, lag: 0.25, blind: 0.57, slow: 0.3, ahead: 5, seek: { cone: 0.6, range: 12, fuel: 0.6, turn: 0.5 }, pad: 0.7, padShip: 0.3, near: 10, fuze: 0.6, blast: 0.6, k: 20, ore: 5, reload: 6, size: 0.12, max: 12, len: 0.095, share: 0.25, pieces: 8, chip: { bite: 0.0025, k: 40 } };
 
 // ---- Breaking (ships.ts, stage.ts): your guns break only your priority target, into pieces you can take: under `edible`
 // a body burns up whole in your air or lands under HIT_MIN, so it feeds you. Pieces a piece cap left unsafe are kicked
@@ -141,7 +145,8 @@ export const CUT = 0.8; // pieces are cut to this share of the edible size (on a
 export const CUT_SPREAD = 0.25; // ...unequal by this pieceShares spread (stage.ts cut): the largest 1.25 × the mean, still under it
 /** The pieceShares spread for a cut of mean `piece` under edible size `e`: CUT_SPREAD, less when a piece cap made the mean bigger, so the largest stays under `e`. */
 export const cutSpread = (piece: number, e: number) => clamp(e / piece - 1, 0, CUT_SPREAD);
-const FLOOR = 1.5; // × SPECK: pieces start this far above the drop floor, so they outlast a little growth
+export const PIECE_MIN = 1e-3; // × your mass: the field's drop floor (asteroid SPECK) the cracks were tuned on; SPECK fell to 1e-4 (2026-11-17), crack counts stay
+const FLOOR = 1.5; // × PIECE_MIN: pieces start this far above it, so they outlast a little growth
 /**
  * Kelvin a body of `q` of your mass delivers arriving at `v` of your diameters/s (stick speed `vs`, your radius `R`), after
  * your air (`sb`: asteroid/rules.ts burnShare) burns what it can; `world`: Age II (rules.ts worldHeat, any-speed burn-up);
@@ -164,11 +169,11 @@ export function edible(sb: number, v: number, vs: number, R: number) {
 export const pieceSize = (sb: number, v: number, vs: number, R: number) => (sb > 0 ? Math.min(sb, BURN_MAX) : edible(sb, v, vs, R));
 /**
  * A body of `share` of you broken into at most `cap` pieces (KEEP of it, `piece` the mean) cut under the edible size `e`, the
- * mean at least FLOOR × SPECK (the field drops pieces under SPECK; CUT_SPREAD leaves the smallest above it). `n` 0: too
+ * mean at least FLOOR × PIECE_MIN (the field drops pieces under SPECK; CUT_SPREAD leaves the smallest above it). `n` 0: too
  * small to leave pieces, all dust.
  */
 export function split(share: number, e: number, cap: number) {
-  const keep = share * KEEP, n = Math.min(cap, Math.max(2, Math.ceil(keep / (CUT * e))), Math.floor(keep / (FLOOR * SPECK)));
+  const keep = share * KEEP, n = Math.min(cap, Math.max(2, Math.ceil(keep / (CUT * e))), Math.floor(keep / (FLOOR * PIECE_MIN)));
   return n > 0 ? { n, piece: keep / n, dust: share - keep } : { n: 0, piece: 0, dust: share };
 }
 export const MISS = 1.5; // × contact distance: a kicked body passes at least this far from your centre
@@ -315,14 +320,14 @@ export function intercept(px: number, py: number, wx: number, wy: number, u: num
 
 // ---- Rival civilizations (rivals.ts): only once you host one; they arrive by distance travelled × pace (RIVAL_FIRST view widths,
 // then every RIVAL_TRAVEL), at most RIVAL_LOADED near you. Lighter than you and drifting; they hold fire until on screen
-// T_SEE s. Level = yours − 1 + its temper's RIVAL_LEAD at first, +1 per LEVEL_UP s, never above yours + 1 (yours = your
-// shield level, at least 1): a Raider starts stronger (its extra veil shows it). Mass by temper, never 1.1× you.
-// A rocket salvo every RIVAL_SALVO s after a RIVAL_GLOW s pad glow, inside its fire range. Their rock moon (RIVAL_ROCK of their mass) only
+// T_SEE s. Level = yours − 1 + its persona's lead at first (rivals/ledger.ts PROFILE: mass, lead and salvo by persona),
+// +1 per LEVEL_UP s, never above yours + 1 (yours = your shield level, at least 1); extra veils show it.
+// A rocket salvo every RIVAL_SALVO s after its pad's tell (rivals/ledger.ts TELL), inside its arming range. Their rock moon (RIVAL_ROCK of their mass) only
 // circles their world, a passive guard. Beaten when their people fall to BEATEN: their world lies open.
-export const RIVAL_MASS = { careful: [0.5, 0.7], raider: [0.7, 1], hungry: [0.9, 1.08] }; // × your mass: no rival eats you on a touch (1.15×)
-export const RIVAL_LEAD = { careful: 0, hungry: 1, raider: 2 };
-export const SALVO_LEAD = { careful: 0, hungry: 2, raider: 1 }; // rockets a salvo adds by temper: a Careful rival rarely beats you, a Hungry or Raider one can
-export const RIVAL_SALVO = 8, RIVAL_GLOW = 1.5, RIVAL_RIPPLE = 0.25; // s between salvos, s its pad glows first (the tell), s between rockets
+// The quiet clock (s with no live rival near) speeds arrival: travel counts × hurry, +1 per QUIET[0] s up to ×QUIET[1].
+export const QUIET = [60, 4];
+export const hurry = (q: number) => Math.min(QUIET[1], 1 + q / QUIET[0]);
+export const RIVAL_SALVO = 8, RIVAL_RIPPLE = 0.25; // s between salvos, s between rockets
 export const RIVAL_LOADED = 2;
 export const RIVAL_FIRST = 3; // view widths travelled after your civilization starts
 export const RIVAL_TRAVEL = 8;
@@ -344,7 +349,7 @@ export const FRIGATE_STOCK = 4;
 export const FRIGATE_S = 60;
 /** Fighters in a rival war wave (its frigates go too). */
 export const waveFighters = (L: number) => clamp(Math.round(L), 1, 3);
-/** Rockets: your magazine by tier (2/3/4 from tiers 1/3/5), a rival's salvo by level + its temper's SALVO_LEAD. */
+/** Rockets: your magazine by tier (2/3/4 from tiers 1/3/5), a rival's salvo by level + its persona's salvo (ledger PROFILE). */
 export const salvo = (T: number) => (T >= 5 ? 4 : T >= 3 ? 3 : 2);
 export const rivalSalvo = (L: number, lead = 0) => clamp(Math.round(L) + lead, 1, 4);
 

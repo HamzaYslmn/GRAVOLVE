@@ -3,7 +3,7 @@
 // world to a moon, never picks past the reach (a link to a big body holds to 1.15×), never flip-flops under ±5% noise,
 // debris clusters are found (≥ 4 small bodies close together), and the miner cap from metal holds.
 import assert from 'node:assert/strict';
-import { assign, BIG, clusters, DEBRIS_N, fireRange, inReach, LINK_HOLD, minerCap, PER_SITE, reach, scores, type Needs, type Site } from '../../src/evolution/civilization/mining.ts';
+import { armReach, assign, BIG, clusters, DEBRIS_N, fireRange, fireReach, inReach, LINK_HOLD, mineReach, minerCap, PER_SITE, reach, scores, type Needs, type Site } from '../../src/evolution/civilization/mining.ts';
 import { lcg } from '../helpers.ts';
 
 const SLOTS = 5, R = reach(SLOTS), calm: Needs = { fleetShort: false, energyShort: false };
@@ -100,8 +100,12 @@ assert.deepEqual(pick([site(1, 5, { share: 0 })]), [undefined], 'a mined-out sit
 // Miner cap from metal: clamp(2 + ⌊metal / 15⌋, 2, 12).
 assert.deepEqual([0, 14, 15, 29, 30, 149, 150, 1e6, -5].map(minerCap), [2, 2, 3, 3, 4, 11, 12, 12, 2]);
 console.log(`miner cap: ${[0, 15, 45, 90, 150].map((m) => `${m} metal → ${minerCap(m)}`).join(', ')}`);
-// Fire range: 2 × the reach off the surface, and a rival's kept orbit (8–12 R, ≥ outer slot + 3) sits inside it.
-assert.equal(fireRange(1), 2 * reach(1));
-assert.ok(fireRange(1) > 12 + 2 && fireRange(5) > fireRange(1), 'the kept orbit is inside the fire range');
+// Fire range (a rocket's fuel): 3 × the reach off the surface; a rival arms within 2 × (armReach), and its kept orbit (8–12 R, ≥ outer slot + 3) sits inside that.
+assert.equal(fireRange(1), 3 * reach(1));
+{
+  const b = { m: 0, r: 2 };
+  assert.ok(mineReach(b) === 2 * reach(0) && fireReach(b) === 3 * mineReach(b) && armReach(b) === 2 * mineReach(b), 'fire 3 ×, arming 2 × the mining reach');
+}
+assert.ok(2 * reach(1) > 12 + 2 && fireRange(5) > fireRange(1), 'the kept orbit is inside the arming range');
 console.log(`fire range (R off the surface): 1 slot ${fireRange(1).toFixed(1)}, 3 slots ${fireRange(3).toFixed(1)}, 5 slots ${fireRange(5).toFixed(1)}`);
 console.log('mining ok');

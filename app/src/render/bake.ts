@@ -1,6 +1,6 @@
 import { Geometry, Mesh, Shader, type UniformGroup } from 'pixi.js';
 
-// One-time GPU bakes (background chunks, rock atlas): a quad whose fragment shader fills a texture.
+// One-time GPU bakes (background chunks, rock atlas, spheres, overlays, the tech page, star looks): a quad whose fragment shader fills a texture.
 // ES 3.0 for integer math (Pixi treats shaders without #version as WebGL1 GLSL).
 // highp: mediump breaks the hash on mobile GPUs, and bakes only run once per chunk/atlas.
 

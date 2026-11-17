@@ -6,7 +6,7 @@ const MAX_COORD = 1e9; // chunks
 const MAX_AREA = 40000; // chunks in one range
 
 /** On-screen chunks [x0, x1, y0, y1] (always loaded, past any budget) and the point the rest load nearest to first. */
-export type Focus = { screen: [number, number, number, number]; x: number; y: number };
+type Focus = { screen: [number, number, number, number]; x: number; y: number };
 
 export function chunkSet<T>(make: (cx: number, cy: number) => T, release: (item: T) => void) {
   const live = new Map<string, { cx: number; cy: number; item: T }>();

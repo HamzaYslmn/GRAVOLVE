@@ -65,7 +65,7 @@ const sfx = createSfx();
 // What Age II needs (planet/stage.ts: moons, reticle, combat: the field of this run, the camera, sound).
 // The game area's half sizes (world units): your natural view, never shrunk by zooming in; spawns and ranges use it.
 const gameArea = { halfW: 640, halfH: 360 };
-const kit: Kit = { input, glow, fx, canvas: app.canvas, field: () => field, view: camera.state, area: gameArea, sfx };
+const kit: Kit = { input, glow, fx, canvas: app.canvas, field: () => field, view: camera.state, area: gameArea, sfx, freeze: (s) => void (frozen = Math.max(frozen, s)) };
 const gameHud = createHud(input, app.canvas);
 const minimap = DEBUG ? createMinimap() : undefined; // debug mode: biome map (settings)
 // Debug mode (ui/debug.ts), localhost dev server only (settings DEBUG): one-click stage jumps and star helpers; a touched run saves no records.
@@ -130,7 +130,7 @@ function startRun() {
 let feel: ReturnType<typeof impactFeedback>;
 const feelFor = (me: Body) => impactFeedback(me, {
   fx, sfx, shake: camera.shake, kick: camera.kick, zoom: () => camera.state.zoom,
-  freeze: (s) => (frozen = Math.max(frozen, s)),
+  freeze: kit.freeze,
   slow: (s) => (slowmo = Math.max(slowmo, s)),
   hear(x, y) { // heard only near you: full at your side, silent HEAR_R × the half-diagonal away, fading with the square
     const { width, height } = app.screen, c = camera.state, me = player.body.motion;
@@ -268,13 +268,15 @@ app.ticker.add((ticker) => {
   debugUi?.step(ticker.deltaMS / 1000);
   const { width, height } = app.screen;
   let dt = Math.min(ticker.deltaMS / 1000, 1 / 20); // a stall shouldn't teleport the player
-  if (frozen > 0) [frozen, dt] = [frozen - dt, 0];
-  else if (slowmo > 0) [slowmo, dt] = [slowmo - dt, dt * SLOW_RATE];
+  const stop = Math.min(frozen, dt); // hit-stop eats exactly its share of game time
+  frozen -= stop;
+  dt = dt - stop < 1e-6 ? 0 : dt - stop; // no sliver of a frame when a stop ends
+  if (!stop && slowmo > 0) [slowmo, dt] = [slowmo - dt, dt * SLOW_RATE];
   const { zoom } = camera.state;
   const pv = player.body.motion, reach = Math.max(2.5 * Math.hypot(width, height) / 2 / zoom, 3 * Math.hypot(pv.vx, pv.vy)); // world units: the screen and a bit beyond, or 3 s of your flight
   const near = field.around(reach);
   planet?.before(); // Age II tracks the steam the player's update boils off
-  spheres.begin(); // a new frame's bake budget: your own sphere bakes first, the field gets what is left
+  spheres.begin(player.body.m); // a new frame's bake budget: your own sphere bakes first, the field gets what is left
   const c = camera.state, hw = width / 2 / zoom, hh = height / 2 / zoom;
   player.update(dt, zoom, near, (b) => Math.abs(b.motion.x - c.x) < hw + b.r && Math.abs(b.motion.y - c.y) < hh + b.r);
   planet?.update(dt, Math.min(ticker.deltaMS / 1000, 0.25), near, zoom, () => player.aim()?.target); // moons, climate, life, your HUD card, sky

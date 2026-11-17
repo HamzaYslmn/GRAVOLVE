@@ -2,6 +2,7 @@ import type { Field, Kit } from '../../kit';
 import type { News } from '../../ui/toast';
 import { Container, Graphics, ParticleContainer, type Renderer, type Texture } from 'pixi.js';
 import type { Vec } from '../../core/entity';
+import { clamp } from '../../core/rng';
 import type { Sfx } from '../../audio/sfx';
 import { dashRing, FAR_BOUNDS, type Fx } from '../../render/fx';
 import { drawShip, quads, shipR, shipUnit, techPage, VIOLET, YOU, type TechPage } from '../../render/tech';
@@ -10,9 +11,10 @@ import { drop, shed, type Body } from '../asteroid/body';
 import type { Moons } from '../planet/moons';
 import { bumps } from './crash';
 import { SPECK } from './flight';
-import { createRockets, createShots, MAX_GLOW, type Hull, type Rocket, type Rockets, type Seek, type Shots, type Team } from './guns';
+import { createRockets, createShots, MAX_GLOW, spot, type Hull, type Lock, type Rocket, type Rockets, type Shots, type Team } from './guns';
 import { drawBolts, heavy } from './bolts';
-import { fireReach } from './mining';
+import { createDodge, passed, stopFor } from './feel';
+import { fireReach, mineReach } from './mining';
 import { createPirates } from './pirates';
 import { createRivals } from './rivals';
 import { ROCKET, SALVAGE, type Wreck } from './rules';
@@ -23,7 +25,8 @@ import type { Civilization } from './stage';
 // for roaming pirates only); Fire and rivals wait for a civilization.
 //   Fire: a rocket (rules.ts ROCKET, guns.ts createRockets) off your surface at what you aim at (the cursor, a tap or the
 //         stick's point; Space: the HUD target): it locks the enemy ship or rocket there (civilization foeAt), else the body
-//         under it, else flies at the point and on until its fuel (the fire range, mining.ts fireReach) is spent. One from
+//         under it, else flies the ray through the point and, past your mining reach, locks the first enemy ship, rocket or
+//         priority it can make (guns.ts spot), or flies on until its fuel (the fire range, mining.ts fireReach) is spent. One from
 //         the magazine (civilization fire: ROCKET.ore each); the magazine shows as the reticle's ring (on touch an arc).
 //   Your priority target (civilization/stage.ts order) shows as four turning cyan arcs round its body (no siege ring).
 //   Contacts run in the field's `contacts` hook (main.ts), after the field's own collisions: every rocket and every ship's
@@ -61,6 +64,8 @@ export type Ctx = {
 const MAX_PARTS = 600;
 const BURST_SOUND = 0.25; // s: at most one burst sound this often
 const PICK_PX = 18; // screen px round a point: what a Fire there locks
+const STRIKE_SOUND = [[0.3, 2], [0.5, 1], [0.8, 0.3]]; // [loud, pitch] of your rocket's strike by tier 1–3 (feel.ts STOP)
+const HUSH = 0.1; // s after a strike: no wreck crack over it
 
 export function createCombat(layer: Container, me: Body, renderer: Renderer, kit: Kit, news: News, moons: MoonsView = NO_MOONS) {
   const root = new Container(), lines = new Graphics();
@@ -68,6 +73,9 @@ export function createCombat(layer: Container, me: Body, renderer: Renderer, kit
   layer.addChild(root, lines);
   const shots = createShots(), rockets = createRockets();
   let clock = 0, heard = -1, alive = new Set<unknown>(); // alive: enemy ships and rockets this frame (your locked rockets let go of the dead)
+  // Feel (feel.ts): salvos at you; the last hit-stop and strike (sim s); a crack held while rockets step; ship kills so far; this rocket hit you / a live rival world.
+  let lastStop = -Infinity, struckAt = -Infinity, stepping = false, held = 0, kills = 0, hitMe = false, world = false;
+  const dodge = createDodge();
   const readout = createReadout(kit.canvas, kit.input);
   const mineFoes = new WeakMap<Ship, Foe>();
 
@@ -92,7 +100,8 @@ export function createCombat(layer: Container, me: Body, renderer: Renderer, kit
       const sr = ctx.shipR();
       kit.fx.flash(x, y, Math.max(sr * 3, 12 / ctx.cam.zoom), 8, sr * 6);
       kit.fx.burst(x, y, 10, sr * 0.5, sr * 6, tint);
-      ctx.sfx()?.play('crack', 0.2, pitch);
+      if (stepping) held = pitch; // a kill inside a rocket's step: its strike may follow (contacts)
+      else if (clock - struckAt >= HUSH) ctx.sfx()?.play('crack', 0.2, pitch);
       if (cls) ctx.salvage(x, y, cls, cargo);
     },
     salvage(x, y, cls, cargo = 0) {
@@ -112,25 +121,35 @@ export function createCombat(layer: Container, me: Body, renderer: Renderer, kit
   const rivals = createRivals(ctx);
   const pirates = createPirates(ctx, rivals);
 
-  /** Rockets of the other side than `team`, still flying (foes). */
-  const enemyRockets = (team: Team) => rockets.live.filter((m) => m.team !== team && !m.dead);
   /** The free body under world point `p` (within max(1.4 r, PICK_PX)): not you or your moons; several: the heaviest. */
   const bodyAt = (p: Vec) => {
     let best: Body | undefined;
     for (const b of ctx.near) if (b.m && b !== me && !moons.owns(b) && Math.hypot(b.motion.x - p.x, b.motion.y - p.y) <= Math.max(1.4 * b.r, PICK_PX / ctx.cam.zoom) && (!best || b.m > best.m)) best = b;
     return best;
   };
+  /** A lock on an enemy ship or rocket (`fuze`; held while it lives) or on a body. */
+  const lockOn = (t: Foe | Body): Lock => {
+    if ('motion' in t) return { seek: () => (t.m ? { ...t.motion, r: t.r } : undefined), target: t };
+    alive.add(t);
+    return { seek: () => (alive.has(t) ? { x: t.x, y: t.y, vx: t.vx ?? 0, vy: t.vy ?? 0 } : undefined), target: t, fuze: true };
+  };
+  /** A point shot's scan once past your mining reach: the nearest enemy ship or rocket, or your priority, it can make (guns.ts spot). */
+  const scan = (m: Rocket) => {
+    const pm = me.motion, pr = ctx.civ?.priority?.t;
+    if (!me.m || Math.hypot(m.x - pm.x, m.y - pm.y) <= mineReach(me) + me.r) return undefined;
+    const f = spot(m, [...combat.foes(), ...(pr ? [pr] : [])].map((t) => ('motion' in t ? { ...t.motion, t } : { x: t.x, y: t.y, vx: t.vx, vy: t.vy, t })));
+    return f && lockOn(f.t);
+  };
   /** Fire at `at` (`target`: the HUD target with Space): lock what is there, take a rocket from the magazine, launch it. */
   function launch(civ: Civilization, at: Vec, target?: Body) {
     const z = ctx.cam.zoom, foe = target ? undefined : civ.foeAt(at, PICK_PX / z), b = target ?? (foe ? undefined : bodyAt(at)), why = civ.fire();
     if (why !== 'ok') return void (why && kit.fx.note(at.x, at.y, why === 'ore' ? 'No ore' : 'Reloading', 1 / z));
-    const pm = me.motion, { vx, vy } = pm, { x: px, y: py } = at;
+    const pm = me.motion, { vx, vy } = pm, x0 = pm.x, y0 = pm.y, D = Math.hypot(at.x - x0, at.y - y0) || 1, ux = (at.x - x0) / D, uy = (at.y - y0) / D;
     let m: Rocket | undefined;
-    // A point shot steers to the point, still in its launch frame (where you clicked, while you coast); past it the lead leaves `cone` and it flies on.
-    const seek: Seek = foe ? () => (alive.has(foe) ? { x: foe.x, y: foe.y, vx: foe.vx ?? 0, vy: foe.vy ?? 0 } : undefined) : b ? () => (b.m ? { ...b.motion, r: b.r } : undefined) : () => ({ x: px + vx * (m?.age ?? 0), y: py + vy * (m?.age ?? 0), vx, vy });
-    if (foe) alive.add(foe);
-    const t = seek() ?? at;
-    m = rockets.launch({ team: 'you', x: pm.x, y: pm.y, vx, vy, r: me.r, tx: t.x, ty: t.y, R: me.r, range: fireReach(me), seek, fuze: !!foe, target: foe ?? b, from: me, own: (q) => q === me || moons.owns(q as Body) });
+    // A point shot flies the world-fixed ray from the launch point through the click (a point ROCKET.ahead R on), then scans.
+    const ray = (): Lock => ({ seek: () => { const k = Math.max(0, ((m?.x ?? x0) - x0) * ux + ((m?.y ?? y0) - y0) * uy) + ROCKET.ahead * me.r; return { x: x0 + ux * k, y: y0 + uy * k, vx: 0, vy: 0 }; } });
+    const l = foe ?? b ? lockOn((foe ?? b)!) : ray(), t = (foe ?? b) && l.seek() || at; // a point shot aims its pad at the click
+    m = rockets.launch({ team: 'you', x: x0, y: y0, vx, vy, r: me.r, tx: t.x, ty: t.y, R: me.r, range: fireReach(me), ...l, scan: foe ?? b ? undefined : scan, from: me, own: (q) => q === me || moons.owns(q as Body) });
     kit.sfx.play('rocket', 0.45, 1);
     news('rocket1', 'Rockets', `Click or tap launches a rocket at what you aim at · ${ROCKET.ore} ore · it turns, but never sharply`);
   }
@@ -139,7 +158,6 @@ export function createCombat(layer: Container, me: Body, renderer: Renderer, kit
     rivals,
     pirates,
     shots,
-    rockets,
     /** Wrecks, grazes and sparked near misses by faction (dev counter: window.__g().combat.bumps). */
     bumps,
     /** `life` = the life stage index (−1 none), `civ` the civilization if any, `aimTarget` the HUD target (Space). */
@@ -198,19 +216,59 @@ export function createCombat(layer: Container, me: Body, renderer: Renderer, kit
       if (rockets.live.some((m) => m.team === 'you' && m.fuze)) alive = new Set(combat.foes());
       // A rocket on a body: a world takes weapon fire (rivals.rocketHit), anything else of yours is cut or chipped (stage.ts).
       // Its end: a burst lights up wide in the side's hue; one shot down flares like a round's hit; one out of fuel puffs grey.
-      if (rockets.live.length) rockets.step(dt, bodies, hulls, SPECK * r, (m, b, x, y) => void (!rivals.rocketHit(m, b, x, y) && m.team === 'you' && ctx.civ?.rocketHit(b, x, y)), (m, x, y, end) => {
+      // Yours on screen strikes by tier (a rocket, a ship in the blast, a kill or a live world: feel.ts STOP): a hit-stop, one
+      // strike for the blast sound. The last of an untouched enemy salvo of 2+ at you: the dodge cue (feel.ts createDodge).
+      kills = pirates.deaths.shot + rivals.deaths.shot;
+      stepping = true;
+      if (rockets.live.length) rockets.step(dt, bodies, hulls, SPECK * r, (m, b, x, y) => {
+        if (!rivals.rocketHit(m, b, x, y)) void (m.team === 'you' && ctx.civ?.rocketHit(b, x, y));
+        else if (m.team === 'you') world = rivals.foe(b)?.body === b; // not a beaten world
+        else hitMe = true;
+      }, (m, x, y, end) => {
+        const k = pirates.deaths.shot + rivals.deaths.shot, killed = k > kills, onWorld = world, clean = m.team !== 'you' && m.target === me && dodge.end(m, hitMe) === 2 && me.m > 0;
+        [kills, hitMe, world] = [k, false, false];
+        if (clean) ctx.sfx()?.play('dodge', 0.6, 1);
         if (!ctx.onScreen(x, y, me.r)) return;
         const tint = m.team === 'you' ? YOU : VIOLET, b = ROCKET.blast * m.R;
+        if (clean) for (let i = 0; i < 8; i++) kit.fx.ember(x, y, Math.cos(i * Math.PI / 4) * 8 * r, Math.sin(i * Math.PI / 4) * 8 * r, Math.max(0.5 * r, 2 / z), tint, 0.4);
         if (end === 'burst') {
           blaze(x, y, Math.max(b, 26 / z), Math.max(1.5 * b, 36 / z), 0.35, tint, 12, 0, Math.PI);
           kit.fx.burst(x, y, 14, r * 0.5, b * 1.5, tint);
-          ctx.sfx()?.play('blast', 0.35, 1);
+          let tier = m.team === 'you' && (killed || onWorld) ? 3 : 0; // else a rocket (1) or a ship (2) in the blast
+          if (m.team === 'you' && !tier) for (const f of hulls) if (f.team !== 'you' && Math.hypot(f.x - x, f.y - y) < b + f.r) tier = Math.max(tier, f.r < r ? 1 : 2);
+          const s = stopFor(lastStop, clock, tier);
+          if (s) {
+            lastStop = clock;
+            kit.freeze(s);
+          }
+          if (tier) {
+            struckAt = clock;
+            ctx.sfx()?.play('strike', STRIKE_SOUND[tier - 1][0], STRIKE_SOUND[tier - 1][1]);
+          } else ctx.sfx()?.play('blast', 0.35, 1);
         } else if (end === 'shot') blaze(x, y, Math.max(1.5 * r, 6 / z), Math.max(2.5 * r, 9 / z), 0.22, tint, 5, 0, Math.PI);
         else {
           kit.fx.ember(x, y, 0, 0, Math.max(2 * r, 8 / z), 0x9a8a78, 0.3);
           kit.fx.burst(x, y, 8, Math.max(1.2 * r, 3 / z), r * 4, 0x8a8478);
         }
       });
+      stepping = false;
+      if (held && clock - struckAt >= HUSH) ctx.sfx()?.play('crack', 0.2, held);
+      held = 0;
+      // A near miss: an enemy rocket has passed within NEAR.d R of you (once a salvo): a whoosh panned to it and 5 violet
+      // embers back along its path. Yours passing its locked target without a hit: 3 cyan embers, no sound.
+      if (me.m) for (const m of rockets.live) {
+        if (m.dead) continue;
+        if (m.team !== 'you') {
+          if (m.target !== me || !dodge.track(m, me.motion, me.r)) continue;
+          kit.sfx.play('whoosh', 0.5, 1, clamp((m.x - ctx.cam.x) / ctx.cam.seenW, -1, 1) * 0.8);
+          trail(m, 5, me.motion.vx, me.motion.vy, VIOLET);
+          continue;
+        }
+        const t = m.lock ? (m.target as Body | Foe | undefined) : undefined;
+        if (!t) continue;
+        const p = 'motion' in t ? t.motion : t;
+        if (passed(m, p.x, p.y, 'motion' in t ? t.r : 0)) trail(m, 3, p.vx ?? 0, p.vy ?? 0, YOU);
+      }
       // A round's hit: a hot flash, light in the gun's tint and sparks thrown back along its path (lances and shells 2.2 ×);
       // a ship (or a rocket) also breaks up in a burst.
       if (shots.n) shots.step(dt, bodies, hulls, SPECK * r, (s, x, y, ship) => {
@@ -224,7 +282,7 @@ export function createCombat(layer: Container, me: Body, renderer: Renderer, kit
       pirates.contacts(bodies, dt);
     },
     /** Enemy ships and rockets your defence ships hunt (civ.update's `foes`). */
-    foes: (): Foe[] => [...rivals.foes(), ...pirates.foes(), ...enemyRockets('you')],
+    foes: (): Foe[] => [...rivals.foes(), ...pirates.foes(), ...rockets.live.filter((m) => m.team !== 'you' && !m.dead)],
     /** A field hit (main.ts onHit, any actor): rival worlds' shields and people. */
     hit: rivals.hit,
     destroy() {
@@ -232,6 +290,7 @@ export function createCombat(layer: Container, me: Body, renderer: Renderer, kit
       pirates.destroy();
       shots.clear();
       rockets.clear();
+      dodge.clear();
       readout.destroy();
       root.destroy({ children: true });
       lines.destroy();
@@ -245,6 +304,12 @@ export function createCombat(layer: Container, me: Body, renderer: Renderer, kit
   };
   return combat;
 
+  /** `n` embers streaking back from rocket `m` along its velocity relative to (vx, vy), if on screen (crash.ts sparks' look). */
+  function trail(m: Rocket, n: number, vx: number, vy: number, tint: number) {
+    if (!ctx.onScreen(m.x, m.y)) return;
+    const ux = m.vx - vx, uy = m.vy - vy, size = Math.max(0.5 * ctx.shipR(), 2 / ctx.cam.zoom), h = (n - 1) / 2;
+    for (let i = 0; i < n; i++) kit.fx.ember(m.x, m.y, -ux * (0.3 + 0.15 * i) - uy * (i - h) * 0.12, -uy * (0.3 + 0.15 * i) + ux * (i - h) * 0.12, size, tint, 0.3);
+  }
   /** A hit's light: a hot flash `f` across, a glow `l` in `tint` for `life` s, `n` sparks within ±`fan` rad of `a` (≥ 1.5 px). */
   function blaze(x: number, y: number, f: number, l: number, life: number, tint: number, n: number, a: number, fan: number) {
     const r = ctx.shipR(), size = Math.max(0.5 * r, 1.5 / ctx.cam.zoom);

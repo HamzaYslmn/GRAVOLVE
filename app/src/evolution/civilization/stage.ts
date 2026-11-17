@@ -225,8 +225,8 @@ export function createCivilization(layer: Container, me: Body, renderer: Rendere
     get level() {
       return shield.level;
     },
-    /** Weapon fire on the shield from outside (pirate shots): taken while it is up (rules.ts shieldShot; ripple at x, y). `share` unused: weapon fire has no size gate. */
-    shieldTake(kelvin: number, _share: number, x: number, y: number) {
+    /** Weapon fire on the shield from outside (pirate shots): taken while it is up (rules.ts shieldShot; ripple at x, y). */
+    shieldTake(kelvin: number, x: number, y: number) {
       if (!active) return false;
       const s0 = shield.s;
       shieldShot(shield, kelvin);
@@ -251,10 +251,6 @@ export function createCivilization(layer: Container, me: Body, renderer: Rendere
     /** Your priority target, if any (combat.ts draws its mark), and whether it waits with no weapon ready or reloading (a dim mark). */
     get priority() {
       return prio && { t: prio, wait };
-    },
-    /** Your sortie on a rival world, if your fleet is engaged (test hook). */
-    get sortie() {
-      return sortie;
     },
     /** Fire (combat.ts): takes a loaded rocket and pays its ore: 'ok' launches, else why not ('reload': the magazine is empty, 'ore'); undefined while asleep. */
     fire: (): 'ok' | 'reload' | 'ore' | undefined => (!active || !me.m ? undefined : mag.n < 1 ? 'reload' : !spend(ROCKET.ore) ? 'ore' : (mag.n--, 'ok')),
@@ -288,10 +284,6 @@ export function createCivilization(layer: Container, me: Body, renderer: Rendere
       crashes(ships, me, nav, dt, fx, drop, bumps.you, YOU, me, seen, crack);
       crashes(frigates, me, nav, dt, fx, drop, bumps.you, YOU, me, seen, crack);
       view.crashes(nav, dt, bumps.you, seen, crack);
-    },
-    /** Each miner's site and the sites of the last re-score (test hook). */
-    get mining() {
-      return { crew: crew.map((id) => (id === undefined ? undefined : spots.get(id))), spots };
     },
     update(dt: number, real: number, near: Body[], zoom: number, w: CivInput) {
       if (!me.m) return;

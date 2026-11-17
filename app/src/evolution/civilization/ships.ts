@@ -333,4 +333,4 @@ export function chip(b: Body, M: number, x: number, y: number, ev: Events | unde
   shed(b, bite);
   b.heat += (ROCKET.chip.k / K_PER_HEAT) * Math.min(1, (ROCKET.share * M) / b.m);
 }
-const CHUNK = 0.45; // of a chip, each of its two chunks (with ROCKET.chip.bite 0.25%: just over the field's SPECK, so they show)
+const CHUNK = 0.45; // of a chip, each of its two chunks (with ROCKET.chip.bite 0.25%: 0.11% of you, ~11× the field's SPECK, so they show)

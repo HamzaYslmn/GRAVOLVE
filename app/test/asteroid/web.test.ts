@@ -3,7 +3,7 @@
 // belts are rarer than the plain belt; Kuiper belts lie only beside voids; the start area is plain belt; half the moving
 // groups stand still.
 import assert from 'node:assert/strict';
-import { biomeAt, density, groupDrift, HOME, kindMix, nearStart, place, VOID_FLOOR, VOID_W, web, type Biome } from '../../src/evolution/asteroid/web.ts';
+import { density, groupDrift, HOME, kindMix, nearStart, place, VOID_FLOOR, VOID_W, web, type Biome } from '../../src/evolution/asteroid/web.ts';
 
 const SCREEN = 1280 / 1.02; // world units across a 1280-px screen at the start zoom
 const seeds = [292, 292 + 7919, 292 + 2 * 7919]; // the first three runs' field seeds (main.ts)
@@ -60,7 +60,7 @@ for (const seed of seeds) {
   for (let k = 0; k < 400; k++) {
     const sx = k * 12345.6, sy = k * 7890.1, a = k * 2.4, d = HOME * Math.sqrt((k % 20) / 20), dx = Math.cos(a) * d, dy = Math.sin(a) * d;
     const [calm, floor] = nearStart(dx, dy), x = sx + dx, y = sy + dy;
-    assert.equal(biomeAt(x, y, seed, Math.max(web(x, y, seed), floor), calm), 'belt', `start area at ${d.toFixed(0)}`);
+    assert.equal(place(x, y, seed, Math.max(web(x, y, seed), floor), calm).biome, 'belt', `start area at ${d.toFixed(0)}`);
   }
   console.log(`biomes ok (seed ${seed}): ${all.map((b) => `${b} ${pct(at(b))}`).join(', ')}; ice in Kuiper ${pct(avg(ice, 'kuiper'))}, ice field ${pct(avg(ice, 'ice'))}, rock in belt ${pct(avg(rock, 'belt'))}; Kuiper beside a void ${pct(nearVoid)}`);
 }
@@ -83,7 +83,7 @@ console.log(`groups ok: ${pct(still / cells)} of spots in still groups`);
   for (let line = 0; line < 30; line++) {
     let last: Biome | undefined, since = 0;
     for (let x = 0; x < 2e6; x += 250) {
-      const b = biomeAt(x, line * 37000 + 1234, seeds[0]);
+      const b = place(x, line * 37000 + 1234, seeds[0]).biome;
       if (b === 'belt') { since += 250; continue; }
       if (last && b !== last && [b, last].sort().join() !== 'kuiper,void') gaps.push(since / SCREEN);
       [last, since] = [b, 0];

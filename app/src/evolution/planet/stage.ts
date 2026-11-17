@@ -38,14 +38,12 @@ export type WorldState = {
   lifeSpeed: number; life: number; lifeName: string; lifeProgress: number; // life: stage index, −1 none
   envelope: boolean; // gas line past Super-Earth mass: no surface for life (doc)
   gasLine: boolean; // on the sticky gas line (in at 20% gas, out below 15%: rules.ts onGasLine)
-  gasWarn: boolean; // a world with a surface from Planet mass with gas ≥ 15%: the HUD warns before the gas line locks life out
   limits: { suffer: number; boil: number }; // masses at today's gas share (and starlight) where seas start to suffer and boil (rules.ts airLimits)
   diff: number; // 0..1 how far your metal has sunk to a core (Body.diff; the magnetic field's lever)
   moons: number; slots: number; // your moons, and how many slots your mass gives (moons.ts)
   civ?: CivState; // from an intelligent species on (evolution/civilization): population, energy, tech, shield
   star?: StarState; // Age III (evolution/star): the nearest star or yours, link, Dyson
 };
-
 
 /** `combat`: the run's (main.ts owns it: Age I's pirates fly on); the stage hands it its moons and news. */
 export function createPlanetStage(layer: Container, me: Body, renderer: Renderer, kit: Kit, combat: Combat, runNews: RunNews) {
@@ -81,8 +79,6 @@ export function createPlanetStage(layer: Container, me: Body, renderer: Renderer
     moons,
     /** Life's progress and calm (dev test hook: scripted runs start at an intelligent species). */
     life,
-    /** Combat: your rockets, rivals, pirates (test hook). */
-    combat,
     /** The civilization once there is one (test hook). */
     get civ() {
       return civ;
@@ -136,7 +132,7 @@ export function createPlanetStage(layer: Container, me: Body, renderer: Renderer
         mass: me.m, gasShare: gas, name, goal, kelvin: hab.k, pressure: hab.p, boilingK: hab.bp, water: hab.state, waterShare: water, seaCover: seaCover(water), vapor,
         scores: { water: hab.water, temp: hab.temp, air: hab.air, magnet: hab.magnet }, lifeSpeed: gassy ? 0 : hab.rate,
         life: stage, lifeName: lifeName(life.progress), lifeProgress: life.progress, envelope: gassy,
-        gasLine: line, gasWarn, limits: airLimits(me.m, gas, light.warm), diff: me.diff ?? 0,
+        gasLine: line, limits: airLimits(me.m, gas, light.warm), diff: me.diff ?? 0,
         moons: moons.list().length, slots: moons.slots,
       };
 

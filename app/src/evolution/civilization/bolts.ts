@@ -101,7 +101,7 @@ export function drawBolts(o: BoltsIn) {
     const len = (ROCKET.len / SHIP_SCALE) * SHIP_PX * u;
     if (!o.onScreen(m.x, m.y, 3 * len)) continue;
     const c = Math.cos(m.heading), sn = Math.sin(m.heading), tint = m.team === 'you' ? YOU : VIOLET, tx = m.x - c * len * 0.5, ty = m.y - sn * len * 0.5;
-    const on = m.fuel > 0 ? 0.5 + 0.5 * m.burn : 0, fl = 0.85 + 0.3 * Math.random(), w = Math.max(0.5 * len, 1.5 / z), L = w * (1 + 1.5 * on) * fl;
+    const on = m.fuel > 0 ? 0.5 + 0.5 * m.burn : 0, fl = 0.85 + 0.3 * Math.random(), w = Math.max(0.5 * len, 2.5 / z), L = w * (1 + 1.5 * on) * fl;
     if (!m.lit) {
       m.lit = true;
       fx.flash(tx, ty, 2 * w, 0, 0);

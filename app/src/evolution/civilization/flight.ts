@@ -241,7 +241,7 @@ export const P_ACC = 4; // 1/s: main thrust = cruise × this
 export const RING_IN = 2.5; // R: runs at you turn out inside this, back in past your outer filled moon slot + RING_OUT
 export const RING_OUT = 3;
 export const ROW = [5, 4]; // ship radii behind and beside per row of a formation
-const ROW_AHEAD = 8; // ship radii: a follower steers at a point this far ahead of its slot
+export const ROW_AHEAD = 8; // ship radii: a follower steers at a point this far ahead of its slot
 const JOIN = 8; // R: a follower farther than this from its leader flies the route on its own until it is near again
 const FRAME_S = 1; // s: a fleet's frame velocity follows its centre's over this long
 const CATCH = 1; // 1/s: a chasing centre closes this share of its gap a second
