@@ -1,3 +1,4 @@
+import '../../ui/hud.css'; // HUD primitives first: the stage CSS builds on them
 import './hud.css';
 import type { Container } from 'pixi.js';
 import type { Aim } from './player';
@@ -5,18 +6,27 @@ import type { Body, Hit } from './body';
 import { hold, kelvin, pressure, waterState, type WaterState } from '../../core/water';
 import { toast, toastBusy } from '../../ui/toast';
 import { load, save } from '../../ui/settings';
-import { bar, finder, fit, hex, label, PERIOD, throttle } from '../../ui/panel';
+import { bar, finder, fit, hex, label, PERIOD, throttle, widths } from '../../ui/panel';
+import { cell, head, icon, tipText, addTips } from '../../ui/rows';
+import { createTip } from '../../ui/tip';
+import type { Controls } from '../../core/input';
 import type { Biome } from './web';
 import { habOf, type Entry } from '../rivals/ledger';
 import { lifeName, moonCap, MOON, MOON_SHARE } from '../planet/rules';
 import { AGE_GOAL, shapeOf, MAX_HEAT, mealsTo, MOLTEN, TAGS, tierAt, TIERS, V_STICK, type Comp, type Element } from './rules';
 
-// The stage HUD, plain DOM over the canvas: every readout is an icon with a short caption. Two cards and a marker:
-//   your card (bottom left, 256 px): everything about your own body. Head (age, tier, mass), the stage's goal bar (moon pips
-//     on its label), speed on one line, composition, then each stage's rows (Age I here; planet/, civilization/ and star/
-//     add theirs), one tip.
+// The stage HUD, plain DOM over the canvas: every readout is an icon with a label on the card's shared columns (ui/rows.ts,
+// ui/hud.css). Two cards and a marker:
+//   your card (bottom left, 320 px; 340 from 1000 px tall): head (age, tier, mass) and the stage's goal bar, then sections,
+//     each only once its stage exists: World (speed, composition; planet/ adds climate, moons, limits), the civilization's
+//     People, Energy, Stocks, Fleet (civilization/), the Star (star/), and one tip. Each section is a header with a live
+//     one-line summary and a body a click on the header opens or folds (Energy's bar and the stock amounts always show).
+//     Defaults: World open (from 900 px tall also People and Energy); your own toggles win (gravolve.hudOpen); under 900 px
+//     one section besides World is open at a time. Phones (PHONE): compact, every section folded to its header (speed stays),
+//     a tap opens one at a time, not saved (hud.css).
 //   target card (top right): the body you are heading for, with the same corner brackets as the marker in the world.
 //   marker: those brackets around the target body itself, in the verdict colour; a named rival gets its name over it.
+// Every [data-tip] explains itself on hover (ui/tip.ts); each stage registers its texts (ui/rows.ts addTips).
 // Updated ~12×/s; the marker follows every frame.
 
 // [element, label, colour, icon]: colour and shape together, so a segment reads at a glance (and without colour vision).
@@ -25,7 +35,7 @@ const ELEMENTS: [Element, string, string, string][] = [
   ['rock', 'Rock', '#c9a27a', '<path d="M2 8.2 2.8 4 6 1.6 9.6 3 11 7.2 8.4 10.6H3.6Z"/><path d="M6 4.2 5.1 6.9 7 7.8"/>'],
   ['ice', 'Water', '#6fd3ff', '<path d="M6 1.2C4 4 2.8 5.8 2.8 7.6a3.2 3.2 0 0 0 6.4 0C9.2 5.8 8 4 6 1.2Z"/>'],
   ['gas', 'Gas', '#ffd27a', '<path d="M1.5 3.8c1.5-1.3 3-1.3 4.5 0s3 1.3 4.5 0M1.5 8.2c1.5-1.3 3-1.3 4.5 0s3 1.3 4.5 0"/>'],
-  ['radio', 'Rad', '#8dff6a', '<path class="fill" d="M4.95 4.18L3.3 1.32A5.4 5.4 0 0 1 8.7 1.32L7.05 4.18A2.1 2.1 0 0 0 4.95 4.18ZM8.1 6L11.4 6A5.4 5.4 0 0 1 8.7 10.68L7.05 7.82A2.1 2.1 0 0 0 8.1 6ZM4.95 7.82L3.3 10.68A5.4 5.4 0 0 1 0.6 6L3.9 6A2.1 2.1 0 0 0 4.95 7.82Z"/><circle class="fill" cx="6" cy="6" r="1.1"/>'], // radioactive heavy elements
+  ['radio', 'Rad', '#8dff6a', '<path class="fill" d="M4.95 4.54L3.3 1.68A5.4 5.4 0 0 1 8.7 1.68L7.05 4.54A2.1 2.1 0 0 0 4.95 4.54ZM8.1 6.36L11.4 6.36A5.4 5.4 0 0 1 8.7 11.04L7.05 8.18A2.1 2.1 0 0 0 8.1 6.36ZM4.95 8.18L3.3 11.04A5.4 5.4 0 0 1 0.6 6.36L3.9 6.36A2.1 2.1 0 0 0 4.95 8.18Z"/><circle class="fill" cx="6" cy="6.36" r="1.1"/>'], // radioactive heavy elements
 ];
 // Speed gauge on a log scale (there is no top speed): the eat zone (0..8) keeps ~20% of the width,
 // 256 diameters/s and up pins the needle.
@@ -34,52 +44,39 @@ const gx = (v: number) => Math.min(1, Math.log1p(Math.max(0, v) / V_STICK) / Mat
 const speedText = (v: number) => (v < 10 ? v.toFixed(1) : v < 1000 ? v.toFixed(0) : `${(v / 1000).toFixed(v < 1e4 ? 1 : 0)}k`);
 // A rival world's life conditions in the target card (keys of planet/rules.ts habitability).
 const RIVAL_CHIPS = [['water', 'Water', 'water'], ['air', 'Air', 'air'], ['magnet', 'Magnetic field', 'magnet']] as const;
-// 12×12 stroke icons shared by the HUD (planet/, civilization/ too).
-const ICON = {
-  temp: '<path d="M5 7.4V2.2a1 1 0 0 1 2 0v5.2a2.4 2.4 0 1 1-2 0Z"/>',
-  air: '<path d="M1.5 4.5h6.2a1.6 1.6 0 1 0-1.6-1.6M1.5 7.5h8a1.6 1.6 0 1 1-1.6 1.6"/>',
-  water: '<path d="M6 1.2C4 4 2.8 5.8 2.8 7.6a3.2 3.2 0 0 0 6.4 0C9.2 5.8 8 4 6 1.2Z"/>',
-  magnet: '<path d="M1.5 1.5h3v4.5a1.5 1.5 0 0 0 3 0V1.5h3V6a4.5 4.5 0 0 1-9 0Z"/><path class="fill" d="M1.5 1.5h3v2h-3ZM7.5 1.5h3v2h-3Z"/>', // horseshoe magnet, lit poles
-  ore: '<path d="M2 4.5 4 2h4l2 2.5L6 10.5Z"/><path d="M2 4.5h8"/>',
-  shield: '<path d="M6 1.3 10 3v3c0 2.4-1.7 4.1-4 4.9C3.7 10.1 2 8.4 2 6V3Z"/>',
-  people: '<circle cx="6" cy="3.4" r="1.9"/><path d="M2.2 10.8a3.8 3.8 0 0 1 7.6 0"/>',
-  bolt: '<path d="M6.8 1 2.6 6.8h3.2L5 11l4.4-6H6.2Z"/>',
-  rad: '<circle cx="6" cy="6" r="1.2"/><path d="M4.9 4.1 3.2 1.3a5.3 5.3 0 0 1 5.6 0L7.1 4.1M8.1 6h3.3a5.3 5.3 0 0 1-2.7 4.7L7 7.9M4.9 7.9 3.3 10.7A5.3 5.3 0 0 1 .6 6h3.3"/>',
-  ship: '<path d="M6 1.2 9.4 10.4 6 8.4 2.6 10.4Z"/>',
-  speed: '<path d="M1.5 8.5a4.5 4.5 0 0 1 9 0"/><path d="M6 8.5 8.4 5"/>',
-  orbit: '<circle cx="6" cy="6" r="4.6"/><circle class="fill" cx="10" cy="3.7" r="1.4"/>',
-  planet: '<circle cx="6" cy="6" r="4"/>',
-  geo: '<path d="M1.2 10.6 4.6 4.4l1.6 2.2 1.1-1.5 3.5 5.5Z"/><path d="M5.4 3.4c-.7-.7.7-1.3 0-2M7.6 3.4c-.7-.7.7-1.3 0-2"/>',
-  sun: '<circle cx="6" cy="6" r="2.2"/><path d="M6 .9v1.5M6 9.6v1.5M.9 6h1.5M9.6 6h1.5M2.4 2.4l1 1M8.6 8.6l1 1M2.4 9.6l1-1M8.6 3.4l1-1"/>',
-  dyson: '<circle class="fill" cx="6" cy="6" r="1.6"/><path d="M6 1.3a4.7 4.7 0 0 1 4.7 4.7M6 10.7A4.7 4.7 0 0 1 1.3 6"/>',
-  yard: '<path d="M1.5 10.5h9M3 10.5V6l3-2 3 2v4.5M6 4V1.5"/>',
-  mend: '<path d="M6 2v8M2 6h8"/>',
-  rocket: '<path d="M1.5 6h5.5l3-2v4l-3-2M3 4.2 1.5 6 3 7.8"/>',
-};
-export const icon = (k: keyof typeof ICON) => `<svg class="icon" viewBox="0 0 12 12" aria-hidden="true">${ICON[k]}</svg>`;
-/**
- * One readout cell: icon · caption · value on one line, the track full width under them. `track` 'bar' fills (`i` width),
- * 'scale' has a band (where life wants it) and a needle (you). The value's class ok / warn / bad colours the cell.
- */
-export const cell = (cls: string, ic: keyof typeof ICON, cap: string, track: 'bar' | 'scale' = 'bar') =>
-  `<div class="cell ${cls}">${icon(ic)}<em class="cap">${cap}</em><span class="v"></span>${track === 'bar' ? '<div class="bar"><i></i></div>' : '<div class="scale"><s class="band"></s><i class="needle"></i></div>'}</div>`;
 const WATER: Record<WaterState, string> = { ice: 'Ice', liquid: 'Liquid', steam: 'Steam' };
-const MIX_ME = 234, MIX_TARGET = 174; // px: the composition bar in your card and the target card (CSS widths; phones scale by transform)
+// px: the composition bar in your card (its inner width: --ui-card less 2 × --ui-s4, styles/base.css) and the target card;
+// on phones (a narrower card on small screens) the bar `el` is measured.
+const MIX_TARGET = 200;
+const BIG = matchMedia('(min-height: 1000px)');
+/** Phones: a narrow touch screen, or any screen under 500 px tall (the same query as hud.css's phone rules). */
+export const PHONE = matchMedia('(pointer: coarse) and (max-width: 640px), (max-height: 500px)');
+export const innerPx = (el?: HTMLElement) => (PHONE.matches && el?.clientWidth) || (BIG.matches ? 316 : 296);
 const AIR_HINT_M = 300; // from here the air cell tells where air starts (core/water.ts: from 1.0k mass)
+const OPEN_ONE = 900; // px tall: under this one section besides World open at a time; from it more open by default
+const GUARD_MS = 400; // after a toggle the card swallows presses this long: the header moved, a quick second click must not fire
 
 const pct = (f: number) => `${Math.round(f * 100)}%`;
 /** A composition share as text: one decimal under 1%, so a trace never reads as 0%. */
 const share = (f: number) => (f > 0.0005 && f < 0.01 ? `${(f * 100).toFixed(1)}%` : pct(f));
+/** A composition as tooltip rows, biggest first. */
+export const mixRows = (c: Comp) => ELEMENTS.filter(([e]) => (c[e] ?? 0) >= 0.0005).sort((a, b) => c[b[0]]! - c[a[0]]!).map(([e, name]) => `${name}\t${share(c[e]!)}`).join('\n');
+/** Mass as text: 12.3, 4.5k, 21.3M. */
+export const big = (m: number) => (m >= 1e6 ? `${(m / 1e6).toFixed(m >= 1e8 ? 0 : 1)}M` : m >= 1e4 ? `${Math.round(m / 1e3)}k` : m >= 1e3 ? `${(m / 1e3).toFixed(1)}k` : m.toFixed(1));
 
 /**
- * A composition as one stacked bar `px` wide, each segment labelled inside as far as it fits (ui/panel.ts fit). Floors:
- * every element from 1% keeps its icon, Rad from 0.5% its share too (fuel to find); flex shares the rest.
+ * A composition as one stacked bar `px` wide: every element from 0.5% keeps icon · share, the biggest also their names
+ * while there is room (ui/panel.ts widths), so a segment's width follows its label, not its share. Flex weights, so the
+ * bar still fills when its real width differs.
  */
-const mixBar = (c: Comp, px: number) =>
-  ELEMENTS.filter(([e]) => (c[e] ?? 0) >= 0.005).map(([e, name, col, svg]) => {
-    const f = c[e]!, v = share(f), k = Math.max(fit(f * px, name, v), e === 'radio' ? 2 : f >= 0.01 ? 1 : 0);
-    return `<i style="flex:${f.toFixed(3)} 1 0;min-width:${k > 1 ? Math.ceil(13 + v.length * 5.4) : k ? 13 : 2}px;background:${col}">${k ? `<svg class="icon" viewBox="0 0 12 12" aria-hidden="true">${svg}</svg>` : ''}${label(k, name, v)}</i>`;
+const mixBar = (c: Comp, px: number) => {
+  const els = ELEMENTS.filter(([e]) => (c[e] ?? 0) >= 0.005);
+  const w = widths(px, els.map(([e, name]) => [c[e]!, name, share(c[e]!)]));
+  return els.map(([e, name, col, svg], i) => {
+    const v = share(c[e]!);
+    return `<i style="flex:${w[i].toFixed(1)} 1 0;background:${col}"><svg class="icon" viewBox="0 0 12 12" aria-hidden="true">${svg}</svg><span>${label(fit(w[i], name, v), name, v)}</span></i>`;
   }).join('');
+};
 
 /** What kind of rock a composition reads as. */
 function rockName(b: Body) {
@@ -108,43 +105,124 @@ const tierOf = (m: number) => TIERS[tierAt(m)];
 const FAST_HINT = 2;
 const FLASH_S = 1.2;
 let fastHits = 0, flashed = 0;
+/** The speed row's tooltip (every stage): `v` and the predicted hit in your diameters a second. */
+export const speedTip = (v: number, aim?: Aim, moon = false) =>
+  `Speed ${speedText(v)}: your own diameters a second. No drag in space: thrust against your motion to brake.\nGreen, under ${V_STICK}: rocks stick, you eat them.\nAmber, to ${3 * V_STICK}: rough hits.\nRed: hits bounce or break.\nAll red: your target outweighs you, slow is not safe.${aim && !moon ? `\nThe small mark under it: your speed into your target, ${speedText(aim.speed)}.` : ''}`;
+/** The composition bar's tooltip (every stage). */
+export const mixTip = (c: Comp) =>
+  `What you are made of:\n${mixRows(c)}\nWater makes seas, gas makes air, sunk metal makes the magnetic field, Rad keeps a core churning and fuels reactors.`;
 /** A hit with you as the actor (field.ts). */
 export function noteHit(h: Hit) {
   if ((h.kind === 'bounce' || h.kind === 'graze') && h.speed > V_STICK) [fastHits, flashed] = [fastHits + 1, FLASH_S];
 }
 
-export function createHud() {
+/** `input`, `surface` (the canvas): section headers take clicks (input.claim), tooltips follow the mouse (ui/tip.ts). */
+export function createHud(input?: Controls, surface?: HTMLElement) {
   const root = document.createElement('div');
   root.id = 'game-hud';
   root.dataset.stage = 'asteroid'; // planet/hud.ts sets 'planet'
   root.innerHTML = `
     <div class="mark" hidden><b></b></div>
     <section class="panel ui-panel me">
-      <div class="head"><em class="age">Age I</em><b class="name"></b><span class="mass"></span></div>
-      <div class="goal"><div class="bar"><i></i></div><div class="label"><span class="to"></span><span class="pips"></span><span class="left"></span></div></div>
-      <div class="speed">${icon('speed')}<em class="cap">Speed</em><div class="gauge"><i class="zone stick" style="width:${pct(gx(V_STICK))}"></i><i class="zone messy" style="width:${pct(gx(3 * V_STICK) - gx(V_STICK))}"></i><i class="zone bounce"></i><i class="needle you"></i><i class="needle hit"></i></div><span class="v"></span></div>
-      <div class="mix"></div>
-      <div class="cells rock">${cell('heat', 'temp', 'Temp')}${cell('wet', 'water', 'Water')}${cell('air', 'air', 'Air')}</div>
+      <div class="head"><em class="age" data-tip="age">Age I</em><b class="name" data-tip="tier"></b><span class="mass" data-tip="mass"></span></div>
+      <div class="goal" data-tip="goal"><div class="bar"><i></i></div><div class="label"><span class="to"></span><span class="left"></span></div></div>
+      <div class="sec world" data-s="world">${head('world', 'world', 'World')}<div class="body">
+        <div class="speed row" data-tip="speed">${icon('speed')}<em class="lb">Speed</em><div class="gauge"><i class="zone stick" style="width:${pct(gx(V_STICK))}"></i><i class="zone messy" style="width:${pct(gx(3 * V_STICK) - gx(V_STICK))}"></i><i class="zone bounce"></i><i class="needle you"></i><i class="needle hit"></i></div><span class="v"></span></div>
+        <div class="mix" data-tip="mix"></div>
+        <div class="cells rock">${cell('heat', 'temp', 'Temp')}${cell('wet', 'water', 'Water')}${cell('air1', 'air', 'Air')}</div>
+      </div></div>
       <div class="tip"></div>
     </section>
-    <section class="panel ui-panel target" hidden><div class="head"><b class="name"></b><span class="ratio"></span></div><div class="sub"></div>
-      <span class="moonsize" hidden>Moon-size</span>
-      <div class="mix"></div>
-      <div class="chips" hidden>${RIVAL_CHIPS.map(([k, label, ic]) => `<span data-k="${k}" title="${label}">${icon(ic)}</span>`).join('')}<em class="life"></em></div></section>`;
+    <section class="panel ui-panel target" hidden><div class="head"><b class="name"></b><span class="ratio" data-tip="t-ratio"></span></div><div class="sub"></div>
+      <span class="moonsize" data-tip="t-moonsize" hidden>Moon-size</span>
+      <div class="mix" data-tip="t-mix"></div>
+      <div class="chips" data-tip="t-chips" hidden>${RIVAL_CHIPS.map(([k, , ic]) => `<span data-k="${k}">${icon(ic)}</span>`).join('')}<em class="life"></em></div></section>`;
   document.body.appendChild(root);
-  const $ = finder(root), due = throttle(), mark = $('.mark');
-  let lastTier = -1, comet = false, mine = '', theirs = '', body: Body | undefined;
+  const $ = finder(root), due = throttle(), mark = $('.mark'), card = $('.me'), target = $('.target');
+  let lastTier = -1, comet = false, mine = '', theirs = '', body: Body | undefined, seenAim: Aim | undefined, seenT: Body | undefined, seenMoon = false, seenV = 0;
   const seen = new Set<string>((load('hints') ?? '').split(',').filter(Boolean));
+
+  // Open sections: the defaults by height, then your own toggles in order (newest last: "energy:1 world:0"); under OPEN_ONE
+  // only the newest section you opened besides World stays open. Each section's .open class follows (sync, at PERIOD).
+  // Phones keep their own one open section in memory, never saved: a phone starts compact and never edits desktop's set.
+  let picks = (load('hudOpen') ?? '').split(' ').filter((p) => /^[a-z]+:[01]$/.test(p)).map((p) => [p.slice(0, -2), p.endsWith('1')] as [string, boolean]);
+  let phoneOpen = '';
+  const opened = () => {
+    if (PHONE.matches) return new Set(phoneOpen ? [phoneOpen] : []);
+    const tall = innerHeight >= OPEN_ONE, on = new Set(tall ? ['world', 'people', 'energy'] : ['world']);
+    for (const [k, v] of picks) v ? on.add(k) : on.delete(k);
+    if (!tall) {
+      const keep = picks.filter(([k, v]) => v && k !== 'world').at(-1)?.[0];
+      for (const k of [...on]) if (k !== 'world' && k !== keep) on.delete(k);
+    }
+    return on;
+  };
+  let on = opened();
+  const sync = () => {
+    on = opened(); // each time: the window may have turned into a phone's or back (a resize, a rotation)
+    // A phone's open section that has gone (the star left, a new run): back to compact.
+    if (PHONE.matches && on.has(phoneOpen) && !card.querySelector<HTMLElement>(`.sec[data-s="${phoneOpen}"]`)?.offsetHeight) [phoneOpen, on] = ['', new Set()];
+    card.querySelectorAll<HTMLElement>('.sec[data-s]').forEach((e) => e.classList.toggle('open', on.has(e.dataset.s!)));
+  };
+  const inside = (e: HTMLElement, x: number, y: number) => {
+    const r = e.getBoundingClientRect();
+    return r.width > 0 && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+  };
+  const secAt = (x: number, y: number) => [...card.querySelectorAll<HTMLElement>('[data-sec]')].find((h) => inside(h, x, y));
+  let guard = 0; // until then a press anywhere on the card is the HUD's (and does nothing): the header just moved under it
+  input?.claim((x, y) => !root.hidden && (!!secAt(x, y) || (performance.now() < guard && inside(card, x, y))), (x, y) => {
+    const k = secAt(x, y)?.dataset.sec;
+    if (!k || performance.now() < guard) return;
+    [guard, on] = [performance.now() + GUARD_MS, opened()];
+    if (PHONE.matches) return void ((phoneOpen = on.has(k) ? '' : k), sync());
+    const shut = innerHeight < OPEN_ONE && k !== 'world' && !on.has(k) ? [...on].filter((o) => o !== 'world') : []; // the one it replaces
+    picks = [...picks.filter(([p]) => p !== k && !shut.includes(p)), ...shut.map((o) => [o, false] as [string, boolean]), [k, !on.has(k)]];
+    sync();
+    save('hudOpen', picks.map(([p, v]) => `${p}:${+v}`).join(' '));
+  });
+  const tip = surface && createTip({ card: () => [card, target], text: tipText, surface, host: root });
+
+  // Age I's texts, and the target card's (later stages answer first for the keys they own).
+  addTips((key) => {
+    const me = body, t = seenT;
+    if (key.startsWith('t-')) {
+      if (!t || !me) return null;
+      const r = t.m / me.m;
+      if (key === 't-ratio') return `Its mass: ×${r < 0.001 ? '<0.001' : r.toPrecision(2)} yours (${big(t.m)}).\nThe glow and these brackets: green safe to eat, red deadly.`;
+      if (key === 't-mix') return `What it is made of:\n${mixRows(t.comp)}`;
+      if (key === 't-moonsize') return 'Moon-size, lit when it could be your moon: 0.2–12.5% of your mass and narrow enough for a ring.\nCatch it by flying it onto a free ring and matching its speed until the ring closes.';
+      if (key === 't-chips') return 'A rival world\'s life conditions: Water, Air, Magnetic field.\nDim: missing. Amber: weak. Green: good.\nThe word at the right: how far its life has come.';
+      return null;
+    }
+    if (!me) return null;
+    if (key === 'speed') return speedTip(seenV, seenAim, seenMoon);
+    if (key === 'mix') return mixTip(me.comp);
+    if (root.dataset.stage !== 'asteroid') return null;
+    const i = tierAt(me.m), [from, name] = TIERS[i], next = TIERS[i + 1];
+    switch (key) {
+      case 'age': return `Age I: from dust to a world. Grow by eating smaller rocks.\nAt ${big(AGE_GOAL)} mass you are a Planetoid: Age II, worlds and life.`;
+      case 'tier': return `${name}: your size class.${next ? `\nNext: ${next[1]} at ${big(next[0])} mass.` : ''}`;
+      case 'mass': return `Mass ${big(me.m)}. Each rock you eat adds its mass: touch smaller rocks slowly.`;
+      case 'goal': return next ? `Next tier: ${next[1]} at ${big(next[0])} mass (from ${big(from)}).\nAbout ${Math.ceil(Math.log(next[0] / me.m) / Math.log(1.1))} meals, a meal counted as +10% of you.` : 'Final tier of Age I.';
+      case 'heat': return `Heat ${Math.round(kelvin(me.heat))} K. Fast hits warm you; you cool slowly.\nOver ${Math.round(kelvin(MOLTEN))} K you are molten: rocks stick to you up to ${1.5 * V_STICK} diameters a second.`;
+      case 'wet': return `Water ${share(me.comp.ice ?? 0)} of your mass, now ${WATER[waterState(me.m, me.heat, me.comp.gas ?? 0)].toLowerCase()}.\nIt makes the seas of your world later: life wants 30–60%.`;
+      case 'air1': return `Air: the gas your gravity holds, from 1.0k mass.\nLife later wants 0.7–10 atm: eat gas-rich rocks.`;
+    }
+    return null;
+  });
 
   return {
     /** Shows or hides the whole HUD (e.g. under the game over card). */
     set visible(v: boolean) {
       root.hidden = !v;
+      if (!v) tip?.hide();
     },
     /** `moon`: a moon you selected, shown in the target card; `world`: the camera's container, to place the marker. */
     update(dt: number, me: Body, aim: Aim | undefined, moon?: { body: Body }, world?: Container) {
+      tip?.update(dt);
       // The marker follows its body every frame (the cards update at PERIOD).
       const t = moon?.body ?? aim?.target;
+      [seenAim, seenT, seenMoon] = [aim, t, !!moon];
       mark.hidden = !t?.m || !world;
       if (t?.m && world) {
         const p = world.toGlobal(t.motion), s = Math.max(22, 2 * t.r * world.scale.x + 16);
@@ -153,6 +231,7 @@ export function createHud() {
       }
       if (!due(dt) || !me.m) return;
       if (me !== body) [body, lastTier] = [me, -1]; // a new run or a respawn: the HUD outlives runs
+      sync(); // stage sections come and go
       const ageOne = root.dataset.stage === 'asteroid';
       flashed = Math.max(0, flashed - PERIOD);
       $('.speed').classList.toggle('flash', flashed > 0 && me.m < AGE_GOAL);
@@ -188,20 +267,20 @@ export function createHud() {
       // Against a heavier target, slow isn't "eat": the eat and rough zones turn red.
       $('.speed').classList.toggle('heavy', !!aim && aim.target.m > me.m);
       const v = Math.hypot(me.motion.vx, me.motion.vy) / (2 * me.r);
-      $('.speed .v').textContent = speedText(v);
+      $('.speed .v').textContent = speedText((seenV = v));
       $('.speed .you').style.left = pct(gx(v));
       const hit = $('.speed .hit');
       hit.hidden = !aim;
       if (aim) [hit.style.left, hit.style.background] = [pct(gx(aim.speed)), hex(aim.color)];
 
       // What you are made of: rebuilt only when the rounded shares change.
-      const m = mixBar(me.comp, MIX_ME);
+      const m = mixBar(me.comp, innerPx($('.me .mix')));
       if (m !== mine) $('.me .mix').innerHTML = mine = m;
 
       if (ageOne) {
         // Head and goal: the tier, the bar to the next one.
         $('.me .name').textContent = name;
-        $('.me .mass').textContent = me.m.toFixed(1);
+        $('.me .mass').textContent = big(me.m);
         $('.goal i').style.width = next ? bar((me.m - from) / (next[0] - from)) : '100%';
         $('.goal .to').textContent = next ? `→ ${next[1]}` : 'Final tier';
         $('.goal .left').textContent = next ? `~${Math.ceil(Math.log(next[0] / me.m) / Math.log(1.1))} meals` : '';
@@ -214,10 +293,10 @@ export function createHud() {
         $('.rock .wet').hidden = ice < 0.005;
         $('.rock .wet .v').textContent = WATER[waterState(me.m, me.heat, gas)];
         $('.rock .wet i').style.width = bar(ice / 0.5);
-        $('.rock .air').hidden = air < 0.01 && me.m < AIR_HINT_M;
-        $('.rock .air .v').textContent = air >= 0.01 ? `${air.toFixed(air < 1 ? 2 : 1)} atm` : hold(me.m) <= 0 ? 'at 1.0k' : 'none';
-        $('.rock .air i').style.width = bar(air / 1);
-        $('.rock').hidden = heat.hidden && $('.rock .wet').hidden && $('.rock .air').hidden;
+        $('.rock .air1').hidden = air < 0.01 && me.m < AIR_HINT_M;
+        $('.rock .air1 .v').textContent = air >= 0.01 ? `${air.toFixed(air < 1 ? 2 : 1)} atm` : hold(me.m) <= 0 ? 'at 1.0k' : 'none';
+        $('.rock .air1 i').style.width = bar(air / 1);
+        $('.rock').hidden = heat.hidden && $('.rock .wet').hidden && $('.rock .air1').hidden;
         // The tip: tags earned, then the closest one not earned yet.
         const has = [...(me.comet ? ['Comet'] : []), ...TAGS.filter((t) => (me.comp[t.el] ?? 0) >= t.min).map((t) => t.name)];
         const want = TAGS.filter((t) => (me.comp[t.el] ?? 0) < t.min)

@@ -251,10 +251,10 @@ const lossFrac = (d: number) => (d < 0.1 ? 0 : d < 1 ? (0.5 * (d - 0.1)) / 0.9 :
 export type Side = { d: number; rest: number; pieces: number; dust: number; heat: number };
 
 /** `v`: impact speed in p's OWN diameters/s, so a crumb hitting a planet takes the hit at its own scale and splashes. */
-function side(p: Phys, o: Phys, v: number, warhead = 0): Side {
+function side(p: Phys, o: Phys, v: number): Side {
   const { m, comp: c } = p, share = o.m / (m + o.m);
-  // Each body takes its centre-of-mass share of the impact, scaled by relative hardness (plus a slug's linear warhead term).
-  const q = (0.5 * v * v * share ** 2 + warhead * share) * ((0.5 + hardness(o)) / (0.5 + hardness(p)));
+  // Each body takes its centre-of-mass share of the impact, scaled by relative hardness.
+  const q = 0.5 * v * v * share ** 2 * ((0.5 + hardness(o)) / (0.5 + hardness(p)));
   const d = q / (Q0 * durability(p) * m ** 0.2);
   const loss = lossFrac(d), lost = m * loss;
   const solid = lost * (1 - (c.ice ?? 0) - (c.gas ?? 0)); // ice and gas boil off
@@ -264,6 +264,32 @@ function side(p: Phys, o: Phys, v: number, warhead = 0): Side {
 
 /** Speed below which two bodies stick: higher if either is molten (molten is sticky). */
 export const stickSpeed = (a: Phys, b: Phys) => ((a.heat ?? 0) > MOLTEN || (b.heat ?? 0) > MOLTEN ? V_STICK * 1.5 : V_STICK);
+
+// Rock on rock (field.ts rock pairs, body.ts resolve). Friction is Coulomb: MU × the normal impulse, never past zero sliding.
+// 0.6: dry rock on rock is 0.6–0.85 whatever the rock (Byerlee); dry metal and 100 K ice sit in the same range.
+export const MU = 0.6;
+// Relief: no body is a smooth sphere. Sliding one contact length (r_T + r_P) across the other costs ROUGH of the sliding
+// speed, load or not (a skim at orbital speed presses on nothing, so Coulomb alone never slows it). Below escape speed only.
+export const ROUGH = 0.25;
+/**
+ * One contact of a rock pair, per unit reduced mass: `vn`, `vt` = relative speed along the normal (< 0 closing) and the
+ * tangent, `e` = restitution, `slide` = distance slid this frame in contact lengths. Returns the changes of vn and vt
+ * and the energy they take out of the pair's motion (≥ 0): that is the hit's heat.
+ */
+export function rub(vn: number, vt: number, e: number, slide = 0) {
+  const dn = vn < 0 ? -(1 + e) * vn : 0, dt = -Math.sign(vt) * Math.min(MU * dn + ROUGH * slide * Math.abs(vt), Math.abs(vt));
+  return { dn, dt, lost: 0.5 * (vn * vn - (vn + dn) ** 2 + vt * vt - (vt + dt) ** 2) };
+}
+// Energy to heat: an equal solid pair's head-on bounce (restitution 0.5 loses ¾, half each) heats like impactHeat's kinetic term.
+const HEAT_WORK = (2 * HEAT_KIN) / (V_STICK ** 2 * 0.5 * 0.75);
+/** Share of a pair's lost energy that heats `p`: the softer body deforms more (the damage rule's hardness ratio). */
+export const workShare = (p: Phys, o: Phys) => (0.5 + hardness(o)) / (1 + hardness(p) + hardness(o));
+/** Heat `p` gains from energy E (mass × (units/s)²): over its heat capacity, in its own diameters like impactHeat. */
+export const workHeat = (p: Phys, E: number) => (HEAT_WORK * E) / (heatCap(p.comp) * p.m * (2 * (p.r ?? radiusOf(p.m, p.comp))) ** 2);
+// Near-equal rocks: the tougher one is T (it stays whole, the other breaks on it). m · toughness^TOUGH_K; toughness spans
+// 74× at most (pure metal .. hot loose gas), so a body under 65% of the other's mass never leads (1.36× over COMP).
+const TOUGH_K = 0.1;
+export const rank = (p: Phys) => p.m * (durability(p) * (0.5 + hardness(p))) ** TOUGH_K;
 
 /**
  * Collision regimes (the doc's "Çarpışma ve Dönüşüm" table). T = the heavier body, P = the lighter.
@@ -281,21 +307,18 @@ export type Regime = 'eat' | 'eaten' | 'accrete' | 'graze' | 'bounce';
 export type CollideOpts = {
   stick?: number; // v_m in T's diameters/s (default stickSpeed); rock pairs pass their escape-based value (field.ts)
   graze?: number; // share of sliding speed that counts toward damage (default GRAZE; rock pairs 1)
+  lead?: boolean; // `a` is T whatever the masses: the caller ranked the pair (field.ts rock pairs: rank)
+  rub?: number; // rock pairs: the frame's dt, s. resolve (body.ts) adds friction, heat from the energy lost, the meal's own heat
   player?: boolean; // `a` is the player: swallowed only past EATEN_MARGIN, never partly accreted
-  warhead?: number; // `a` is a mass-driver slug fired by a body of this diameter (world units): see WARHEAD
   repel?: boolean; // nothing changes hands: a would-be merge or accretion is a bounce (a solid world bouncing a small body)
   world?: boolean; // the heavier is your world (Age II): the hit adds worldHeat to it
 };
-// Mass-driver slugs: the centre-of-mass share² leaves a small fast projectile nearly harmless, so a slug adds a linear
-// "warhead" term on its target: q += WARHEAD · s · ½ (u / D)², s = the slug's share of the pair, u = its damage speed,
-// D = the shooter's diameter. Tuned so a 1% moon chips at every size (table in test/civilization/rules.test.ts).
-const WARHEAD = 0.5;
 /** `a` is the actor ("you" in the doc). `closing` / `sliding`: head-on and tangential speed at contact, world units/s. */
 export function collide(pa: Phys, pb: Phys, closing: number, sliding = 0, o: CollideOpts = {}) {
   const ra = pa.r ?? radiusOf(pa.m, pa.comp), rb = pb.r ?? radiusOf(pb.m, pb.comp);
-  const aT = o.player ? pb.m < EATEN_MARGIN * pa.m : pa.m >= pb.m, rT = aT ? ra : rb, rP = aT ? rb : ra; // the player's margin works both ways
+  const aT = o.lead || (o.player ? pb.m < EATEN_MARGIN * pa.m : pa.m >= pb.m), rT = aT ? ra : rb, rP = aT ? rb : ra; // the player's margin works both ways
   const V = Math.hypot(closing, sliding), u = Math.hypot(closing, (o.graze ?? GRAZE) * sliding);
-  const a = side(pa, pb, u / (2 * ra)), b = side(pb, pa, u / (2 * rb), o.warhead ? WARHEAD * 0.5 * (u / o.warhead) ** 2 : 0);
+  const a = side(pa, pb, u / (2 * ra)), b = side(pb, pa, u / (2 * rb));
   const vm = (o.stick ?? stickSpeed(pa, pb)) * 2 * rT; // world units/s
   const sT = aT ? a : b, sP = aT ? b : a;
   let kind: Regime, xi = 0;

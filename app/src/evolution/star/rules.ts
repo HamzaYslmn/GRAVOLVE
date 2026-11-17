@@ -132,17 +132,6 @@ export const dysonEnergy = (M: number, cover: number) => DYSON_E * Math.sqrt(lum
 // Fun first: once the star is yours your people lift LIFT ore/s off it, so a world with mined-out moons still finishes.
 export const LIFT = 0.2;
 
-// ---- Energy beam (concept 4): from BEAM_COVER of Dyson cover, Fire works like a gun (civilization/combat.ts). Its power
-// P = √(cover / BEAM_COVER) × M^0.3 scales the bite (civilization/rules.ts BEAM_BITE) and the heat, BEAM_K × P kelvin.
-// A shot costs BEAM_COST of the star's mass; none that would leave it under BEAM_MIN suns.
-export const BEAM_COVER = 0.2;
-const BEAM_K = 20;
-export const BEAM_COST = 0.002;
-export const BEAM_MIN = 0.3;
-export const beamPower = (M: number, cover: number) => Math.sqrt(clamp(cover, 0, 1) / BEAM_COVER) * M ** 0.3;
-export const beamK = (P: number) => BEAM_K * P;
-export const beamFed = (M: number) => M * (1 - BEAM_COST) >= BEAM_MIN;
-
 // ---- Star engine (from the link): your thrust steers the star. ENGINE × thrust × (ENGINE_BASE + √(Dyson E/s ÷ 10)),
 // capped at 2×, with drag ENGINE_DRAG (coasts to a stop in a few seconds).
 const ENGINE = 2;

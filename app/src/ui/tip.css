@@ -1,0 +1,21 @@
+/* The shared HUD tooltip (tip.ts): the .ui-panel glass beside the hovered card, above it, never under the mouse's input. */
+#game-hud .tooltip {
+  position: absolute;
+  z-index: 4; /* above the cards, under the reticle (5) */
+  box-sizing: border-box;
+  width: max-content;
+  max-width: 280px;
+  display: grid;
+  gap: var(--ui-s2);
+  padding: var(--ui-s3);
+  font-size: var(--ui-value);
+  line-height: 1.35;
+  color: var(--ui-text);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  animation: tip-in 80ms ease-out;
+}
+#game-hud .tooltip .tooltip-row { display: flex; justify-content: space-between; gap: var(--ui-s4); }
+#game-hud .tooltip .tooltip-row > :first-child { color: var(--ui-muted); }
+#game-hud .tooltip .tooltip-row > :last-child { white-space: nowrap; }
+@keyframes tip-in { from { opacity: 0; } }

@@ -9,7 +9,6 @@ import { K_PER_HEAT } from '../../core/water';
 import { thrustOf } from '../asteroid/player';
 import { AGE_GOAL, density } from '../asteroid/rules';
 import { moonSlots } from '../planet/rules';
-import { BEAM_BITE } from '../civilization/rules';
 import type { Civilization } from '../civilization/stage';
 import { createStarHud } from './hud';
 import { createColonies } from './colony';
@@ -18,7 +17,7 @@ import { createStarView, starPage, type Hauler, type StarView } from './look';
 import { YOU } from '../../render/tech';
 import { carry, catchPlanet, release, ride, type Planet } from './system';
 import {
-  BEAM_COST, BEAM_COVER, beamFed, beamK, beamPower, capacity, CELL, dysonEnergy, GROW, engineAccel, ENGINE_DRAG, FAR_LIGHT, FIRST, FLARE_DOSE, FLARE_MEAN, FLARE_RISE, FLARE_S, FLARE_X, flareK, flux, glare,
+  capacity, CELL, dysonEnergy, GROW, engineAccel, ENGINE_DRAG, FAR_LIGHT, FIRST, FLARE_DOSE, FLARE_MEAN, FLARE_RISE, FLARE_S, FLARE_X, flareK, flux, glare,
   BAND, inBand, layout, linkStep, liquidBand, ORBIT_RATE, orbitGoal, PLANET_R, PANELS, PULL_X, roche, starMu, starPull, SEGMENTS, STAR_CHANCE, starColor, starKelvin, starMass,
   starName, starRadius, sunlight, tearRate, warmth,
 } from './rules';
@@ -33,8 +32,6 @@ import {
 //             join it on outer rings (system.ts), each growing it GROW. Touching another star, the lighter is swallowed:
 //             losing yours frees your world (LOST s of grace from the well) to link another.
 //   Dyson:    the civilization builds it (dyson.ts); energy = light × coverage feeds the civilization (`dyson`); the glow dims.
-//   Beam:     from BEAM_COVER, Fire shoots an energy beam (civilization/combat.ts reads `beam`); each shot burns BEAM_COST
-//             of the star's mass.
 
 type Star = {
   key: string; m: Motion; M: number; K: number; glow: number; R: number; color: number; name: string;
@@ -49,10 +46,7 @@ export type StarState = {
   wait?: string; // why the Dyson sphere is not building
   fleetWait?: string; // why the next colony fleet waits (colony.ts)
   planets: number; cap: number; colonies: number; // system planets your star carries / can carry, of them colonies
-  beamOff?: string; // why the beam refuses
 };
-/** Your star's energy beam (civilization/combat.ts): kelvin a shot delivers now (0: none), its bite (share of your mass), `burn` pays a shot. */
-export type Beam = { k: number; bite: number; off?: string; burn: () => void };
 type Light = { flux: number; warm: number; dyson: number; sun: number; at: number };
 
 const FLARE_FALL = 1.2; // s the flare fades after its pulse
@@ -79,11 +73,6 @@ export function createStarStage(layer: Container, me: Body, renderer: Renderer, 
   const lay = (s: Star) => layout(s.R, me.r, moonSlots(me.m)); // your orbit range and the rings round a star (rules.ts)
   const colonies = createColonies(layer, renderer, me, civ, kit.fx, news);
   const dyson = createDyson(civ, kit, news);
-  const beam: Beam = { k: 0, bite: 0, burn() {
-    if (!own) return;
-    grow(own, own.M * (1 - BEAM_COST));
-    kit.fx.flash(own.m.x, own.m.y, own.R * 1.6, 0, 0); // the star gives up a little of itself
-  } };
 
   const make = (key: string, x: number, y: number, rnd: () => number): Star => {
     const s = {
@@ -191,14 +180,6 @@ export function createStarStage(layer: Container, me: Body, renderer: Renderer, 
       kit.fx.flash(b.motion.x, b.motion.y, Math.max(b.r * 3, s.R * 0.08), 6, b.r * 2);
       drop(b);
     }
-  }
-
-  /** Your star's beam this frame: on from BEAM_COVER while the star can feed it. */
-  function aim(s: Star | undefined) {
-    const lit = !!s && s.placed / PANELS >= BEAM_COVER;
-    beam.off = lit && !beamFed(s.M) ? 'Beam off: the star is too small to feed it' : undefined;
-    const P = lit && !beam.off ? beamPower(s.M, s.placed / PANELS) : 0;
-    [beam.k, beam.bite] = [beamK(P), BEAM_BITE * P];
   }
 
   /** Sprites only for stars whose far light can reach you (and yours); only the star you are at links. */
@@ -349,7 +330,6 @@ export function createStarStage(layer: Container, me: Body, renderer: Renderer, 
       name: near.name, kelvin: near.K, mass: near.M, color: near.color, x, link: near.link, owned: near.owned, cover,
       energy: near.owned ? dysonEnergy(near.M, cover) : 0, band: liquidBand(pressure, near.glow, cover), warm: out.warm, targeted: !aimed && x < NEAR_X,
       wait: near.owned ? dyson.wait : undefined, fleetWait: near.owned ? colonies.wait : undefined, planets: near.owned ? planets.length : 0, cap: capacity(near.M), colonies: colonies.count,
-      beamOff: near.owned ? beam.off : undefined,
     };
     hud.update(real, state, x < NEAR_X || near.owned);
   }
@@ -400,9 +380,8 @@ export function createStarStage(layer: Container, me: Body, renderer: Renderer, 
         [s.build, s.haulers.length] = [undefined, 0]; // a segment in flight would land past the sphere
       } else grow(s, Number(cmd));
     },
-    /** Stars and your system planets (test hooks); your energy beam (combat.ts). */
+    /** Stars and your system planets (test hooks). */
     stars,
-    beam,
     planets,
     /**
      * `aimed`: the HUD has a body target (the star shows in the target panel only without one); `pressure`: your air (atm).
@@ -414,7 +393,6 @@ export function createStarStage(layer: Container, me: Body, renderer: Renderer, 
       const pm = me.motion, ci = Math.round((pm.x - origin.x) / CELL), cj = Math.round((pm.y - origin.y) / CELL);
       for (let i = ci - 1; i <= ci + 1; i++) for (let j = cj - 1; j <= cj + 1; j++) cell(i, j);
       const yours = own, near = yours ?? nearest(), rocheX = roche(density(me.comp));
-      aim(yours);
       views(near, dt);
       const x = near ? visit(near, out, dt, zoom, pressure, rocheX) : Infinity;
       gravity(dt);

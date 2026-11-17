@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { shapeThrust } from '../../src/core/entity.ts';
 import { K_PER_HEAT, kelvin } from '../../src/core/water.ts';
 import { HIT_MIN, SHIELD_K, shieldMeet, type Shield } from '../../src/evolution/civilization/rules.ts';
-import { bakes, BURN_MAX, burnShare, COMP, collide, pieceShares, SPREAD, GIANT_HIT, gravitates, pairPull, MAX_HEAT, MOLTEN, worldHeat, worldOpts, contactTime, shellContact, shellPass, shellSees, V_STICK, critSpeed, damage, DEATH_D, durability, heatCap, impactHeat as hitHeat, mergeHeat, TOP, hardness, impactHeat, massOf, need, reachGround, radiusOf, R_CAP, density, roundR, roundShape, START_R, type CollideOpts, type Comp, type Phys } from '../../src/evolution/asteroid/rules.ts';
+import { bakes, MU, rank, rub, workHeat, workShare, BURN_MAX, burnShare, COMP, collide, pieceShares, SPREAD, GIANT_HIT, gravitates, pairPull, MAX_HEAT, MOLTEN, worldHeat, worldOpts, contactTime, shellContact, shellPass, shellSees, V_STICK, critSpeed, damage, DEATH_D, durability, heatCap, impactHeat as hitHeat, mergeHeat, TOP, hardness, impactHeat, massOf, need, reachGround, radiusOf, R_CAP, density, roundR, roundShape, START_R, type CollideOpts, type Comp, type Phys } from '../../src/evolution/asteroid/rules.ts';
 
 const near = (a: number, b: number, tol: number) => assert.ok(Math.abs(a - b) <= tol, `${a} vs ${b}`);
 // Collision numbers below use the loose radius (the size cap, checked further down, only touches planets).
@@ -276,4 +276,29 @@ console.log(`rules ok: slow meal ${slow.a.rest.toFixed(0)}+${slow.b.rest.toFixed
   assert.ok(!bakes(69e3, icy, COMP.icy, 0, 1) && bakes(69e3, icy, COMP.icy) && bakes(69e3, icy, COMP.icy, 0.5, 1), 'rough icy 69k: unbaked until molten');
   assert.ok(!bakes(500, radiusOf(500, COMP.icy), COMP.icy) && !bakes(500, radiusOf(500, COMP.icy), COMP.icy, 1), 'nothing under ROUND_M bakes');
   console.log(`fragments ok: ${pieceShares(6, SPREAD).map((v) => (100 * v).toFixed(1)).join('/')}% of the kept mass (6 pieces), largest:smallest ${((1 + SPREAD) / (1 - SPREAD)).toFixed(1)}; rough bodies bake only once molten`);
+}
+
+// Rock pairs rub (body.ts resolve, rules.ts rub): energy only leaves the motion, sliding never reverses, friction is capped.
+{
+  for (const [vn, vt, e, slide] of [[-5, 3, 0.5, 0], [-1, 20, 0.15, 0.3], [2, -7, 0.5, 0.1], [-3, 0, 0.5, 0], [-0.2, -9, 0, 2]]) {
+    const r = rub(vn, vt, e, slide);
+    assert.ok(r.lost >= -1e-12, 'a contact never adds energy');
+    assert.ok(Math.abs(vt + r.dt) <= Math.abs(vt) + 1e-12 && (vt + r.dt) * vt >= -1e-12, 'sliding slows, never reverses');
+    assert.ok(Math.abs(r.dt) <= MU * r.dn + 0.25 * slide * Math.abs(vt) + 1e-12, 'friction is capped by the load and the relief');
+  }
+  const free = rub(2, 5, 0.5); assert.ok(free.dn === 0 && free.dt === 0 && free.lost === 0, 'leaving, no relief: nothing happens');
+  // Calibration: an equal stony head-on bounce heats each like impactHeat's kinetic term over heat capacity.
+  const s1 = P(1000, COMP.stony), v = 8 * 2 * R(s1), r = rub(-v, 0, 0.5), E = (r.lost * s1.m) / 2;
+  near(workHeat(s1, E * workShare(s1, s1)), (1.5 * 0.5 * (v / (2 * R(s1)) / 8) ** 2) / heatCap(COMP.stony), 1e-9);
+  const soft = P(10, COMP.icy), hard = P(10, COMP.metallic);
+  near(workShare(soft, hard) + workShare(hard, soft), 1, 1e-12);
+  assert.ok(workShare(soft, hard) > workShare(hard, soft), 'the softer body takes more of the heat');
+  // Near-equal masses: the tougher leads; never a body much lighter than the other.
+  const comps = Object.values(COMP) as Comp[];
+  for (const ca of comps) for (const cb of comps) for (const h of [0, 4, 6]) for (const rb of [0, 1])
+    assert.ok(rank(P(1, ca, { heat: h, rubble: rb })) < rank(P(1.4, cb)), 'a body under 1/1.4 of the other never leads');
+  assert.ok(rank(P(0.96, COMP.metallic)) > rank(P(1, COMP.stony)) && rank(P(0.9, COMP.metallic)) < rank(P(1, COMP.stony)), 'metal leads stone at 0.96, not at 0.9');
+  assert.equal(collide(P(0.96, COMP.metallic), P(1, COMP.stony), 0.1, 0, { lead: true }).t, 'a', 'lead: the caller ranked the pair');
+  assert.equal(collide(P(0.96, COMP.metallic), P(1, COMP.stony), 0.1).t, 'b', 'without lead T is by mass');
+  console.log('rub ok: friction capped, energy only lost, heat by softness, the tougher of near-equal rocks leads');
 }

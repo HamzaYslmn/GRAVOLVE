@@ -5,8 +5,9 @@ import type { Body } from '../asteroid/body';
 import type { Ctx } from './combat';
 import { bump, bumps, MISS_V, sparks } from './crash.ts';
 import {
-  approach, BRAKE, circuit, follow, H_TOP, H_TURN, inArc, jink, jinkStep, leash, M_TOP, M_TURN, MAX_DT, P_ACC, P_TOP, P_TURN, ROW, startJink, steps, strafe, thrust, want, type Circler, type Craft, type Jink, type Strafer,
+  approach, BRAKE, circuit, follow, H_TOP, H_TURN, inArc, jink, jinkStep, leash, M_TOP, M_TURN, MAX_DT, P_ACC, P_TOP, P_TURN, startJink, steps, strafe, thrust, want, wedge, type Circler, type Craft, type Jink, type Strafer,
 } from './flight.ts';
+import { delay, jumpAt, mend, pressed, ROUT_V, routAt, soak, spool, type Wake } from './escape.ts';
 import { menace, nearest, pull, trigger, type Gun, type Trigger } from './guns.ts';
 import { clear, DODGE, free, LOOK, PAD, reachOf, scan, type Disc, type Near } from './nav.ts';
 import {
@@ -15,10 +16,9 @@ import {
 } from './rules.ts';
 import type { Rival, Rivals } from './rivals';
 import type { Foe } from './ships';
-import type { Mark } from './weapon';
 
 // Pirate fleets in every age (numbers in rules.ts, design in docs/gameevents.md): nomads who crack rocks, haul the
-// pieces and raid worlds. A ship dies touching any body (swept: fast bodies never tunnel); rounds take hull hits.
+// pieces and raid worlds. A ship dies touching any body (swept: fast bodies never tunnel); rounds meet its shield, then hull.
 // Node-safe (pirates.test.ts flies it with a fake ctx).
 //   - States: cruise (a formation on a lane across the view) → work (a rock) or raid (a world) → leave (gone or a jump);
 //     decisions every THINK s, a target kept ≥ COMMIT s. The formation's fixed slots follow a virtual lead (the flag).
@@ -27,7 +27,7 @@ import type { Mark } from './weapon';
 //     their own pieces off. Each ship scans once a frame and clears every sub-step (nav.ts); your moon system is one keep-out.
 
 const PIRATE = 0xd9cfbf; // bone hulls, clear of you (cyan), rivals (violet) and the verdict colours
-const TRACER = 0xff7a50; // their rounds
+const TRACER = 0xff7a50; // their rounds (render/tech.ts RUST)
 const SHOT_V = 20; // your radii/s a round flies on top of the shooter
 const SHOT_S = [0.5, 0.62]; // s a round flies: raider, marauder
 const RUN_IN = 1.2; // turn radii (plus 1 R) past the keep-out: a gun run turns out here...
@@ -49,7 +49,7 @@ const SPAWN_ROOM = 2; // R clear of any body where a fleet appears
 
 type Kind = keyof typeof PIRATE_CLASS;
 type PShip = Foe & Circler & Strafer & {
-  kind: Kind; job: 'form' | 'gun' | 'haul' | 'guard'; hull: number; dead: boolean; g: Trigger; jk: Jink; flee: number; dry: number;
+  kind: Kind; job: 'form' | 'gun' | 'haul' | 'guard'; hull: number; sh: number; calm: number; flare: number; spool: number; dead: boolean; g: Trigger; jk: Jink; flee: number; dry: number;
   aim?: Body; foe?: Foe; responding: boolean; wing: number; ward?: PShip; back: number; side: number; near: Near[];
   piece?: Body; pull: number; mass: number; comp: Comp; stolen: { ore: number; vol: number }; units: number;
 };
@@ -59,7 +59,7 @@ type Fleet = {
   lane: { x: number; y: number; dx: number; dy: number }; lanes: number; t: number; st: number; tick: number; held: number; stay: number;
   target?: Target; onYou: boolean; cracks: Map<Body, number>; loose: Body[]; off: { x: number; y: number }; raidT: number;
   lash: { far: number; slow: number }; lashed: boolean; chip: number; cap: number; seen: number; gun: Gun; big: Gun;
-  scatter: number; sb?: Disc; sx: number; sy: number; slots: boolean; jumped: boolean; own: Set<Body>;
+  scatter: number; sb?: Disc; sx: number; sy: number; slots: boolean; jumped: boolean; own: Set<Body>; rout: number; hurt: number;
 };
 
 const TURNS: Record<Kind, number> = { raider: P_TURN, hauler: H_TURN, marauder: M_TURN }, TOPS: Record<Kind, number> = { raider: P_TOP, hauler: H_TOP, marauder: M_TOP }; // tops × class speed
@@ -67,7 +67,8 @@ const live = (b: Body | undefined, me: Body): b is Body => !!b && b.m > 0 && !b.
 
 export function createPirates(ctx: Ctx, rivals: Rivals, rnd: () => number = Math.random) {
   let fleet: Fleet | undefined, timer = between(PIRATE_FIRST, rnd), attackT: number | undefined, hunt = false;
-  const deaths = { body: 0, shot: 0 }; // what broke pirate ships (test hook): touching a body, or slugs, rounds and the beam
+  const wakes: Wake[] = []; // jumps for bolts.ts to draw (it ages and drops them)
+  const deaths = { body: 0, shot: 0 }; // what broke pirate ships (test hook): touching a body, or rounds and rockets
   const stats = { rounds: 0, hits: 0, cracked: 0, hauled: 0, shoved: 0 }; // rounds fired, rounds on their target body, rocks cracked, pieces stowed, pieces shoved off a ship (test hook)
   const gap = () => PIRATE_CALM + poissonGap(PIRATE_MEAN, rnd);
   const enemies = () => [...ctx.mine, ...rivals.foes()]; // ships that shoot back: your fighters, rival ships
@@ -79,27 +80,8 @@ export function createPirates(ctx: Ctx, rivals: Rivals, rnd: () => number = Math
   }
   const near = () => (ctx.me.m ? [ctx.me, ...ctx.near] : ctx.near);
 
-  /** Fixed formation slots (ship radii behind and beside the flag), redone only when a ship dies. */
-  function slots(fl: Fleet) {
-    const alive = fl.ships.filter((s) => !s.dead), point = alive.find((s) => s.kind === 'marauder') ?? alive.find((s) => s.kind === 'raider');
-    const haulers = alive.filter((s) => s.kind === 'hauler'), rest = alive.filter((s) => s !== point && s.kind !== 'hauler');
-    rest.sort((a, b) => (a.kind === 'marauder' ? -1 : b.kind === 'marauder' ? 1 : 0));
-    let row = 0;
-    if (point) [point.back, point.side, point.ward, row] = [0, 0, undefined, 1];
-    for (const h of haulers) {
-      [h.back, h.side] = [row * ROW[0], 0];
-      for (const side of [-1, 1]) {
-        const e = rest.shift();
-        if (e) [e.back, e.side, e.ward] = [row * ROW[0], side * ROW[1], h];
-      }
-      row++;
-    }
-    rest.forEach((s, i) => {
-      const k = 1 + (i >> 1);
-      [s.back, s.side, s.ward] = [(row - 1 + k) * ROW[0], (i % 2 ? 1 : -1) * (1 + k) * ROW[1], undefined];
-    });
-    fl.slots = false;
-  }
+  /** Fixed formation slots (flight.ts wedge), redone only when a ship dies. */
+  const slots = (fl: Fleet) => void (wedge(fl.ships), (fl.slots = false));
   const width = (fl: Fleet) => Math.max(0, ...fl.ships.filter((s) => !s.dead).map((s) => Math.abs(s.side))) * ctx.shipR() + 2 * ctx.shipR();
 
   /** A lane from the flag across the view: aimed within LANE[1] view half-widths of its centre, ending LANE[0] half-diagonals past it. */
@@ -117,9 +99,9 @@ export function createPirates(ctx: Ctx, rivals: Rivals, rnd: () => number = Math
     const n = fleetSize(u), ships: PShip[] = [];
     const mk = (kind: Kind): PShip => {
       const s: PShip = {
-        kind, job: 'form', hull: PIRATE_CLASS[kind].hull, dead: false, g: trigger(), jk: jink(), flee: 0, dry: 0, responding: false, wing: 0, back: 0, side: 0, near: [],
+        kind, job: 'form', hull: PIRATE_CLASS[kind].hull, sh: PIRATE_CLASS[kind].shield, calm: 99, flare: 0, spool: 0, dead: false, g: trigger(), jk: jink(), flee: 0, dry: 0, responding: false, wing: 0, back: 0, side: 0, near: [],
         x: p.x, y: p.y, vx: 0, vy: 0, heading: 0, burn: 0, wx: 0, wy: 0, k: Math.floor(rnd() * 1e6), sense: rnd() < 0.5 ? 1 : -1, out: false,
-        pull: 0, mass: 0, comp: { rock: 1 }, stolen: { ore: 0, vol: 0 }, units: 0, kill: () => hit(s),
+        pull: 0, mass: 0, comp: { rock: 1 }, stolen: { ore: 0, vol: 0 }, units: 0, kill: (heavy?: boolean) => (heavy ? die(s, 'shot') : hit(s)),
       };
       return s;
     };
@@ -133,7 +115,7 @@ export function createPirates(ctx: Ctx, rivals: Rivals, rnd: () => number = Math
     const fl: Fleet = {
       ships, n0: ships.length, state: 'cruise', v, flag: { x: p.x, y: p.y, vx: 0, vy: 0, heading: 0, burn: 0 }, flagNear: [], lane: { x: 0, y: 0, dx: 1, dy: 0 }, lanes: 0,
       t: 0, st: 0, tick: 0, held: 0, stay: between(STAY, rnd), onYou: false, cracks: new Map(), loose: [], off: { x: 0, y: 0 }, raidT: 0, lash: { far: 0, slow: 0 }, lashed: false,
-      chip: 0, cap: 0, seen: 0, gun: gun(0), big: gun(1), scatter: 0, sx: 0, sy: 0, slots: true, jumped: false, own: new Set(),
+      chip: 0, cap: 0, seen: 0, gun: gun(0), big: gun(1), scatter: 0, sx: 0, sy: 0, slots: true, jumped: false, own: new Set(), rout: -1, hurt: 99,
     };
     slots(fl);
     lane(fl);
@@ -143,8 +125,8 @@ export function createPirates(ctx: Ctx, rivals: Rivals, rnd: () => number = Math
     fleet = fl;
     return true;
   }
-  /** The formation's speed, × cruise: slower with a hauler or marauder about. */
-  const speed = (fl: Fleet) => (fl.ships.some((s) => !s.dead && s.kind !== 'raider') ? FORM_V : 1);
+  /** The formation's speed, × cruise: slower with a hauler or marauder about, full once routed. */
+  const speed = (fl: Fleet) => (fl.rout >= 0 ? ROUT_V : fl.ships.some((s) => !s.dead && s.kind !== 'raider') ? FORM_V : 1);
 
   /** Leave: everyone forms up round the haulers and flies straight out from the view's centre (ends an attack on you). */
   function leave(fl: Fleet, cx: number, cy: number) {
@@ -168,9 +150,9 @@ export function createPirates(ctx: Ctx, rivals: Rivals, rnd: () => number = Math
     if (fleet === fl) [fleet, timer] = [undefined, poissonGap(PIRATE_GAP, rnd)];
   }
 
-  /** A round on a ship: one hull hit; the last one breaks it. */
+  /** A round or blast on a ship: its shield soaks it (escape.ts), else one hull hit; the last one breaks it. */
   function hit(s: PShip) {
-    if (s.dead) return;
+    if (s.dead || soak(s, fleet)) return;
     if (--s.hull <= 0) return die(s, 'shot');
     ctx.fx.flash(s.x, s.y, ctx.shipR() * 2, 4, ctx.shipR() * 3);
   }
@@ -178,9 +160,9 @@ export function createPirates(ctx: Ctx, rivals: Rivals, rnd: () => number = Math
   function die(s: PShip, why: keyof typeof deaths) {
     const fl = fleet;
     if (s.dead || !fl) return;
-    [s.dead, s.piece, fl.slots] = [true, undefined, true];
+    [s.dead, s.piece, fl.slots, fl.hurt] = [true, undefined, true, 0];
     deaths[why]++;
-    ctx.wreck(s.x, s.y, PIRATE, 1.8);
+    ctx.wreck(s.x, s.y, PIRATE, 1.8, s.kind);
     if (s.kind !== 'hauler') return;
     // The hold bursts: KEPT of what it carried as 1–4 pieces the field keeps, and your stolen stock comes back × LOOT_BACK.
     const f = ctx.field(), sr = ctx.shipR(), n = Math.min(4, Math.floor((KEPT * s.mass) / (GRAB[0] * ctx.me.m)));
@@ -392,7 +374,7 @@ export function createPirates(ctx: Ctx, rivals: Rivals, rnd: () => number = Math
       if (!fl.jumped) ctx.news('pirates-down', 'Pirate fleet destroyed', 'Burst haulers spill what they stole');
       return gone(fl);
     }
-    [fl.t, fl.st, fl.held] = [fl.t + dt, fl.st + dt, fl.held + dt];
+    [fl.t, fl.st, fl.held, fl.hurt] = [fl.t + dt, fl.st + dt, fl.held + dt, fl.hurt + dt];
     if (alive.some((s) => ctx.onScreen(s.x, s.y))) {
       fl.seen += dt;
       ctx.news('pirates', 'Pirate fleet', 'Raiders crack rocks and haulers carry them off · they break on anything they touch');
@@ -432,6 +414,7 @@ export function createPirates(ctx: Ctx, rivals: Rivals, rnd: () => number = Math
     for (const s of alive) {
       s.jk.cool = Math.max(0, s.jk.cool - dt);
       s.flee = Math.max(0, s.flee - dt);
+      mend(s, PIRATE_CLASS[s.kind].shield, dt);
       const m = menace(s, foes, ctx.shots, 'pirate', sr, R);
       if (!m) continue;
       if (s.kind !== 'hauler') startJink(s, s.jk, m.x, m.y, m.vx, m.vy);
@@ -506,7 +489,7 @@ export function createPirates(ctx: Ctx, rivals: Rivals, rnd: () => number = Math
     for (const s of alive) {
       const G = PIRATE_CLASS[s.kind].gun;
       if (G && s.job === 'gun') fire(fl, s, G, dt, sr, R, alive);
-      ctx.draw(s.kind, s.x, s.y, s.heading, s.burn, s.bank ?? 0);
+      ctx.draw(s.kind, s.x, s.y, s.heading, s.spool > 0 ? 1 : s.burn, s.bank ?? 0);
     }
     // Lanes in cruise: past a lane's end, another across the view; two with nothing and they leave.
     const f = fl.flag;
@@ -515,15 +498,22 @@ export function createPirates(ctx: Ctx, rivals: Rivals, rnd: () => number = Math
       else lane(fl);
     }
     if (fl.state !== 'leave') return;
-    // Leaving: the lane runs on; gone once every ship is past GONE half-diagonals; ships still on screen after JUMP_S jump out.
-    const c = ctx.cam, out = (s: PShip) => Math.hypot(s.x - c.x, s.y - c.y) > GONE * ctx.diag();
+    // Leaving: the lane runs on; gone once every ship is past GONE half-diagonals. Beaten down or pressed, the fleet is routed
+    // (escape.ts); from jumpAt each ship spools on screen (shield down, still killable) and jumps out, haulers first.
+    const c = ctx.cam, out = (s: PShip) => Math.hypot(s.x - c.x, s.y - c.y) > GONE * ctx.diag(), pm = me.motion, d = Math.hypot(pm.x - cx, pm.y - cy) || 1e-9;
     if ((fl.lane.x - f.x) * fl.lane.dx + (fl.lane.y - f.y) * fl.lane.dy < 2 * R) [fl.lane.x, fl.lane.y] = [f.x + fl.lane.dx * ctx.diag(), f.y + fl.lane.dy * ctx.diag()];
-    const late = fl.st >= JUMP_S && alive.some((s) => ctx.onScreen(s.x, s.y));
-    if (alive.every(out) || fl.st >= 2 * JUMP_S) return gone(fl);
-    if (!late) return;
-    for (const s of alive) if (s.kind === 'hauler' || fl.st >= JUMP_S + 0.5) {
-      if (ctx.onScreen(s.x, s.y)) ctx.fx.flash(s.x, s.y, sr * 4, 10, sr * 8);
-      [s.dead, fl.jumped] = [true, true];
+    fl.rout = routAt(fl.rout, fl.st, alive.length / fl.n0, pressed(fl.hurt, d / R, -((pm.x - cx) * (pm.vx - cvx) + (pm.y - cy) * (pm.vy - cvy)) / d / R, fl.v));
+    const at = jumpAt(fl.rout);
+    if (alive.every(out) || fl.st >= at + 3) return gone(fl); // the last spool ends by at + 2.6 s
+    for (const s of alive) {
+      const j = spool(s, fl.st - at - delay(s.kind, s.k), dt, ctx.onScreen(s.x, s.y));
+      if (j === 2) [s.dead, fl.jumped] = [true, true]; // no wreck, no loot: it got away
+      else if (j === 1) {
+        [s.jk.t, s.jk.cool] = [0, JUMP_S]; // straight out from here
+        wakes.push({ s, t: 0 });
+        ctx.sfx()?.play('warp', 0.3, 1, (s.x - c.x) / c.halfW);
+        ctx.news('pirates-jump', 'Pirates jumped away', 'A routed fleet spools up and jumps · a spooling ship has no shield');
+      }
     }
   }
 
@@ -600,6 +590,7 @@ export function createPirates(ctx: Ctx, rivals: Rivals, rnd: () => number = Math
     },
     deaths,
     stats,
+    wakes,
     /** Test hook: launch a fleet now (false: one is already about). */
     launch,
     /** Test hook: an attack on you is due now. */
@@ -610,9 +601,7 @@ export function createPirates(ctx: Ctx, rivals: Rivals, rnd: () => number = Math
       if (!fleet && ctx.cam.halfW > 0 && (timer -= dt) <= 0) launch(); // a zero-size view would launch it on you
       if (fleet) step(fleet, dt);
     },
-    /** Slugs and the beam: any touch breaks a ship. */
-    marks: (): Mark[] => afloat().map((s) => ({ x: s.x, y: s.y, r: ctx.shipR(), kill: () => die(s, 'shot') })),
-    foes: afloat, // rounds: each takes one hull hit (`kill` = hit)
+    foes: afloat, // rounds and blasts: its shield, then one hull hit; a rocket's direct hit (`kill(true)`) breaks it
     /** Ships die touching any body, swept along this frame's relative motion so fast bodies never tunnel; a hauler's claimed piece is spared. */
     contacts(bodies: Body[], dt: number) {
       if (!fleet) return;
@@ -625,7 +614,7 @@ export function createPirates(ctx: Ctx, rivals: Rivals, rnd: () => number = Math
       }
     },
     destroy() {
-      fleet = undefined;
+      [fleet, wakes.length] = [undefined, 0];
     },
   };
 }

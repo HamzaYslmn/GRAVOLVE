@@ -1,10 +1,10 @@
 // node test/planet/rules.test.ts: Age II tiers, climate (greenhouse, rain, boiling), habitability, life.
 import assert from 'node:assert/strict';
-import { boil, heatOfK, kelvin, pressure, waterState } from '../../src/core/water.ts';
-import { blend, COOL, G_WORLD, GIANT_HIT, radiusOf, START_R, youPull, type Comp } from '../../src/evolution/asteroid/rules.ts';
+import { boil, boilingK, heatOfK, kelvin, pressure, waterState } from '../../src/core/water.ts';
+import { AGE_GOAL, blend, COOL, G_WORLD, GIANT_HIT, radiusOf, START_R, youPull, type Comp } from '../../src/evolution/asteroid/rules.ts';
 import { slotRadius } from '../../src/core/orbits.ts';
 import {
-  FEED, fedAir, gripWindow, LANE, matchWindow, moonCap, MOON_R, MOON_SHARE, beforeClimate, bombardment, climate, climateK, envelope, fieldParts, habitability, impact, lifeSpeed, lifeStep, LIFE_S, magnet, moonSlots, nextGoal, pickSlot, onGasLine, radioLife, SOFT_S, stageOf, tierIndex, tierName,
+  AIR_LO, airLimits, FEED, fedAir, gripWindow, HOT_RAMP, nextMoonMass, LANE, matchWindow, moonCap, MOON_R, MOON_SHARE, beforeClimate, bombardment, climate, climateK, envelope, fieldParts, habitability, impact, lifeSpeed, lifeStep, LIFE_S, magnet, moonSlots, nextGoal, pickSlot, onGasLine, radioLife, SOFT_S, stageOf, tierIndex, tierName,
   type Life, type Sky, type World,
 } from '../../src/evolution/planet/rules.ts';
 
@@ -187,6 +187,12 @@ for (const g of [0.18, 0.21, 0.17, 0.19, 0.16, 0.149]) {
 assert.equal(line, false);
 assert.equal(tierName(2.13e7, { gas: 0.19, ice: 0.3, rock: 0.51 }, 0, true), 'Brown dwarf');
 assert.equal(tierName(2.13e7, { gas: 0.19, ice: 0.3, rock: 0.51 }, 0, false), 'Super-Earth');
+// Ice giant needs the gas line, like envelope: a wet rocky world at 10^5.5 under it stays Super-Earth (user, 2026-11-17).
+const WET: Comp = { ice: 0.5, gas: 0.12, rock: 0.3, metal: 0.08 }, WET_GAS: Comp = { ice: 0.45, gas: 0.22, rock: 0.25, metal: 0.08 };
+assert.equal(tierName(10 ** 5.5, WET, 0), 'Super-Earth');
+assert.equal(tierName(10 ** 5.5, WET, 0, false), 'Super-Earth');
+assert.equal(tierName(10 ** 5.5, WET_GAS, 0), 'Ice giant');
+assert.equal(tierName(10 ** 5.5, { ...WET, gas: 0.17, ice: 0.45 }, 0, true), 'Ice giant', 'sticky line: 17% gas still on it');
 assert.equal(nextGoal(2e7, GASSY, true), undefined);
 assert.ok(envelope(2e5, { gas: 0.17, rock: 0.83 }, true) && !envelope(2e5, { gas: 0.17, rock: 0.83 }, false));
 console.log('planet ok: gas line sticky 20% in / 15% out (3.5M at 19% stays Mini-Neptune), 13.8M and 21.3M on the line = Brown dwarf');
@@ -217,4 +223,32 @@ const mid = slotRadius(1, 1) + 0.625;
 for (const [args, k] of [[[slotRadius(1, 2), 1, 4, 0], 2], [[slotRadius(1, 2) + 0.1, 1, 4, 0b100], 3], [[slotRadius(1, 2) - 0.1, 1, 4, 0b100], 1], [[slotRadius(1, 1), 1, 4, 0b1111], -1], [[slotRadius(1, 0), 1, 0, 0], -1],
   [[20, 1, 2, 0], 1], [[mid + 0.05, 1, 4, 0, 1], 1], [[mid + 0.1, 1, 4, 0, 1], 2], [[mid + 0.05, 1, 4, 0], 2]] as const) assert.equal(pickSlot(...args), k, `pickSlot(${args})`);
 for (const w of [small, huge]) assert.ok(gripWindow(w.r, w.circ) >= Math.SQRT2 * w.circ && gripWindow(w.r, w.circ) >= 2 * matchWindow(w.r, w.circ));
+
+// nextMoonMass: where moonSlots steps up; undefined at five.
+assert.equal(nextMoonMass(1e3), AGE_GOAL);
+for (let m = AGE_GOAL; m !== undefined && moonSlots(m) < 5; m = nextMoonMass(m)) {
+  const n = nextMoonMass(m)!;
+  assert.ok(n > m && moonSlots(n) === moonSlots(m) + 1 && moonSlots(n * (1 - 1e-6)) === moonSlots(m), `next ring at ${n} from ${m}`);
+}
+assert.equal(nextMoonMass(10 ** 5.5), undefined);
+// airLimits: at today's gas share, the masses where the resting climate reaches boiling − HOT_RAMP (suffer) and boiling.
+const edge = (m: number, gas: number, warm: number, off: number) => { const p = pressure(m, gas); return climateK(p) + warm - (boilingK(p) - off); };
+const shotLim = airLimits(125e3, 0.077);
+for (const [mass, off] of [[shotLim.suffer, HOT_RAMP], [shotLim.boil, 0]]) assert.ok(Math.abs(edge(mass, 0.077, 0, off)) < 1e-3, `on the line: ${edge(mass, 0.077, 0, off)}`);
+assert.ok(Math.abs(shotLim.suffer / 125e3 - 2.85) < 0.05 && Math.abs(shotLim.boil / 125e3 - 6.06) < 0.05, `screenshot Super-Earth 7.7% gas: ×${(shotLim.suffer / 125e3).toFixed(2)} / ×${(shotLim.boil / 125e3).toFixed(2)}`);
+for (const [m, gas, warm] of [[125e3, 0.077, 30], [125e3, 0.077, 60], [1.5e4, 0.08, 0], [2e4, 0.04, 40], [5e4, 0.2, 0], [5e3, 0.2, 30], [2e3, 0.05, 32]] as const) {
+  const l = airLimits(m, gas, warm);
+  assert.ok(l.suffer <= l.boil, `suffer no later than boil: ${JSON.stringify(l)}`);
+  for (const [mass, off] of [[l.suffer, HOT_RAMP], [l.boil, 0]]) {
+    if (mass === m) assert.ok(edge(m, gas, warm, off) >= 0 && pressure(m, gas) >= AIR_LO, 'returns m only when already over in livable air');
+    else assert.ok(mass > m && edge(mass, gas, warm, off) > -1e-3 && (Math.abs(edge(mass, gas, warm, off)) < 1e-3 || Math.abs(pressure(mass, gas) / AIR_LO - 1) < 1e-5) && !(edge(mass * (1 - 1e-5), gas, warm, off) >= 0 && pressure(mass * (1 - 1e-5), gas) >= AIR_LO), `${m} ${gas} ${warm}: first over at ${mass}`);
+  }
+}
+const sub = airLimits(5e3, 0.2, 30); // below Planet mass pressure grows with hold(m): the crossing can sit there too
+assert.ok(sub.suffer > 5e3 && sub.suffer < 10 ** 4.5, `sub-Planet crossing: ${sub.suffer}`);
+const airless = airLimits(2e3, 0.05, 32); // airless and hot: a sub-triple-point "crossing" has no seas; the line starts at AIR_LO
+assert.ok(pressure(airless.suffer, 0.05) >= AIR_LO * (1 - 1e-5) && pressure(airless.boil, 0.05) >= AIR_LO * (1 - 1e-5), `thin air: ${JSON.stringify(airless)}`);
+const more = airLimits(125e3, 0.1), warmer = airLimits(125e3, 0.077, 20);
+assert.ok(more.boil < shotLim.boil && more.suffer < shotLim.suffer && warmer.boil < shotLim.boil && warmer.suffer < shotLim.suffer, 'more gas or warmth lowers both');
+assert.ok(airLimits(125e3, 0.5).boil === 125e3 && airLimits(125e3, 0).boil === Infinity, 'already boiling: m; no gas: never');
 console.log(`planet ok: outer slot vs view half height ${[10 ** 3.5, 1e4, 10 ** 4.5, 1e5, 10 ** 5.5, 1e6].map((m) => `${outer(m).toFixed(1)}/${halfH(m).toFixed(1)}`).join(' ')} R; match window ${[10 ** 3.5, 10 ** 5.5, 10 ** 6.5, 1e7].map((m) => { const w = circAt(m); return (matchWindow(w.r, w.circ) / (2 * w.r)).toFixed(2); }).join(' / ')} D/s at 10^3.5 / 10^5.5 / 10^6.5 / 10^7; widest moon (stony/icy/gas-rich/metallic) ${widest.map((w) => w.map((s) => `${(100 * s).toFixed(1)}%`).join('/')).join(' · ')} of 10^4 · 10^6 · 10^7`);

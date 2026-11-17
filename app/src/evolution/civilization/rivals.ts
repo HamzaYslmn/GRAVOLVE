@@ -7,34 +7,34 @@ import { MOON_SHARE, moonSlots } from '../planet/rules';
 import { drop, hitKelvin, shed, unmoon, type Body, type Hit } from '../asteroid/body';
 import { burnShare, COMP, G_WORLD, pairPull, pieceShares, pullMass, SPREAD, youPull } from '../asteroid/rules';
 import { thrustOf } from '../asteroid/player';
-import { A_ENG, alarmStep, DEFEND_SHIELD, DODGE, evade, GATHER_U, newWave, next, restStep, SITE, stance, stationStep, STOCK_RATE, volley, WAVE_COST, waveStep, WORLD_FLAGS, type Entry, type Stance, type Wave } from '../rivals/ledger';
+import { A_ENG, alarmStep, DEFEND_SHIELD, DODGE, evade, GATHER_U, newWave, next, pursueStep, restStep, SITE, stance, stationStep, STOCK_RATE, volley, WAVE_COST, waveStep, WORLD_FLAGS, type Entry, type Stance, type Wave } from '../rivals/ledger';
 import { isWave, OUT_V, plan, settle, step, type Away, type Centre, type Frame, type Role } from './away';
 import type { Ctx } from './combat';
 import { bump, bumps, MISS_V, sparks } from './crash';
 import { chase, inArc, leash, lowPass, MAX_DT, steps } from './flight';
-import { lineClear, pick, pull, seeker, trigger, type Gun, type Missile, type Trigger } from './guns';
+import { lineClear, pick, pull, trigger, type Gun, type Rocket, type Trigger } from './guns';
+import { fireReach } from './mining';
 import {
-  ARMS, BEATEN, beamPop, CHASE_V, FRIGATE_S, FRIGATE_STOCK, HIT_KILL, HIT_MIN, intercept, LEASH, raid, RIVAL_AIM, RIVAL_FIRE, RIVAL_FIRST, RIVAL_HIT_MAX, RIVAL_LEAD, RIVAL_LOADED, RIVAL_MASS, RIVAL_ROCK, SALVO_LEAD,
-  RIVAL_TRAVEL, rivalFrigates, rivalLevel, rivalSalvo, rivalShips, shellR, SHIELD_K, shieldHolds, shieldMax, shieldMeet, shieldRegen, shieldShot, SLUG_SPEED, strength, T_SEE, waveFighters, weaponHit, type Arm, type Raid, type Shield,
+  ARMS, BEATEN, CHASE_V, FRIGATE_S, FRIGATE_STOCK, HIT_KILL, HIT_MIN, LEASH, pace, raid, RIVAL_FIRST, RIVAL_GLOW, RIVAL_HIT_MAX, RIVAL_LEAD, RIVAL_LOADED, RIVAL_MASS, RIVAL_PACE, RIVAL_RIPPLE, RIVAL_ROCK, RIVAL_SALVO, SALVO_LEAD,
+  RIVAL_TRAVEL, rivalFrigates, rivalLevel, rivalSalvo, rivalShips, shellR, SHIELD_K, shieldHolds, shieldMax, shieldMeet, shieldRegen, shieldShot, strength, T_SEE, waveFighters, weaponHit, type Arm, type Raid, type Shield,
 } from './rules';
 import { crashes, defend, dropLost, foeOf, lose, newShip, strike, type Foe, type Ship } from './ships';
 import { shieldLook, type ShieldLook } from './view';
-import { slugBodies, type Mark, type Shielded, type Slug } from './weapon';
 
 // Rival civilizations (numbers in rules.ts, stances and waves in rivals/ledger.ts): living worlds with people, a shield shell
-// like yours (rules.ts shieldMeet; their air burns slugs once it is down), home patrols (ships.ts defend: they hunt pirates
-// too), a mass driver and a silo. Each spawns at the quietest spot ahead (field.fillAt) as the run roster's next named rival.
+// like yours (rules.ts shieldMeet), home patrols (ships.ts defend: they hunt pirates too) and a rocket pad (your rockets,
+// guns.ts). Each spawns at the quietest spot ahead (field.fillAt) as the run roster's next named rival.
 //   - Their rock circles their world, a guard: a match on its circle steals it (moons.ts); dropped, a match within 30 s does.
 //   - Probes look you over, a miner strips free rocks; with stock and odds to suit its temper a war wave masses in view, then
 //     its fighters strafe you in wings of three (guns.ts pick: your frigate, ships, miners, else your shield), its frigates
-//     lance you from home and its silo fires after each lance salvo. Home on losses, outrun, its shield low, or your people
+//     lance you from home and its pad keeps launching rockets. Home on losses, outrun, its shield low, or your people
 //     at the raid's floor. Ships away die touching a body; home patrols graze or wreck as yours do (ships.ts crashes).
 //   - Open once its fleet is gone for good (YARD fleets of rebuilds spent): its shield stops mending, miners take SITE × level.
 //   - Weapon hits go through rules.ts weaponHit like yours (`struck`).
 // Its world is a gravity body (ledger WORLD_FLAGS): engines (ledger stationStep) keep it KEEP of your radii off you, clear of
-// other rivals, dodging your missiles (ledger DODGE); beaten, engines off, it stays your gravitating companion.
+// other rivals, dodging your rockets (ledger DODGE); beaten, engines off, it stays your gravitating companion.
 
-const AIR = 1; // atm on a rival world (burns small slugs)
+const AIR = 1; // atm on a rival world
 const ROCK_ORBIT = 2.6; // rival radii (inside its ships' 2–4.6 R circuit: they steer round it)
 const ROCK_W = 0.6; // rad/s
 const ROCK_AGAIN = 30; // s until a new rock is caught after a loss
@@ -45,7 +45,6 @@ const FAR = 4; // camera half-diagonals: past this a rival is left behind (the f
 const SPAWN = [1.25, 1.6]; // camera half-diagonals ahead of you
 const COMP_WORLD = { rock: 0.55, metal: 0.15, ice: 0.25, gas: 0.05 };
 const ENGAGE = 30; // your radii
-const REACH = 1.7; // ...or within this many camera half-diagonals, so one spawned ahead of you comes in too
 const KEEP = [8, 12]; // your radii: on screen, so it sees you and fires
 const APART = 6; // your radii: another rival world this close pushes it away...
 const APART_V = 1; // ...at up to this many of your radii/s
@@ -59,27 +58,27 @@ const STRIP_SHARE = 0.3; // of the rock per trip (a rock under 1e-4 of the world
 type Out = Foe & Away & { hp: number; g: Trigger; rock?: Body; load: boolean; dead: boolean; glow: number };
 
 export type Rival = {
-  b: Body; level: number; sh: Shield; pop: number; seen: number; fireT: number; rockT: number; shipT: number;
+  b: Body; level: number; sh: Shield; pop: number; seen: number; rockT: number; shipT: number;
   rock?: Body; rockA: number; ships: Ship[]; foes: WeakMap<Ship, Foe>; lights: { a: number; d: number }[];
-  look: ShieldLook; flick: number; beaten: boolean; keep: number; turn: number; alarm: number; // a missile alarm (ledger alarmStep)
+  look: ShieldLook; flick: number; beaten: boolean; keep: number; turn: number; alarm: number; // a rocket alarm (ledger alarmStep)
   left?: boolean; // gone out of reach (the next spawn waits)
   entry?: Entry; temper: Entry['temper']; stance: Stance; stanceT: number; stock: number; out: Out[]; wave?: Wave; c: Centre; fv: { x: number; y: number }; lash: { far: number; slow: number }; probeT: number;
-  rest: number; // s until its next volley of slugs (rivals/ledger.ts restStep)
+  rest: number; quit: { slow: number; rest: number }; inRange: boolean; // s until its next volley (ledger restStep); its will to follow you (ledger pursueStep); you are inside its fire range (mining.ts fireReach)
   gun: Gun; lance: Gun; // its war wave's guns: the fighters' rounds, the frigates' lance
   /** Its defence fleet is gone: your miners work `site` (civilization/stage.ts). */
   open: boolean; site: { ore: number; vol: number }; yard: number; // ships it can still rebuild
   frig: number; frigT: number; // frigates it has (rivalFrigates; built apart from wave ships), s to the next rebuilt one
   wound: { k: number }; raid?: Raid; // heavy fire on it not yet landed; its wave's caps on your people
-  silo: { load: number; glow: number }; thrust: { x: number; y: number }; // its missile silo; its engines' last Δv/s (the plume)
+  pad: { t: number; glow: number; left: number }; thrust: { x: number; y: number }; // its rocket pad (s to the next launch, s glowing, rockets left this salvo); its engines' last Δv/s (the plume)
   af?: Frame; // its ships away's frame (away.ts), reused
 };
 
 export function createRivals(ctx: Ctx) {
   const list: Rival[] = [];
-  const deaths = { body: 0, shot: 0 }; // what broke their ships (test hook): touching a body, or slugs and rounds
+  const deaths = { body: 0, shot: 0 }; // what broke their ships (test hook): touching a body, or rounds and rockets
   const shot = (s: Ship) => void (lose(s) && deaths.shot++);
   let raiders = (): Foe[] => []; // pirate ships: their patrols hunt them too (pirates.ts calls watch)
-  let travelled = 0, nextAt = RIVAL_FIRST, clock = 0, since = -1, lastX = NaN, lastY = NaN, lastEntry: Entry | undefined;
+  let travelled = 0, paceNow = 1, nextAt = RIVAL_FIRST, clock = 0, since = -1, lastX = NaN, lastY = NaN, lastEntry: Entry | undefined;
   // Loaded: the field still holds the world (it stores it with its chunk once you leave; its view leaves the layer then).
   const near = (r: Rival) => r.b.m > 0 && !!r.b.view.parent && Math.hypot(r.b.motion.x - ctx.me.motion.x, r.b.motion.y - ctx.me.motion.y) < FAR * ctx.diag();
   const veil = (r: Rival, s0: number, x: number, y: number) => s0 > 0 && [r.look.ripple(Math.atan2(y - r.b.motion.y, x - r.b.motion.x)), r.sh.s <= 0 && ctx.fx.burst(r.b.motion.x, r.b.motion.y, 20, r.b.r * 0.08, r.b.r * 1.4, VIOLET)]; // a hit on its veil while up (s0): a ripple; a burst if it collapses
@@ -117,10 +116,10 @@ export function createRivals(ctx: Ctx) {
       onBody: (q: Body, x: number, y: number) => q === ctx.me && ctx.civ?.struck('lance', L.k, x, y, r.raid),
     };
     const r: Rival = {
-      b, level, sh: { level, s: SHIELD_K * level }, pop: 1, seen: 0, fireT: between(RIVAL_FIRE), rockT: 0, shipT: SHIP_AGAIN,
+      b, level, sh: { level, s: SHIELD_K * level }, pop: 1, seen: 0, rockT: 0, shipT: SHIP_AGAIN,
       rockA: Math.random() * Math.PI * 2, ships: [], foes: new WeakMap(), flick: 0, beaten: false, keep: between(KEEP), turn: Math.random() < 0.5 ? -1 : 1,
-      frig: rivalFrigates(level), frigT: FRIGATE_S, wound: { k: 0 }, silo: { load: 0, glow: 0 }, thrust: { x: 0, y: 0 }, alarm: -between(DODGE.react),
-      entry, temper, stance: 'explore', stanceT: 0, stock: 0, out: [], gun, lance, c: { x: 0, y: 0, vx: 0, vy: 0 }, fv: { x: 0, y: 0 }, lash: { far: 0, slow: 0 }, probeT: 0, rest: 0, open: false, site: { ore: 0, vol: 0 }, yard: YARD * rivalShips(level),
+      frig: rivalFrigates(level), frigT: FRIGATE_S, wound: { k: 0 }, pad: { t: 0, glow: 0, left: 0 }, thrust: { x: 0, y: 0 }, alarm: -between(DODGE.react),
+      entry, temper, stance: 'explore', stanceT: 0, stock: 0, out: [], gun, lance, c: { x: 0, y: 0, vx: 0, vy: 0 }, fv: { x: 0, y: 0 }, lash: { far: 0, slow: 0 }, probeT: 0, rest: 0, quit: { slow: 0, rest: 0 }, inRange: false, open: false, site: { ore: 0, vol: 0 }, yard: YARD * rivalShips(level),
       lights: Array.from({ length: LIGHTS }, () => ({ a: Math.random() * Math.PI * 2, d: 0.25 + 0.65 * Math.sqrt(Math.random()) })),
       look: shieldLook(ctx.root, page, VIOLET, Math.floor(Math.random() * 1e9), 3),
     };
@@ -149,7 +148,7 @@ export function createRivals(ctx: Ctx) {
     r.look.destroy();
     list.splice(list.indexOf(r), 1);
   }
-  /** Weapon fire on the rival's shield (a slug, a pirate shot, the beam): taken while it is up (rules.ts shieldShot). */
+  /** Weapon fire on the rival's shield (a pirate shot): taken while it is up (rules.ts shieldShot). */
   function shieldTake(r: Rival, kelvin: number, _share: number, x: number, y: number) {
     if (r.beaten) return false;
     const up = r.sh.s > 0;
@@ -238,7 +237,7 @@ export function createRivals(ctx: Ctx) {
       r.stanceT = 1;
       const civ = ctx.civ, n = waveFighters(r.level), yours = civ ? strength(civ.ships.filter((s) => s.kind === 'fighter').length, civ.frigates.length, civ.level) : 0;
       const odds = yours > 0 ? strength(r.ships.length + n, r.frig, r.sh.level) / yours : Infinity;
-      r.stance = r.open ? 'defend' : stance({ temper, wave: !!r.wave, shield: r.sh.s / shieldMax(r.sh), fleetShort: !r.ships.length, far, seen: r.seen, stock: r.stock, level: r.level, odds });
+      r.stance = r.open ? 'defend' : stance({ temper, wave: !!r.wave, shield: r.sh.s / shieldMax(r.sh), fleetShort: !r.ships.length, far, seen: r.seen, stock: r.stock, level: r.level, odds, rest: r.quit.rest > 0 });
       if (r.stance === 'attack' && !r.wave) sendWave(r);
       else if (r.stance === 'gather' && !r.out.some((s) => s.role === 'miner')) {
         const rock = freeRock(r);
@@ -250,7 +249,7 @@ export function createRivals(ctx: Ctx) {
     }
     // Losses: a burst where each ship broke; the wave counts what is left.
     for (let i = r.out.length - 1; i >= 0; i--) if (r.out[i].dead) {
-      ctx.wreck(r.out[i].x, r.out[i].y, VIOLET, 1.6);
+      ctx.wreck(r.out[i].x, r.out[i].y, VIOLET, 1.6, r.out[i].role, r.out[i].load ? GATHER_U : 0); // salvage: rules.ts SALVAGE, a miner's haul too
       r.out.splice(i, 1);
     }
     const w = r.wave;
@@ -305,7 +304,7 @@ export function createRivals(ctx: Ctx) {
       // clear (any body but you takes a bolt: it waits as its circuit carries it round), then a salvo.
       if (s.role === 'frigate' && phase === 'go' && me.m) {
         s.fired += dt;
-        const bears = s.fired >= L.reload && inArc(s, pm.x, pm.y, pm.vx, pm.vy, r.lance.u, L.arc) && lineClear(s.x, s.y, pm.x, pm.y, me.r, bodies, (q) => q === me || q === r.b || q === r.rock, sr);
+        const bears = r.inRange && s.fired >= L.reload && inArc(s, pm.x, pm.y, pm.vx, pm.vy, r.lance.u, L.arc) && lineClear(s.x, s.y, pm.x, pm.y, me.r, bodies, (q) => q === me || q === r.b || q === r.rock, sr);
         s.glow = bears ? s.glow + dt : Math.max(0, s.glow - dt);
         const p = pull(s.g, dt, bears && s.glow >= L.glow, L.salvo, 1 / L.gap, Infinity);
         if (p) ctx.shots.fire(r.lance, s.g, p === 1, s.x, s.y, s.vx, s.vy, s.heading, pm.x, pm.y, pm.vx, pm.vy, me);
@@ -319,22 +318,21 @@ export function createRivals(ctx: Ctx) {
   }
 
   /**
-   * Engines (ledger stationStep) after gravity: within ENGAGE R (or REACH; both alive) an orbit r.keep R off you, clear of rival worlds (APART), dodging
-   * your missiles (ledger DODGE: building its own thrust over DODGE.ramp). Else (or beaten) engines off: it coasts. True: you are out of its reach.
+   * Engines (ledger stationStep) after gravity: within ENGAGE R (both alive, and while it still follows you: ledger pursueStep) an orbit r.keep R off you, clear of rival worlds (APART), dodging
+   * your rockets (ledger DODGE: building its own thrust over DODGE.ramp). Else (or beaten) engines off: it coasts. True: you are out of its reach.
    */
   function keepStation(r: Rival, dt: number) {
     const me = ctx.me, pm = me.motion, bm = r.b.motion, R = me.r, ox = bm.x - pm.x, oy = bm.y - pm.y, od = Math.hypot(ox, oy) || 1;
-    const far = od > Math.max(ENGAGE * R, REACH * ctx.diag()), was = { x: r.thrust.x, y: r.thrust.y }; // R/s², last step
+    const far = od > ENGAGE * R, was = { x: r.thrust.x, y: r.thrust.y }, keep = Math.max(r.keep, slotRadius(1, Math.max(0, moonSlots(me.m) - 1)) + 3); // R/s², last step; clear of your outermost moon
     [r.thrust.x, r.thrust.y] = [0, 0];
-    if (r.beaten || !me.m || far || dt <= 0) return far;
-    const keep = Math.max(r.keep, slotRadius(1, Math.max(0, moonSlots(me.m) - 1)) + 3); // clear of your outermost moon
+    if (r.beaten || !me.m || far || dt <= 0 || !pursueStep(r.quit, r.temper, od / R, keep, (ox * (bm.vx - pm.vx) + oy * (bm.vy - pm.vy)) / od / R, dt)) return far; // outrun: engines off, it coasts
     const a = (G_WORLD * pairPull(youPull(me.m, R), me.m, pullMass(r.b.m, me.m), r.b.m) * (me.m + r.b.m)) / Math.max(od, R + r.b.r) ** 2; // the pair's pull (field.ts gravity)
     let ax = 0, ay = 0;
     for (const q of list) {
       const dx = bm.x - q.b.motion.x, dy = bm.y - q.b.motion.y, d = Math.hypot(dx, dy);
       if (q !== r && q.b.m && d < APART * R && d > 0) [ax, ay] = [ax + (dx / d) * APART_V * R * (1 - d / (APART * R)), ay + (dy / d) * APART_V * R * (1 - d / (APART * R))];
     }
-    const ev = evade(bm, ctx.missiles.live.filter((m) => m.team === 'you' && m.target === r.b && !m.dead)); // it sees the launch, as you see its silo's
+    const ev = evade(bm, ctx.rockets.live.filter((m) => m.team === 'you' && m.target === r.b && !m.dead)); // it sees the launch, as you see its pad's
     r.alarm = alarmStep(r.alarm, ev.n > 0, dt);
     if (r.alarm > 0) [ax, ay] = [ax + ev.x * R, ay + ev.y * R];
     const dv = stationStep(ox / R, oy / R, (bm.vx - pm.vx) / R, (bm.vy - pm.vy) / R, keep, a / R, r.turn, dt, false, ax / R, ay / R, r.alarm > 0 ? thrustOf(r.b) / R : A_ENG, was);
@@ -362,26 +360,12 @@ export function createRivals(ctx: Ctx) {
     }
   }
 
-  /** A slug when due: aimed at where you will be, RIVAL_AIM of them true, the rest wide by 1.5–3 of your radii. */
-  function fireSlug(r: Rival, dt: number) {
-    if ((r.fireT -= dt) > 0) return;
-    r.fireT = between(RIVAL_FIRE);
-    const me = ctx.me, pm = me.motion, bm = r.b.motion, u = SLUG_SPEED * 2 * r.b.r, ox = pm.x - bm.x, oy = pm.y - bm.y, t = intercept(ox, oy, pm.vx - bm.vx, pm.vy - bm.vy, u) ?? Math.hypot(ox, oy) / u;
-    let ax = ox + (pm.vx - bm.vx) * t, ay = oy + (pm.vy - bm.vy) * t;
-    if (Math.random() > RIVAL_AIM) {
-      const al = Math.hypot(ax, ay) || 1, side = (Math.random() < 0.5 ? -1 : 1) * between([1.5, 3]) * me.r;
-      [ax, ay] = [ax - (ay / al) * side, ay + (ax / al) * side];
-    }
-    const al = Math.hypot(ax, ay) || 1;
-    ctx.slugs.fire(r.b, { x: ax / al, y: ay / al }, { rock: 0.8, metal: 0.2 }, VIOLET, true);
-  }
-
   /** Patrols that break rocks heading for their world and hunt your ships near it; rebuilt one at a time while the yard lasts. */
   function homeFleet(r: Rival, dt: number, bodies: Body[]) {
     const b = r.b;
-    const missiles = ctx.missiles.live.filter((m) => m.team === 'you' && !m.dead); // point defence: picked first
-    defend(r.ships, b, ctx.near, dt, (share, v) => shieldHolds(r.sh, share, v), ctx.fx, ctx.kill, [...ctx.mine, ...raiders(), ...missiles], ctx.shots, { bodies, sr: ctx.shipR() });
-    dropLost(r.ships, b, ctx.fx, 8, 0.5, VIOLET);
+    const rockets = ctx.rockets.live.filter((m) => m.team === 'you' && !m.dead); // point defence: picked first
+    defend(r.ships, b, ctx.near, dt, (share, v) => shieldHolds(r.sh, share, v), ctx.fx, ctx.kill, [...ctx.mine, ...raiders(), ...rockets], ctx.shots, { bodies, sr: ctx.shipR() });
+    dropLost(r.ships, b, ctx.fx, 8, 0.5, VIOLET, (x, y) => ctx.salvage(x, y, 'fighter'));
     if (!r.open && !r.ships.length && r.yard <= 0) open(r);
     if (!r.open && r.yard > 0 && r.ships.length < rivalShips(r.level) && (r.shipT -= dt) <= 0) {
       [r.shipT, r.yard] = [SHIP_AGAIN, r.yard - 1];
@@ -391,21 +375,24 @@ export function createRivals(ctx: Ctx) {
   }
 
   /**
-   * Its silo (ARMS.missile): loads while its wave masses or is out, then glows on the surface facing you (seen, never told); once the
-   * wave has left it fires rivalSalvo(level, SALVO_LEAD) missiles, fanned, ARMS.missile.after s after a lance salvo (or a lance reload).
+   * Its rocket pad (your rockets, rules.ts ROCKET): armed (in its fire range) with its wave out or on its volley rhythm, the pad
+   * glows RIVAL_GLOW s on the surface facing you (seen, never told), then rivalSalvo(level, SALVO_LEAD) rockets ripple out
+   * RIVAL_RIPPLE s apart; the next salvo RIVAL_SALVO s later. Your radius is their unit, so your size never changes a dodge.
    */
-  function silo(r: Rival, dt: number, armed: boolean) {
-    const M = ARMS.missile, me = ctx.me, pm = me.motion, bm = r.b.motion, sl = r.silo, frigs = r.out.filter((s) => s.role === 'frigate');
-    const ready = armed && !!r.wave && (sl.load = Math.min(M.reload, sl.load + dt)) >= M.reload && ctx.missiles.room(); // a full pool keeps the salvo
-    sl.glow = ready ? sl.glow + dt : 0;
-    if (!ready || r.wave!.phase !== 'go' || sl.glow < M.glow || (frigs.length && sl.glow < M.glow + ARMS.lance.reload && !frigs.some((s) => s.fired >= M.after && s.fired < M.after + 3))) return;
-    const a = Math.atan2(pm.y - bm.y, pm.x - bm.x), x = bm.x + Math.cos(a) * r.b.r * 1.05, y = bm.y + Math.sin(a) * r.b.r * 1.05, n = rivalSalvo(r.level, SALVO_LEAD[r.temper]);
-    for (let i = 0; i < n; i++) ctx.missiles.launch({ team: 'rival', x, y, vx: bm.vx, vy: bm.vy, tx: pm.x, ty: pm.y, tvx: pm.vx, tvy: pm.vy, u: M.u * me.r, life: M.life, k: M.k, blast: M.blast * me.r, fan: n > 1 ? M.fan * ((2 * i) / (n - 1) - 1) : 0, target: me, own: (q) => q === r.b || q === r.rock, from: r.b, seek: () => (me.m ? { ...me.motion, r: me.r } : undefined), seeker: seeker(M, me.r) });
-    [sl.load, sl.glow] = [0, 0];
-    ctx.fx.flash(x, y, r.b.r * 0.3, 8, r.b.r * 0.6);
+  function rockets(r: Rival, dt: number, armed: boolean) {
+    const me = ctx.me, pm = me.motion, bm = r.b.motion, p = r.pad;
+    p.t -= dt;
+    if (!p.left) {
+      p.glow = armed && p.t <= 0 && (r.wave?.phase === 'go' || volley(!!r.wave, r.rest)) ? p.glow + dt : 0;
+      if (p.glow >= RIVAL_GLOW) [p.left, p.glow, p.t] = [rivalSalvo(r.level, SALVO_LEAD[r.temper]), 0, 0];
+    } else if (p.t <= 0 && ctx.rockets.room()) {
+      [p.left, p.t] = [p.left - 1, p.left > 1 ? RIVAL_RIPPLE : RIVAL_SALVO];
+      ctx.rockets.launch({ team: 'rival', x: bm.x, y: bm.y, vx: bm.vx, vy: bm.vy, r: r.b.r, tx: pm.x, ty: pm.y, R: me.r, range: fireReach(r.b), target: me, from: r.b, own: (q) => q === r.b || q === r.rock, seek: () => (me.m ? { ...me.motion, r: me.r } : undefined) });
+      ctx.sfx()?.play('rocket', 0.3, 0.85);
+    }
   }
 
-  /** Lights (by people, flickering after a hit), its shield (view.ts shieldLook: veils, lattice, ripples), ships, the silo's glow, the engine plume. */
+  /** Lights (by people, flickering after a hit), its shield (view.ts shieldLook: veils, lattice, ripples), ships, the pad's glow, the engine plume. */
   function look(r: Rival, dt: number, on: boolean, page: TechPage) {
     const b = r.b, bm = b.motion, R = b.r;
     r.flick = Math.max(0, r.flick - dt);
@@ -413,8 +400,8 @@ export function createRivals(ctx: Ctx) {
     if (!on) return;
     const pm = ctx.me.motion, t = Math.hypot(r.thrust.x, r.thrust.y), at = Math.atan2(pm.y - bm.y, pm.x - bm.x);
     if (t > 0.02) ctx.put(page.dot, bm.x - (r.thrust.x / t) * R * 1.15, bm.y - (r.thrust.y / t) * R * 1.15, 0, R * (0.25 + 0.25 * Math.min(1, t / A_ENG)), VIOLET, 0.3 * Math.min(1, t / A_ENG)); // one plume opposite its thrust
-    if (r.silo.glow > 0) {
-      const k = Math.min(1, r.silo.glow / ARMS.missile.glow);
+    if (r.pad.glow > 0) {
+      const k = Math.min(1, r.pad.glow / RIVAL_GLOW);
       ctx.put(page.dot, bm.x + Math.cos(at) * R, bm.y + Math.sin(at) * R, 0, R * (0.1 + 0.15 * k), VIOLET, 0.4 + 0.5 * k);
     }
     const lit = Math.round(LIGHTS * Math.min(1, r.pop)), rot = b.view.rotation, unit = shipUnit(ctx.me.r, ctx.cam.zoom);
@@ -433,8 +420,9 @@ export function createRivals(ctx: Ctx) {
     update(dt: number, civ: Ctx['civ']) {
       clock += dt;
       const me = ctx.me, pm = me.motion;
-      // Distance travelled in view widths (a parked world gets no rivals).
-      if (civ?.state?.active && me.m && ctx.cam.halfW > 0 && Number.isFinite(lastX)) travelled += Math.hypot(pm.x - lastX, pm.y - lastY) / (2 * ctx.cam.halfW);
+      // Distance travelled in view widths × the local pace, sampled once a second (a parked world gets no rivals; voids are lonely).
+      if (Math.floor(clock) > Math.floor(clock - dt)) paceNow = pace(ctx.field()?.fillAt(pm.x, pm.y) ?? 1, RIVAL_PACE);
+      if (civ?.state?.active && me.m && ctx.cam.halfW > 0 && Number.isFinite(lastX)) travelled += (paceNow * Math.hypot(pm.x - lastX, pm.y - lastY)) / (2 * ctx.cam.halfW);
       [lastX, lastY] = [pm.x, pm.y];
       if (travelled >= nextAt) {
         nextAt += RIVAL_TRAVEL;
@@ -463,7 +451,7 @@ export function createRivals(ctx: Ctx) {
         if (r.beaten) {
           for (const v of r.look.veils) v.alpha *= Math.exp(-dt * 2);
           if (b.m > MOON_SHARE[1] * me.m) continue;
-          // Beamed down to moon size: a free body now, yours to catch (a spoil); gone from the roster.
+          // Mined down to moon size: a free body now, yours to catch (a spoil); gone from the roster.
           b.held = false;
           remove(r);
           if (r.entry) r.entry.alive = false;
@@ -473,24 +461,16 @@ export function createRivals(ctx: Ctx) {
         if (L > r.level && !r.open) [r.level, r.sh.level, r.sh.s] = [L, L, r.sh.s + SHIELD_K * (L - r.level)];
         if (!r.open) shieldRegen(r.sh, dt);
         rockMoon(r, dt);
-        // Slugs in volleys (none while its wave is out or your shield mends).
+        // Rockets only within its fire range; outside a wave in volleys (none while your shield mends).
         r.rest = restStep(r.rest, yourShieldDown, dt);
-        const armed = r.seen >= T_SEE && on && me.m > 0;
-        if (armed && volley(!!r.wave, r.rest)) fireSlug(r, dt);
+        r.inRange = Math.hypot(b.motion.x - pm.x, b.motion.y - pm.y) - b.r - me.r <= fireReach(b);
         homeFleet(r, dt, bodies);
         strategy(r, dt, on, far, bodies);
-        silo(r, dt, armed);
+        rockets(r, dt, r.seen >= T_SEE && on && me.m > 0 && r.inRange);
         if (r.pop <= BEATEN) beat(r);
         else look(r, dt, on, page);
       }
     },
-    /** Shielded rival worlds for slugs (weapon.ts). */
-    worlds: (): Shielded[] => list.filter((r) => !r.beaten && r.b.m > 0).map((r) => ({ body: r.b, shield: (k, share, x, y) => shieldTake(r, k, share, x, y), p: AIR })),
-    /** Rival ships as your slugs see them. */
-    marks: (): Mark[] => list.flatMap((r) => [
-      ...r.ships.map((s) => ({ x: r.b.motion.x + s.x, y: r.b.motion.y + s.y, r: ctx.shipR(), kill: () => shot(s) })),
-      ...r.out.filter((s) => !s.dead).map((s) => ({ x: s.x, y: s.y, r: ctx.shipR(), kill: s.kill })),
-    ]),
     /** Rival ships as foes for your defence ships (stable objects). */
     foes: (): Foe[] => list.flatMap((r) => [...r.ships.map((s) => r.foes.get(s)!).filter(Boolean), ...r.out.filter((s) => !s.dead)]),
     /** Open worlds (defence fleet gone) and what they still hold for your miners. */
@@ -516,12 +496,10 @@ export function createRivals(ctx: Ctx) {
         }
       }
     },
-    /** A rival's own slug never hits its world or its rock. */
-    own: (s: Slug, b: Body) => list.some((r) => r.b === s.from && b === r.rock),
     /** Shield ripple / people lost for hits on rival worlds (main.ts onHit through combat). */
     hit(h: Hit) {
       const r = list.find((q) => q.b === h.a || q.b === h.b);
-      if (!r || r.beaten || !r.b.m || slugBodies.has(h.a) || h.kind === 'eat') return; // a meal is not an attack
+      if (!r || r.beaten || !r.b.m || h.kind === 'eat') return; // a meal is not an attack
       const kelvin = hitKelvin(h, r.b); // what got past its shell (b.guard)
       if (kelvin >= HIT_MIN) [r.pop, r.flick] = [r.pop * (1 - Math.min(RIVAL_HIT_MAX, kelvin * HIT_KILL)), 1.5];
     },
@@ -530,11 +508,12 @@ export function createRivals(ctx: Ctx) {
       const pm = ctx.me.motion, live = list.filter((r) => !r.beaten && r.b.m > 0 && near(r)), aimed = live.find((r) => r.b === prefer), r = aimed ?? live.sort((a, c) => Math.hypot(a.b.motion.x - pm.x, a.b.motion.y - pm.y) - Math.hypot(c.b.motion.x - pm.x, c.b.motion.y - pm.y))[0];
       return r && { body: r.b, hit: (arm: Arm, k: number, x: number, y: number, cap?: Raid) => struck(r, arm, k, x, y, cap) };
     },
-    /** A missile burst on body `b` (combat.ts): theirs on you, yours on a rival world; weapon fire either way. */
-    missileHit(m: Missile, b: Body, x: number, y: number) {
-      if (m.team === 'rival' && b === ctx.me) return void ctx.civ?.struck('missile', m.k, x, y, list.find((r) => r.b === m.from)?.raid);
-      const r = m.team === 'you' ? list.find((q) => q.b === b) : undefined;
-      if (r) struck(r, 'missile', m.k, x, y);
+    /** A rocket burst on world `b` (combat.ts): theirs on you (outside its wave it kills nobody: floor = your people), yours on a rival world; true when it was a world. */
+    rocketHit(m: Pick<Rocket, 'team' | 'k' | 'from'>, b: Body, x: number, y: number) {
+      const w = list.find((q) => q.b === m.from), r = m.team === 'you' ? list.find((q) => q.b === b) : undefined;
+      if (m.team === 'rival' && b === ctx.me) return ctx.civ?.struck('rocket', m.k, x, y, w?.wave?.phase === 'go' ? w.raid : { floor: ctx.civ.state?.pop ?? 0, burnt: 0 }), true;
+      if (r) struck(r, 'rocket', m.k, x, y);
+      return !!r;
     },
     /** Dev hooks: beat a rival now; send its war wave now (massing first, as ever). */
     beat: (r: Rival) => void (r.pop = BEATEN),
@@ -542,14 +521,6 @@ export function createRivals(ctx: Ctx) {
       if (r.wave || r.beaten) return;
       [r.seen, r.stock, r.stanceT] = [Math.max(r.seen, 60), Math.max(r.stock, 1e3), 1];
       sendWave(r);
-    },
-    /** Your beam on `b` (combat.ts): false while a rival's shield takes its `kelvin` (nothing removed); else its people fall by BEAM_KILL × `share`. */
-    beam(b: Body, kelvin: number, share: number, x: number, y: number) {
-      const r = list.find((q) => q.b === b);
-      if (!r || r.beaten) return true;
-      if (shieldTake(r, kelvin, 0, x, y)) return false;
-      [r.pop, r.flick] = [beamPop(r.pop, share), 1.5];
-      return true;
     },
     /** Shield take from outside (pirate shots). */
     shieldTake,

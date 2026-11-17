@@ -1,11 +1,12 @@
-// node test/civilization/guns.test.ts: rounds are pooled, never tunnel, keep to the arc; missiles home (kicked to alternating sides, less from near; an early held burn beats one side's),
-// die to one round, stop on bodies and burst on enemy ships; `pick` and `nearest` choose targets; lances hit drifting
-// rocks; bolts stay visible at every zoom.
+// node test/civilization/guns.test.ts: rounds are pooled, never tunnel, keep to the arc; `pick` and `nearest` choose targets;
+// a fighter stops some rockets; lances hit drifting rocks; bolts stay visible at every zoom; rockets turn at most
+// ROCKET.turn, fly exactly their range, alternate pads, hit ships often and fast ones rarely.
 import assert from 'node:assert/strict';
-import { craft, disc, fighterGun, q, R, seeded, silo, SR } from './fakes.ts';
+import { craft, disc, fighterGun, q, R, rocketAt, seeded, SR } from './fakes.ts';
 import { BURST, F_PATROL_V, F_TURN, GAP, GUN, GUN_ARC, leadAt, RATE, SHOT_S, SHOT_V, SPREAD, wrap } from '../../src/evolution/civilization/flight.ts';
-import { BOLT, createMissiles, createShots, DOT_GLOW, DOT_LIT, least, MAX_GLOW, pick, nearest, pull, SHOTS, trigger, type Gun, type Hull, type Launch } from '../../src/evolution/civilization/guns.ts';
-import { ARMS, FLEET, FRAG, PREY } from '../../src/evolution/civilization/rules.ts';
+import { BOLT, createRockets, createShots, DOT_GLOW, DOT_LIT, least, MAX_GLOW, pick, nearest, pull, SHOTS, trigger, type Gun, type Hull } from '../../src/evolution/civilization/guns.ts';
+import { ARMS, FLEET, FRAG, PREY, ROCKET } from '../../src/evolution/civilization/rules.ts';
+import { fireRange } from '../../src/evolution/civilization/mining.ts';
 
 // Rounds (flight.ts createShots): the pool holds SHOTS at most; a SHOT_V (22 R/s) round cannot tunnel through a 0.09 R ship at 30
 // fps; nothing fires at a lead point outside the arc; bursts at a ship crossing at 4 R/s from 5 R kill some of the time.
@@ -41,155 +42,42 @@ import { ARMS, FLEET, FRAG, PREY } from '../../src/evolution/civilization/rules.
   console.log(`rounds: pool capped at ${SHOTS}; a burst at a ship crossing at 4 R/s, 5 R out, kills it ${((kills / N) * 100).toFixed(0)}% of the time (${N} seeded bursts, aim error ±${SPREAD} rad a burst)`);
   assert.ok(kills / N >= 0.35 && kills / N <= 0.75, `a burst at a crossing ship kills 35–75%: ${kills / N}`);
 }
-// Missiles (guns.ts createMissiles): without a seeker one flies straight (aimed once: a target holding course is hit, one
-// turning after launch is missed); one enemy round kills it; any body stops it; its burst kills enemy ships inside its blast;
-// `pick` takes a missile, then a frigate, before a fighter at the same distance. Shooter at rest, target 10 R out crossing at
-// 1 R/s (a world keeping station), 6 R/s, hit radius 0.6 R (a rival world's radius would be bigger: the strictest case).
+// Rockets as targets (guns.ts pick): a rocket first, then a frigate, before a fighter at the same distance; your priority ship
+// before either. Point defence: a rival rocket (rules.ts ROCKET, guided at the world, a seeded pad side) from 7–11 R at a world
+// (the origin); a home fighter 2–4 R out on its side fires bursts of BURST rounds every GAP s (RATE/s, SPREAD aim error, its
+// nose on the lead point) while the rocket is within GUN R. To rounds a rocket is ROCKET.size × a ship's hit radius. 400 seeded tries.
 {
-  const u = 6 * R, life = 5, shot = (o: Partial<Launch>): Launch => ({ team: 'you', x: 0, y: 0, vx: 0, vy: 0, tx: 10 * R, ty: 0, tvx: 0, tvy: 0, u, life, k: 12, blast: 0.6 * R, ...o });
-  for (const turn of [false, true]) {
-    const pool = createMissiles(9), m = pool.launch(shot({ tvy: R }))!, v0 = [m.vx, m.vy];
-    let tx = 10 * R, ty = 0, tvx = 0, tvy = R, best = Infinity;
-    for (let t = 0; pool.live.length && t < life + 1; t += 1 / 60) {
-      if (turn && t > 0.2) [tvx, tvy] = [0, -R]; // a sidestep after launch: back the other way
-      [tx, ty] = [tx + (tvx / 60), ty + (tvy / 60)];
-      const was = pool.live.length;
-      pool.step(1 / 60, [], [], 0, () => {}, () => {});
-      if (was && pool.live.length) assert.ok(m.vx === v0[0] && m.vy === v0[1], 'without a seeker a missile never changes velocity');
-      best = Math.min(best, Math.hypot(m.x - tx, m.y - ty));
-    }
-    assert.ok(turn ? best > 0.6 * R : best < 0.3 * R, `${turn ? 'a sidestepping' : 'a steady'} target: closest ${(best / R).toFixed(2)} R`);
-    console.log(`unguided missile vs a target 10 R out at 1 R/s, ${turn ? 'turning back 0.2 s after launch' : 'holding course'}: closest ${(best / R).toFixed(2)} R (${turn ? 'missed' : 'hit'})`);
-  }
-  // Intercepted: an enemy round in the shot pool, the missile listed as a hull (combat.ts).
-  {
-    const pool = createMissiles(9), shots = createShots(SHOTS, seeded(3)), m = pool.launch(shot({ team: 'rival', x: 10 * R, tx: 0 }))!;
-    const gun: Gun = { team: 'you', u: 30 * R, life: 0.5, arc: Math.PI, spread: 0, tint: 0 };
-    shots.fire(gun, trigger(), true, 4 * R, 0, 0, 0, 0, m.x, m.y, m.vx, m.vy);
-    for (let f = 0; f < 30 && !m.dead; f++) {
-      pool.step(1 / 60, [], [], 0, () => {}, () => {});
-      shots.step(1 / 60, [], m.dead ? [] : [{ x: m.x, y: m.y, vx: m.vx, vy: m.vy, r: SR, team: m.team, kill: m.kill }], 0, () => {});
-    }
-    let ended = '';
-    pool.step(1 / 60, [], [], 0, () => {}, (_, __, ___, burst) => (ended = burst ? 'burst' : 'shot down'));
-    assert.ok(m.dead && ended === 'shot down' && !pool.live.length, 'one enemy round kills a missile');
-  }
-  // A body in the way stops it (and is told); enemy ships within its blast die, its own side's do not. A rocket (`hit` set)
-  // gives its effect to its own target only.
-  {
-    const pool = createMissiles(9), rock = disc(5 * R, 0, 0.5 * R), kills: string[] = [];
-    pool.launch(shot({}));
-    const hulls: Hull[] = [
-      { x: 4.4 * R, y: 0.3 * R, r: SR, team: 'rival', kill: () => kills.push('rival near') },
-      { x: 4.4 * R, y: 3 * R, r: SR, team: 'rival', kill: () => kills.push('rival far') },
-      { x: 4.4 * R, y: -0.3 * R, r: SR, team: 'you', kill: () => kills.push('yours') },
-    ];
-    let hit: unknown, at = -1;
-    for (let t = 0; pool.live.length && t < life; t += 1 / 60) pool.step(1 / 60, [rock], hulls, 0, (_, b) => (hit = b), () => (at = t));
-    assert.ok(hit === rock && at > 0 && at < 1, `a body stops it (${at.toFixed(2)} s)`);
-    assert.deepEqual(kills, ['rival near'], 'its burst kills the enemy ship inside its blast only');
-    const other = disc(20 * R, 0, 0.5 * R), got: unknown[] = [];
-    pool.launch(shot({ target: other, hit: (b) => got.push(b) }));
-    for (let t = 0; pool.live.length && t < life; t += 1 / 60) pool.step(1 / 60, [rock, other], [], 0, () => got.push('combat'), () => {});
-    assert.deepEqual(got, [], 'a rocket stopped by a body that is not its target does nothing to it');
-  }
-  // Point defence: a silo missile (ARMS.missile, guided at the world, kicked to a seeded side) from 7–11 R at a world (the
-  // origin); a home fighter 2–4 R out on its side fires bursts of BURST rounds every GAP s (RATE/s, SPREAD aim error, its nose
-  // on the lead point) while the missile is within GUN R. To rounds a missile is ARMS.missile.size × a ship's hit radius:
-  // about a third to a half are stopped. 400 seeded tries.
-  {
-    const rnd = seeded(77), M = ARMS.missile, world = disc(0, 0, R);
-    let killed = 0;
-    for (let i = 0; i < 400; i++) {
-      const a = rnd() * 2 * Math.PI, L = 7 + 4 * rnd(), pool = createMissiles(9, seeded(500 + i)), shots = createShots(SHOTS, seeded(i)), g = trigger();
-      const m = pool.launch(silo(M, R, { team: 'rival', x: Math.cos(a) * L * R, y: Math.sin(a) * L * R, seek: () => ({ x: 0, y: 0, vx: 0, vy: 0, r: R }) }))!;
-      const b = a + (rnd() - 0.5) * 1.5, d = (2 + 2 * rnd()) * R, sx = Math.cos(b) * d, sy = Math.sin(b) * d;
-      const gun: Gun = { team: 'you', u: SHOT_V * R, life: SHOT_S, arc: GUN_ARC, spread: SPREAD, tint: 0 };
-      for (let f = 0; f < (M.life + 0.5) * 60 && !m.dead && pool.live.length; f++) {
-        const h = 1 / 60, c = craft(sx, sy);
-        c.heading = leadAt(c, m.x, m.y, m.vx, m.vy, gun.u);
-        const p = pull(g, h, Math.hypot(m.x - sx, m.y - sy) < GUN * R, BURST, RATE, GAP);
-        if (p) shots.fire(gun, g, p === 1, sx, sy, 0, 0, c.heading, m.x, m.y, m.vx, m.vy);
-        pool.step(h, [world], [], 0, () => {}, () => {});
-        shots.step(h, [], m.dead ? [] : [{ x: m.x, y: m.y, vx: m.vx, vy: m.vy, r: SR * M.size, team: m.team, kill: m.kill }], 0, () => {});
-      }
-      if (m.dead) killed++;
-    }
-    console.log(`point defence: one fighter's bursts (${BURST} rounds every ${GAP} s) kill an inbound guided missile (${M.u} R/s, from 7–11 R, ${M.size} × a ship's radius) ${((100 * killed) / 400).toFixed(0)}% of the time`);
-    assert.ok(killed >= 0.3 * 400 && killed <= 0.55 * 400, `one fighter stops a third to a half of the missiles (${killed / 400})`);
-  }
-  // The launch kick (ARMS.missile.arc): into an empty pool the first side is random (rnd < 0.5: +), then each launch flips it.
-  // From nearer than half a second of cruise (5.5 R) the kick shrinks in proportion: from 2.75 R it is half.
-  {
-    const M = ARMS.missile, m = createMissiles(9, () => 0).launch(silo(M, R, { tx: 2.75 * R, seek: () => ({ x: 2.75 * R, y: 0, vx: 0, vy: 0, r: R }) }))!;
-    assert.ok(Math.abs(Math.atan2(m.vy, m.vx) - M.arc / 2) < 1e-9, `a launch 2.75 R out leaves at half the arc (${(Math.atan2(m.vy, m.vx) / M.arc).toFixed(3)} × arc)`);
-  }
-  for (const [r, first] of [[0, 1], [0.9, -1]] as const) {
-    const pool = createMissiles(9, () => r), M = ARMS.missile, sides = [0, 1, 2].map(() => {
-      const m = pool.launch(silo(M, R, { tx: 10 * R, seek: () => ({ x: 10 * R, y: 0, vx: 0, vy: 0, r: R }) }))!;
-      return Math.atan2(m.vy, m.vx) / M.arc;
-    });
-    assert.ok(sides.every((x, i) => Math.abs(x - first * (i % 2 ? -1 : 1)) < 1e-9), `kicked ±arc, the first side ${first > 0 ? '+' : '−'}, then alternating (${sides.map((x) => x.toFixed(2)).join(' / ')} × arc)`);
-  }
-  const ship = { x: 4 * R, y: 0, kill() {}, cls: 'fighter' as const }, frig = { x: 0, y: 4 * R, kill() {}, cls: 'frigate' as const }, mis = { x: -4 * R, y: 0, kill() {}, cls: 'missile' as const };
-  assert.equal(pick([ship, frig, mis], 0, 0, 9 * R), mis, 'a missile first');
+  const ship = { x: 4 * R, y: 0, kill() {}, cls: 'fighter' as const }, frig = { x: 0, y: 4 * R, kill() {}, cls: 'frigate' as const }, rk = { x: -4 * R, y: 0, kill() {}, cls: 'rocket' as const };
+  assert.equal(pick([ship, frig, rk], 0, 0, 9 * R), rk, 'a rocket first');
   assert.equal(pick([ship, frig], 0, 0, 9 * R), frig, 'then a frigate');
   assert.equal(pick([ship, { ...frig, y: 6 * R }], 0, 0, 9 * R), ship, 'a fighter much nearer than a frigate');
-  assert.equal(pick([{ ...mis, x: -10 * R }], 0, 0, 9 * R), undefined, 'none out of range');
-  assert.equal(pick([ship, frig, mis], 0, 0, 9 * R, ship), ship, 'your priority ship before a missile or a frigate');
-  assert.equal(pick([mis], 0, 0, 9 * R, undefined), mis, 'no priority: the usual pick');
-  console.log('missiles ok: straight without a seeker, one round kills it, a body stops it, the blast takes enemy ships only, a rocket hits only its target; pick: your priority, then missile, frigate, fighter');
-}
-// Guidance (guns.ts steer, ARMS.missile): a silo missile at a world of radius R (the shooter's size) L R out (16 unless
-// said) crossing at 1 R/s, kicked ARMS.missile.arc to either side (both tried: `side`). While locked it turns at most
-// turn × u / speed rad/s (a lateral-acceleration limit; nav: the error closed at nav / time-to-go, a lazy arc); the lock
-// never comes back; unlocked its heading holds. A steady target is hit with the seeker held for its burn s or to within
-// blind s of the end; so is one that turns back 0.2 s after launch and a launch 0.08 rad off. A held burn of 7.5 R/s²
-// sideways (a world's dodge) from 0.8 s is caught from 8 R; from 0.3 s at 10 R, whichever way it burns, one kick side hits
-// and the other misses; a target outside the cone at launch gets a straight shot. Then the land rate over seeded random dodges.
-{
-  const M = ARMS.missile, h = 1 / 60, sides = [1, -1];
-  /** One flight; `dodge(t, unlockedAt)` gives the target's sideways acceleration (R/s²); `side` the launch kick's. Closest approach (R), whether it hit, when it unlocked and ended. */
-  const fly = (dodge: (t: number, off: number) => number, side = 1, fan = 0, turnAt = Infinity, L = 16) => {
-    const pool = createMissiles(9, () => (side > 0 ? 0 : 0.9)), w = disc(L * R, 0, R, 0, R);
-    const m = pool.launch(silo(M, R, { team: 'rival', tx: w.motion.x, tvy: R, fan, target: w, seek: () => ({ ...w.motion, r: w.r }) }))!;
-    let hit = false, best = Infinity, off = Infinity, h0 = Math.atan2(m.vy, m.vx), was = true, t = 0;
-    for (; pool.live.length && t < M.life + 0.5; t += h) {
-      if (t >= turnAt) w.motion.vy = -R;
-      const a = dodge(t, off) * R;
-      w.motion.vy += a * h;
-      [w.motion.x, w.motion.y] = [w.motion.x + w.motion.vx * h, w.motion.y + w.motion.vy * h];
-      pool.step(h, [w], [], 0, (_, b) => void (hit ||= b === w), () => {});
-      if (!pool.live.length) break;
-      const hd = Math.atan2(m.vy, m.vx), turned = Math.abs(wrap(hd - h0)), most = (M.turn * M.u * R * h) / Math.hypot(m.vx, m.vy);
-      if (m.lock) assert.ok(was && turned <= most + 1e-6, `locked: ${turned.toFixed(5)} rad in a step, at most ${most.toFixed(5)}`);
-      else assert.ok(was || turned < 1e-9, 'unlocked: the heading holds');
-      if (!m.lock && was) off = t;
-      [h0, was] = [hd, m.lock];
-      best = Math.min(best, Math.hypot(m.x - w.motion.x, m.y - w.motion.y) - w.r);
+  assert.equal(pick([{ ...rk, x: -10 * R }], 0, 0, 9 * R), undefined, 'none out of range');
+  assert.equal(pick([ship, frig, rk], 0, 0, 9 * R, ship), ship, 'your priority ship before a rocket or a frigate');
+  const rnd = seeded(77), world = disc(0, 0, R);
+  let killed = 0;
+  for (let i = 0; i < 400; i++) {
+    const a = rnd() * 2 * Math.PI, L = 7 + 4 * rnd(), pool = createRockets(12, seeded(500 + i)), shots = createShots(SHOTS, seeded(i)), g = trigger();
+    const m = pool.launch(rocketAt(R, { team: 'rival', x: Math.cos(a) * L * R, y: Math.sin(a) * L * R, tx: 0, ty: 0, seek: () => ({ x: 0, y: 0, vx: 0, vy: 0, r: R }) }))!;
+    const b = a + (rnd() - 0.5) * 1.5, d = (2 + 2 * rnd()) * R, sx = Math.cos(b) * d, sy = Math.sin(b) * d;
+    const gun: Gun = { team: 'you', u: SHOT_V * R, life: SHOT_S, arc: GUN_ARC, spread: SPREAD, tint: 0 };
+    for (let f = 0; f < 6 * 60 && !m.dead && pool.live.length; f++) {
+      const h = 1 / 60, c = craft(sx, sy);
+      c.heading = leadAt(c, m.x, m.y, m.vx, m.vy, gun.u);
+      const p = pull(g, h, Math.hypot(m.x - sx, m.y - sy) < GUN * R, BURST, RATE, GAP);
+      if (p) shots.fire(gun, g, p === 1, sx, sy, 0, 0, c.heading, m.x, m.y, m.vx, m.vy);
+      pool.step(h, [world], [], 0, () => {}, () => {});
+      shots.step(h, [], m.dead ? [] : [{ x: m.x, y: m.y, vx: m.vx, vy: m.vy, r: SR * ROCKET.size, team: m.team, kill: m.kill }], 0, () => {});
     }
-    return { hit, best: best / R, off, t };
-  };
-  /** A held 7.5 R/s² burn from `at` s, both ways, against both launch sides. */
-  const burn = (L: number, at: number) => sides.flatMap((side) => sides.map((s) => fly((t) => (t >= at ? 7.5 * s : 0), side, 0, Infinity, L)));
-  const steady = sides.map((s) => fly(() => 0, s)), late = sides.map((s) => fly(() => 0, s, 0, 0.2)), skew = sides.map((s) => fly(() => 0, s, 0.08)), wide = sides.map((s) => fly(() => 0, s, 2.5));
-  const caught = burn(8, 0.8), early = burn(10, 0.3);
-  const say = (f: { hit: boolean; best: number }) => (f.hit ? 'hit' : `missed by ${f.best.toFixed(2)} R`), both = (fs: { hit: boolean; best: number }[]) => fs.map(say).join(' / ');
-  console.log(`guided missile (${M.u} R/s, turn ${M.turn} rad/s at cruise: ${(M.turn * M.u).toFixed(1)} R/s² sideways, kicked ±${M.arc} rad, blind ${M.blind} s) at a world 16 R out, both sides: steady ${both(steady)} (seeker let go ${steady.map((f) => (f.t - f.off).toFixed(2)).join(' / ')} s out, flight ${steady.map((f) => f.t.toFixed(2)).join(' / ')} s), turning back at 0.2 s ${both(late)}, 0.08 rad off ${both(skew)}, outside the cone ${both(wide)}; a held 7.5 R/s² burn (both ways, both sides) from 0.8 s at 8 R ${both(caught)}, from 0.3 s at 10 R ${both(early)}`);
-  assert.ok(steady.every((f) => f.hit && f.off >= Math.min(M.burn, f.t - M.blind) - 0.05), `a steady target is hit, the seeker held its burn s or to within blind s (let go at ${steady.map((f) => f.off.toFixed(3)).join(' / ')} s)`);
-  assert.ok([...late, ...skew].every((f) => f.hit), 'an early turn back and a launch 0.08 rad off are hit');
-  assert.ok(caught.every((f) => f.hit), 'a burn from 0.8 s is caught from 8 R');
-  for (const k of [0, 1]) assert.ok([early[k], early[2 + k]].some((f) => f.hit) && [early[k], early[2 + k]].some((f) => !f.hit), `a burn from 0.3 s at 10 R (${k ? '−' : '+'}): one kick side hits, the other misses (${both([early[k], early[2 + k]])})`);
-  assert.ok(wide.every((f) => f.off < 2 * h && !f.hit), 'outside the cone at launch: unlocked at once, a straight miss');
-  // Land rate: the target sidesteps at a random moment of the flight with a random push of 0–8 R/s² (the dodges a player tries), the kick to a random side.
-  const rnd = seeded(31);
-  let land = 0;
-  for (let i = 0; i < 200; i++) {
-    const at = rnd() * 2, g = 8 * rnd(), s = rnd() < 0.5 ? -1 : 1, side = rnd() < 0.5 ? -1 : 1;
-    if (fly((t) => (t >= at ? s * g : 0), side).hit) land++;
+    if (m.dead) killed++;
   }
-  console.log(`guided missile land rate against random sidesteps (any moment, 0–8 R/s²): ${((100 * land) / 200).toFixed(0)}%`);
-  assert.ok(land >= 0.75 * 200 && land <= 0.95 * 200, `most random sidesteps are caught, not all (${land / 200})`);
+  console.log(`point defence: one fighter's bursts (${BURST} rounds every ${GAP} s) kill an inbound rocket (${ROCKET.speed} R/s, from 7–11 R, ${ROCKET.size} × a ship's radius) ${((100 * killed) / 400).toFixed(0)}% of the time`);
+  assert.ok(killed >= 0.3 * 400 && killed <= 0.55 * 400, `one fighter stops a third to a half of the rockets (${killed / 400})`);
+  // A rocket with its own `hit` gives its effect to its own target only; a body in the way just stops it.
+  const pool = createRockets(12, seeded(4)), rock = disc(5 * R, 0, 0.5 * R), other = disc(20 * R, 0, 0.5 * R), got: unknown[] = [];
+  pool.launch(rocketAt(R, { tx: 20 * R, target: other, hit: (q) => got.push(q) }, 30));
+  for (let t = 0; pool.live.length && t < 5; t += 1 / 60) pool.step(1 / 60, [rock, other], [], 0, () => got.push('combat'), () => {});
+  assert.deepEqual(got, [], 'a rocket stopped by a body that is not its target does nothing to it');
+  console.log('rockets as targets ok: pick takes your priority, then a rocket, a frigate, a fighter; a rocket hits only its own target');
 }
 // Lance bolts (ARMS.lance) at drifting rocks: a frigate circling its world (the origin) 3 R out at F_PATROL_V turns its nose
 // (F_TURN) onto the lead point and fires one salvo once it bears; the rock (FRAG–FLEET.frigate.breaks of the world, 5–25 R
@@ -243,17 +131,95 @@ import { ARMS, FLEET, FRAG, PREY } from '../../src/evolution/civilization/rules.
     assert.ok(px('lance') > px('shell') && px('shell') > px('round') && px('round') > px('probe') && px('round') > px('round', 'core'), `heavier bolts are bigger (zoom ${z}, R ${Rw})`);
   }
   const e = 1e-9, f = (x: number) => x.toFixed(1);
-  console.log(`bolts: bright middle ≥ ${f(low.round)} px round, ${f(low.probe)} probe, ${f(low.pirate)} pirate, ${f(low.shell)} shell, ${f(low.lance)} lance, ${f(low.missile)} missile head, ${f(low.rocket)} rocket head; glow ≥ ${f(low.glow)} px round, ${f(low.lanceGlow)} lance`);
-  assert.ok(low.round >= 2.8 - e && low.pirate >= 2.8 - e && low.probe >= 2.2 - e && low.lance >= 4.8 - e && low.missile >= 5 - e, 'bright middles stay a few px wide at every zoom');
+  console.log(`bolts: bright middle ≥ ${f(low.round)} px round, ${f(low.probe)} probe, ${f(low.pirate)} pirate, ${f(low.shell)} shell, ${f(low.lance)} lance; glow ≥ ${f(low.glow)} px round, ${f(low.lanceGlow)} lance`);
+  assert.ok(low.round >= 2.8 - e && low.pirate >= 2.8 - e && low.probe >= 2.2 - e && low.lance >= 4.8 - e, 'bright middles stay a few px wide at every zoom');
   assert.ok(low.glow >= 5.8 && low.lanceGlow >= 10 - e, 'glows stay ~6 px (rounds) and 10 px (lances) wide');
-  for (const k of ['missile', 'rocket'] as const) for (const z of [3, 1, 0.024]) for (const Rw of [16, 500]) {
-    const F = BOLT[k].flame!, w = least(F.k, F.px, unit(Rw, z), z) * z;
-    assert.ok(w >= 12 - e && w * F.long! >= 48 - e, `a ${k} flame stays at least 12 × 48 px: ${f(w)} × ${f(w * F.long!)}`);
+  // A rocket hull (bolts.ts): ROCKET.len of its unit, at least ROCKET.px on screen, never over 0.6 of its shooter's radius (zoomed far out).
+  for (const z of [3, 1, 0.098, 0.024]) for (const Rw of [16, 40, 500]) {
+    const len = Math.min(Math.max(ROCKET.len * Rw, ROCKET.px / z), 0.6 * Rw) * z;
+    assert.ok(len <= 0.6 * Rw * z + e && len >= Math.min(ROCKET.px, 0.6 * Rw * z) - e, `a rocket is ${f(len)} px at zoom ${z}, R ${Rw} (its world ${f(Rw * z)} px)`);
   }
-  assert.ok(low.rocket >= 4 - e && low.missile > low.rocket, `a rocket's head ≥ 4 px, a missile's bigger: ${f(low.rocket)}, ${f(low.missile)}`);
-  const lances = 12, worst = SHOTS * 2 + lances + 14 + ARMS.missile.max * 4 + 4 * 2 + 2 + 3; // rounds (+ lance halos), muzzles, missiles and rockets (head, core, flame, jet), slugs, beam ends, charging glows
+  const lances = 12, worst = SHOTS * 2 + lances + 14 + ROCKET.max * 3 + 14 * 5 + 3; // rounds (+ lance halos), muzzles, rockets (flame, jet, nozzle), pirate shields or jumps, charging glows
   console.log(`glow layer worst frame: ${worst} of ${MAX_GLOW} quads`);
   assert.ok(worst <= MAX_GLOW, `the worst frame fits the glow layer: ${worst} of ${MAX_GLOW} quads`);
   assert.ok(SHOT_V === ARMS.round.u && SHOT_S === ARMS.round.life && SHOT_V * SHOT_S >= GUN + 5, `a round reaches ${f(SHOT_V * SHOT_S)} R, past the gun range + 5 R`);
   assert.ok(ARMS.lance.u * ARMS.lance.life >= 59, `a lance bolt reaches ${f(ARMS.lance.u * ARMS.lance.life)} R`);
+}
+// Rockets (guns.ts createRockets, rules.ts ROCKET), flown by flight.ts `thrust` in their launch frame: the nose never turns
+// faster than ROCKET.turn at 30, 60 or 240 fps and the velocity follows it; the fuel is the range (a straight shot ends at
+// the fire range, mining.ts fireRange, for 1 and 5 moon slots); pads alternate sides, less off the aim from near; a direct
+// hit is heavy (through shields), the blast is not; a round kills it; a body stops it; seeded hit rates on ships.
+{
+  const W = R, sr = SR;
+  for (const dt of [1 / 30, 1 / 60, 1 / 240]) {
+    const pool = createRockets(12, seeded(3)), t = { x: 6 * W, y: 3 * W, vx: 0, vy: 4 * W };
+    const m = pool.launch({ team: 'you', x: 0, y: 0, vx: 3 * W, vy: -2 * W, r: W, tx: t.x, ty: t.y, R: W, range: fireRange(1) * W, seek: () => t })!;
+    let rate = 0, slip = 0, h0 = m.heading;
+    while (pool.live.length) {
+      pool.step(dt, [], [], 0, () => {}, () => {});
+      t.y += t.vy * dt;
+      [rate, h0] = [Math.max(rate, Math.abs(wrap(m.heading - h0)) / dt), m.heading];
+      slip = Math.max(slip, Math.abs(wrap(Math.atan2(m.vy - m.v0y, m.vx - m.v0x) - m.heading)));
+    }
+    assert.ok(rate <= ROCKET.turn + 1e-9 && slip <= 0.15, `at 1/${Math.round(1 / dt)} s the nose turns ≤ ${ROCKET.turn} rad/s (${rate.toFixed(3)}), slip ≤ 0.15 rad (${slip.toFixed(3)})`);
+  }
+  for (const slots of [1, 5]) {
+    const pool = createRockets(12, seeded(5)), range = fireRange(slots);
+    let end = 0;
+    pool.launch({ team: 'you', x: 0, y: 0, vx: 0, vy: 0, r: W, tx: 100 * W, ty: 0, R: W, range: range * W });
+    for (let i = 0; i < 900 && pool.live.length; i++) pool.step(1 / 60, [], [], 0, () => {}, (m) => void (end = Math.hypot(m.x, m.y) / W - 1));
+    assert.ok(Math.abs(end - range) <= 0.3, `a straight shot ends ${end.toFixed(2)} R off the surface, its fire range ${range.toFixed(1)} R (${slots} slots)`);
+  }
+  { // pads: alternating sides, the full ROCKET.pad from afar, less from near
+    const pool = createRockets(12, seeded(7)), at = (tx: number) => wrap(pool.launch({ team: 'you', x: 0, y: 0, vx: 0, vy: 0, r: W, tx, ty: 0, R: W, range: 10 * W })!.heading);
+    const a = at(30 * W), b = at(30 * W), c = at(3 * W);
+    assert.ok(Math.abs(Math.abs(a) - ROCKET.pad) < 1e-9 && Math.sign(a) === -Math.sign(b), `sides alternate, ±${ROCKET.pad} rad from afar (${a.toFixed(2)}, ${b.toFixed(2)})`);
+    assert.ok(Math.abs(c) < ROCKET.pad * 0.25, `less from near (${c.toFixed(2)})`);
+  }
+  { // a direct hit is heavy, a ship in the blast takes a plain hit; a round kills a rocket; a body stops one
+    const pool = createRockets(12, seeded(9)), kills: string[] = [];
+    pool.launch({ team: 'you', x: 0, y: 0, vx: 0, vy: 0, r: W, tx: 6 * W, ty: 0, R: W, range: 20 * W, seek: () => ({ x: 6 * W, y: 0, vx: 0, vy: 0 }), fuze: true });
+    const ships: Hull[] = [{ x: 6 * W, y: 0, r: sr, team: 'pirate', kill: (h) => void kills.push(h ? 'direct' : 'blast') }, { x: 6 * W, y: 0.4 * W, r: sr, team: 'pirate', kill: (h) => void kills.push(h ? 'direct2' : 'blast2') }];
+    let end = '';
+    for (let i = 0; i < 300 && pool.live.length; i++) pool.step(1 / 60, [], ships, 0, () => {}, (m, x, y, e) => void (end = e));
+    assert.ok(end === 'burst' && kills.includes('direct') && kills.includes('blast2') && kills.length === 2, `the locked ship takes the direct (heavy) hit, its neighbour the blast: ${kills}`);
+    const p2 = createRockets(12, seeded(9)), rk = p2.launch({ team: 'rival', x: 10 * W, y: 0, vx: 0, vy: 0, r: W, tx: 0, ty: 0, R: W, range: 20 * W })!;
+    p2.step(0.1, [], [], 0, () => {}, () => {});
+    rk.kill(); // a round's hit (combat.ts lists a rocket as a hull of ROCKET.size × a ship's radius)
+    p2.step(1 / 60, [], [], 0, () => {}, (m, x, y, e) => void (end = e));
+    assert.ok(rk.dead && end === 'shot', `a killed rocket ends as shot down (${end})`);
+    const p3 = createRockets(12, seeded(9)), rock = disc(6 * W, 0, 1.5 * W);
+    let stopped = false;
+    p3.launch({ team: 'you', x: 0, y: 0, vx: 0, vy: 0, r: W, tx: 10 * W, ty: 0, R: W, range: 20 * W, seek: () => ({ x: 10 * W, y: 0, vx: 0, vy: 0 }) });
+    for (let i = 0; i < 300 && p3.live.length; i++) p3.step(1 / 60, [rock], [], 0, () => void (stopped = true), () => {});
+    assert.ok(stopped, 'a rock in its path stops it');
+  }
+  // Seeded hit rates on a ship (hit radius SR) from a still world, 300 launches each, fuel 16.8 R (1 slot).
+  const rate = (mk: (rnd: () => number) => { s: { x: number; y: number; vx: number; vy: number }; move: (t: number, dt: number) => void }) => {
+    const rnd = seeded(17);
+    let hit = 0;
+    for (let i = 0; i < 300; i++) {
+      const pool = createRockets(12, rnd), { s, move } = mk(rnd);
+      let dead = false;
+      pool.launch({ team: 'you', x: 0, y: 0, vx: 0, vy: 0, r: W, tx: s.x, ty: s.y, R: W, range: fireRange(1) * W, seek: () => s, fuze: true });
+      for (let t = 0, dt = 1 / 60; t < 6 && pool.live.length; t += dt) {
+        move(t, dt);
+        pool.step(dt, [], [{ ...s, r: sr, team: 'pirate', kill: () => void (dead = true) }], 0, () => {}, () => {});
+      }
+      if (dead) hit++;
+    }
+    return hit / 300;
+  };
+  const line = (v: number, d: number, across: boolean) => (rnd: () => number) => {
+    const a = rnd() * 2 * Math.PI, sg = rnd() < 0.5 ? 1 : -1, s = { x: Math.cos(a) * d * W, y: Math.sin(a) * d * W, vx: (across ? -Math.sin(a) * sg : -Math.cos(a)) * v * W, vy: (across ? Math.cos(a) * sg : -Math.sin(a)) * v * W };
+    return { s, move: (t: number, dt: number) => void ([s.x, s.y] = [s.x + s.vx * dt, s.y + s.vy * dt]) };
+  };
+  const orbit = rate((rnd) => {
+    const a = rnd() * 2 * Math.PI, p = rnd() * 2 * Math.PI, cx = Math.cos(a) * 8 * W, cy = Math.sin(a) * 8 * W, s = { x: cx + 2 * W * Math.cos(p), y: cy + 2 * W * Math.sin(p), vx: 0, vy: 0 };
+    return { s, move: (t: number) => void ([s.x, s.y, s.vx, s.vy] = [cx + 2 * W * Math.cos(p + 1.5 * t), cy + 2 * W * Math.sin(p + 1.5 * t), -3 * W * Math.sin(p + 1.5 * t), 3 * W * Math.cos(p + 1.5 * t)]) };
+  });
+  const cross = rate(line(6, 8, true)), close = rate(line(6, 14, false)), fast = rate(line(10, 8, true));
+  console.log(`rockets (${ROCKET.speed} R/s, ≤ ${ROCKET.turn} rad/s) on a ship: orbiting at 3 R/s ${(100 * orbit).toFixed(0)}%, crossing at 6 R/s ${(100 * cross).toFixed(0)}%, closing at 6 R/s ${(100 * close).toFixed(0)}%, crossing at 10 R/s ${(100 * fast).toFixed(0)}%`);
+  assert.ok(orbit >= 0.6 && cross >= 0.3 && close >= 0.3, 'a rocket hits a patrolling, crossing or closing ship often');
+  assert.ok(fast <= 0.2, 'a ship crossing at 10 R/s mostly slips it (no undefeatable rocket)');
 }

@@ -18,14 +18,14 @@ your HUD card and controls: [hudandcontrols.md](hudandcontrols.md). Labels: [REA
 | 10^4 | Protoplanet (molten) / Dwarf planet |
 | 10^4.5 | Planet (Rocky planet if solids ≥ 60%) |
 | 10^5 | Super-Earth / Mini-Neptune |
-| 10^5.5 | Ice giant (ice + gas ≥ 60%) |
+| 10^5.5 | Ice giant (ice + gas ≥ 60%, on the gas line; a wet rocky world stays Super-Earth) |
 | 10^6 | Gas giant (gas ≥ 70%) |
 | 10^6.5 | Super-Jupiter |
 | 10^7 | Brown dwarf (never ignites) |
 
-- **Gas line:** in at gas ≥ 20%, out below 15% (sticky; `rules.test.ts`, 2026-11-16). From 15% at ≥ Planet mass the HUD warns once. A gas world leaves the life path and ends at Brown dwarf.
+- **Gas line:** in at gas ≥ 20%, out below 15% (sticky; `rules.test.ts`, 2026-11-16). From 15% at ≥ Planet mass the HUD warns once (a toast); your card's Limits row shows the gas share against 20% from 5% ([hudandcontrols.md](hudandcontrols.md) → HUD). A gas world leaves the life path and ends at Brown dwarf.
 - The life path closes on the gas line only from Super-Earth mass (`envelope`: m ≥ 10^5 and on the line, read in the stage's `update`). Below that a gas-line world still runs life and can start a civilization. The warning toast says so: "20% gas makes a gas world from Super-Earth mass: no surface, no life".
-- A world never reads as an asteroid again: dropping below AGE_GOAL still names a planetoid. One toast per mass step; a rocky world past Super-Earth has no next tier, its goal is "make it habitable".
+- A world never reads as an asteroid again: dropping below AGE_GOAL still names a planetoid. One toast per mass step; a rocky world past Super-Earth has no next tier, its goal is "make it habitable". Growing still thickens its air at the same gas share: `airLimits(m, gas, warm)` gives the masses where the seas start to suffer (`HOT_RAMP` 30 K under boiling) and where they boil, at today's gas share and starlight (`WorldState.limits`, the Limits row; computed, 2026-11-17, for a 125k Super-Earth at 7.7% gas without starlight: suffer ×2.84, boil ×6.07).
 
 ### Your surface
 
@@ -80,7 +80,7 @@ Code: `core/orbits.ts`, `planet/moons.ts`.
 
 - **Slots:** 1 / 2 / 3 / 4 / 5 at 10^3.5 / 10^4 / 10^4.5 / 10^5 / 10^5.5, slot k at R·(2.4 + 1.25k), the fifth at 7.4 R (user, 2026-11-14: "same for planet moons, sizes etc"; 2026-11-15: moons looked too large and overlapped, "around 5 moons instead of 7"). Moons are no wider than `MOON_R` 0.45 R, so neighbours never touch.
 - Kinematic, the old game's way (real gravity cannot hold a moon against your thrust): spring 0.25 s, rate √(μ/a³). `moons.fit()` widens the camera so the outer slot stays on screen.
-- Free slots show as faint drifting dashed circles; your HUD card shows a pip per slot.
+- Free slots show as faint drifting dashed circles; your HUD card shows a pip per slot and the mass ratio where the next ring opens (`nextMoonMass`).
 
 #### Capture by match
 

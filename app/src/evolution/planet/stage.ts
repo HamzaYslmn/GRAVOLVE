@@ -12,7 +12,7 @@ import { createStarStage, type StarState } from '../star/stage';
 import { createWorldHud } from './hud';
 import { createMoons } from './moons';
 import {
-  beforeClimate, climate, envelope, fedAir, GAS_WARN, gasPath, habitability, impact, lifeStep, nextGoal, onGasLine, PLANET_M, PROTO_M, RAIN_GAP, seaCover, lifeName, stageOf, THIEF, tierName,
+  airLimits, beforeClimate, climate, envelope, fedAir, GAS_WARN, gasPath, habitability, impact, lifeStep, nextGoal, onGasLine, PLANET_M, PROTO_M, RAIN_GAP, seaCover, lifeName, stageOf, THIEF, tierName,
   type Life, type Sky,
 } from './rules';
 
@@ -39,6 +39,7 @@ export type WorldState = {
   envelope: boolean; // gas line past Super-Earth mass: no surface for life (doc)
   gasLine: boolean; // on the sticky gas line (in at 20% gas, out below 15%: rules.ts onGasLine)
   gasWarn: boolean; // a world with a surface from Planet mass with gas ≥ 15%: the HUD warns before the gas line locks life out
+  limits: { suffer: number; boil: number }; // masses at today's gas share (and starlight) where seas start to suffer and boil (rules.ts airLimits)
   diff: number; // 0..1 how far your metal has sunk to a core (Body.diff; the magnetic field's lever)
   moons: number; slots: number; // your moons, and how many slots your mass gives (moons.ts)
   civ?: CivState; // from an intelligent species on (evolution/civilization): population, energy, tech, shield
@@ -62,7 +63,7 @@ export function createPlanetStage(layer: Container, me: Body, renderer: Renderer
   /** The stage's own news, after NEWS_WAIT (not latched while waiting); the body shows it too. */
   const once = (key: string, title: string, sub: string) => void (age >= NEWS_WAIT && news(key, title, sub) && look.milestone(key));
   const moons = createMoons(layer, me, kit.input, kit.glow, kit.fx, kit.canvas, news);
-  combat.attach(moons); // mass driver, rival worlds, pirates
+  combat.attach(moons); // your rockets, rival worlds, pirates
 
   return {
     /** The latest snapshot (undefined before the first update). */
@@ -80,7 +81,7 @@ export function createPlanetStage(layer: Container, me: Body, renderer: Renderer
     moons,
     /** Life's progress and calm (dev test hook: scripted runs start at an intelligent species). */
     life,
-    /** Combat: mass driver, rivals, pirates (test hook). */
+    /** Combat: your rockets, rivals, pirates (test hook). */
     combat,
     /** The civilization once there is one (test hook). */
     get civ() {
@@ -135,7 +136,7 @@ export function createPlanetStage(layer: Container, me: Body, renderer: Renderer
         mass: me.m, gasShare: gas, name, goal, kelvin: hab.k, pressure: hab.p, boilingK: hab.bp, water: hab.state, waterShare: water, seaCover: seaCover(water), vapor,
         scores: { water: hab.water, temp: hab.temp, air: hab.air, magnet: hab.magnet }, lifeSpeed: gassy ? 0 : hab.rate,
         life: stage, lifeName: lifeName(life.progress), lifeProgress: life.progress, envelope: gassy,
-        gasLine: line, gasWarn, diff: me.diff ?? 0,
+        gasLine: line, gasWarn, limits: airLimits(me.m, gas, light.warm), diff: me.diff ?? 0,
         moons: moons.list().length, slots: moons.slots,
       };
 
@@ -162,7 +163,7 @@ export function createPlanetStage(layer: Container, me: Body, renderer: Renderer
         if (!star && civ.state?.contact) star = createStarStage(layer, me, renderer, kit, civ, news);
         state.star = star?.state;
       }
-      combat.update(dt, near, zoom, aimTarget, stage, civ, star?.beam);
+      combat.update(dt, near, zoom, aimTarget, stage, civ);
       if (name === 'Brown dwarf') once('age2', 'Brown dwarf: a failed star', 'Age II complete · the gas line ends here');
       else if (name !== tier && age >= NEWS_WAIT) {
         // Every tier above the planetoid is told here: one toast per mass step.

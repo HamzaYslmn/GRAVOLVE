@@ -10,7 +10,7 @@ import { makeRival, steerRival, tendMoon } from './rival';
 import { live, next, roster, struck, tick, type Entry } from '../rivals/ledger';
 import { beltFlow, density, groupDrift, KINDS, kindMix, nearStart, palette, place, rapidsFlow, tintBy, web, type Biome, type Place } from './web';
 import type { Spheres } from './sphere';
-import { AGE_GOAL, BURN_HEAT, BURN_MAX, burnShare, SPECK, EATEN_MARGIN, impactHeat, worldOpts, damage, COMP, G_WORLD, gravitates, pairPull, START_M, pullMass, reachGround, stickSpeed, youPull, V_STICK, radiusOf, START_R, type Element, type Comp } from './rules';
+import { AGE_GOAL, BURN_HEAT, BURN_MAX, burnShare, SPECK, EATEN_MARGIN, impactHeat, worldOpts, damage, COMP, G_WORLD, gravitates, pairPull, START_M, pullMass, rank, reachGround, stickSpeed, youPull, V_STICK, radiusOf, START_R, type Element, type Comp } from './rules';
 
 // Asteroid field in world chunks, Minecraft-style: a chunk is generated once from the seed, stored as it is on unload
 // (eaten rocks stay eaten) and restored on load. A rock belongs to the chunk it is in; only loaded chunks simulate.
@@ -669,7 +669,7 @@ export function createAsteroidField(layer: Container, atlas: Rock[], glow: Textu
   const events: Events = { hit: (h) => void (rivalHit(h), onHit(h)), debris: (x, y, vx, vy, m, comp, from) => void (m >= SPECK * player.m && addBody(x, y, vx, vy, m, comp, from)) }; // specks are just dust
 
   /**
-   * Mutual escape speed in diameters/s of `a` (the heavier: the rules' unit). Rock pairs stick below half of it: they merge
+   * Mutual escape speed in diameters/s of `a` (T: the rules' unit). Rock pairs stick below half of it: they merge
    * only when gravity can hold them, else bounce and chip.
    */
   const escape = (a: Body, b: Body) => Math.sqrt((2 * G_WORLD * (a.m + b.m)) / (a.r + b.r)) / (2 * a.r);
@@ -816,9 +816,9 @@ export function createAsteroidField(layer: Container, atlas: Rock[], glow: Textu
       if (a === player) return (b.moon && a.guard?.own?.(b) !== false) || burn(b) ? undefined : ((b.moon = false), hitWorld(player, b)); // yours never touch you; a rival's rock lands like any body
       if (a.moon && b.moon) return; // moons keep their slots
       if (a.guard && ((b.moon && !a.guard.own?.(b)) || b.metShell === a)) return hitWorld(a, b); // another world's moon (shed loose by its shell too) lands as a body lands on you
-      const [p, q] = a.m >= b.m ? [a, b] : [b, a];
-      if (p.rival || q.rival || p.moon || q.moon) resolve(p, q, events); // a moon eats like you do: a guard swallows slow infall
-      else resolve(p, q, events, { stick: Math.min(V_STICK, escape(p, q)) / 2, graze: 1 });
+      if (a.rival || b.rival || a.moon || b.moon) return a.m >= b.m ? resolve(a, b, events) : resolve(b, a, events); // a moon eats like you do: a guard swallows slow infall
+      const ka = rank(phys(a)), kb = rank(phys(b)), [p, q] = ka > kb || (ka === kb && Math.random() < 0.5) ? [a, b] : [b, a], e = escape(p, q); // near-equal masses: the tougher leads (rules.ts rank), exact ties by chance
+      resolve(p, q, events, { stick: Math.min(V_STICK, e) / 2, graze: 1, lead: true, rub: dt });
     };
     if (clash) {
       // Until they meet each keeps heading for the other (rocks on the way and gravity would knock it off line); once they

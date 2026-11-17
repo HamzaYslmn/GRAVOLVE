@@ -1,11 +1,11 @@
 # Star gameplay
 
 Age III: star contact, stars as places, the stylised scale, the approach, the link, control of a star and the automatic
-orbit, the Dyson sphere, system planets, losing and swallowing stars, the energy beam, colonies and terraforming, and how
+orbit, the Dyson sphere, system planets, losing and swallowing stars, colonies and terraforming, and how
 a star looks. Code: `evolution/star/` (`rules.ts` numbers, checked by `rules.test.ts`; `stage.ts` approach, link,
-control, orbit, beam feed, star collisions; `dyson.ts` the Dyson builder; `system.ts` system planets; `colony.ts`
+control, orbit, star collisions; `dyson.ts` the Dyson builder; `system.ts` system planets; `colony.ts`
 colony fleets, colonies and terraforming; `look.ts` sprites and the star page; `hud.ts` the Star panel). Contact is in
-`civilization/stage.ts`, the beam shot in `civilization/combat.ts`, carrying on as a colony in `main.ts`. Labels:
+`civilization/stage.ts`, carrying on as a colony in `main.ts`. Labels:
 [README.md](README.md).
 
 ## Built
@@ -51,7 +51,7 @@ reach = your outer moon slot + 0.5 r):
 | Ring k | your orbit + reach + 0.4 + 0.35·k R★: rings always clear your moons |
 | Catch zone | ring 0 to ring 0 + 1 R★ |
 
-- The smallest star a beam can leave (`BEAM_MIN` 0.3 suns, 766 u, 1.8e7 mass) is 1.5× the planet size cap `R_CAP` 500 u and above any spawn (0.9e7) or brown dwarf. Moon slots are compressed too ([planetgameplay.md](planetgameplay.md) → Moons).
+- The smallest star (`starMass(0)`) is 1.5× the planet size cap `R_CAP` 500 u and above any spawn (0.9e7) or brown dwarf. Moon slots are compressed too ([planetgameplay.md](planetgameplay.md) → Moons).
 - Computed (`rules.test.ts`, 2026-11-16), orbit at its floor, system edge vs the short half-view at the 2.5× zoom cap: at 1e5 a red dwarf 4,185 / 6,262 u, a sun 5,081, a blue giant 6,916 (overflows); at 1e6 7,283 / 8,179 / 10,015 of 10,464.
 
 ### Approach
@@ -90,7 +90,7 @@ reach = your outer moon slot + 0.5 r):
 `star/dyson.ts` (`createDyson`).
 
 - 10 segments × 60 ore × 20 s, 400 panels; each panel carried by a hauler (2.6 s flight, equator first). The segment spends the ore stock (mined metal plus star lifting).
-- Energy 20·√L·cover E/s. It feeds the civilization as its `dyson` input ([civilizationgameplay.md](civilizationgameplay.md) → Energy and dose) and makes the engine stronger. Dimming moves the liquid band inward. From 20% it unlocks the energy beam.
+- Energy 20·√L·cover E/s. It feeds the civilization as its `dyson` input ([civilizationgameplay.md](civilizationgameplay.md) → Energy and dose) and makes the engine stronger. Dimming moves the liquid band inward.
 - The panel says why it waits: "Waits for your people: life must recover" or "Next segment needs 60 ore · n stored".
 - Toasts: "Dyson sphere" at the start; **50%** "Age III complete" ("Half a Dyson sphere · your people run on starlight · next: close it"); **100%** "Type II civilization".
 - Build speed × (1 + 0.5 per colony) (`dysonSpeed`, concept 4: more living planets speed up the sphere).
@@ -101,7 +101,7 @@ reach = your outer moon slot + 0.5 r):
 `star/system.ts`, run from `star/stage.ts` in the 0.25 s tick.
 
 - **Capture** (`catchPlanet`): a round world (≥ 10^3.5) in the catch zone, slower than circular speed, no bigger than 0.15 R★ (`PLANET_R`), and not a rival, meteor, moon, held or fast body, takes the lowest free ring. `carry` eases it there at 2 R★/s, then moves it kinematically; `release` frees them when the star is lost.
-- Planets reuse the `b.moon` flag: no free gravity, never stored with chunks; pirates, ships and moon capture skip them; your slugs and the beam pass them.
+- Planets reuse the `b.moon` flag: no free gravity, never stored with chunks; pirates, ships and moon capture skip them; your rockets pass them.
 - **Capacity** min(6, 2 + ⌊2·log2(M/0.4)⌋): red dwarf 2, sun 4, 1.6 suns and up 6 (the old game had 3 / 6 / 8; 6 so a system fits on screen).
 - **Growth:** each planet adds 3% to the star's mass (`GROW`; `grow` recomputes its class and μ). Fun-first deviation, as the concept asks: "acquiring new planets causes the star to grow and increases the number of planets it can carry".
 - Toast "A planet joins your star"; the Star panel shows "Planets n/cap". Debug "+Planet" spawns a 10^3.6–10^4.6 metal world in the catch zone.
@@ -112,16 +112,9 @@ reach = your outer moon slot + 0.5 r):
 - If yours is swallowed: its planets are released (colonies die with it: "Colonies adrift"), your world gets 5 s of protection from the new star's pull, tides and surface (`LOST`) and is thrown out at 2 R★/s ("Star lost"). You fly it again and can link another star.
 - Game over is unchanged: touching a star or its tides still ends the run, unless a colony lives (Colonies and terraforming [L]).
 
-### Energy beam [K]
+### Energy beam [K] (removed)
 
-- From Dyson ≥ 20% (`BEAM_COVER`), Fire shoots an instant beam (no ore, `BEAM_COOL` 3 s) from your surface toward the aim point and 3 R past it. It stops at the first body (your moons and planets are skipped) and kills every enemy ship before it. It works like a gun (user, 2026-11-14): every shot takes a bite.
-- **Power** P = √(cover / 20%) × M^0.3 (`beamPower`): red dwarf 0.76 → 1.70, sun 1 → 2.24, blue giant 1.87 → 4.17 over 20 → 100% cover.
-- **A shot** bites `BEAM_BITE` 1% of your mass × P off the body and adds 20 K × P of heat (`beamK`). The body shrinks (`shed`); 40% of the bite flies off sideways as three chunks (at 1.3–1.7× the body's escape speed), the rest is dust. A body within 2 bites (`BEAM_SHATTER`) shatters.
-- **Rival worlds:** while the shield holds, a shot takes 20 K × P off it and removes nothing. Once it is down, each shot bites and kills 3 × the share removed of its people (`BEAM_KILL`, capped by `RIVAL_HIT_MAX`). A beaten rival beamed down to moon size becomes a free body you can catch.
-- **Star fuel:** each shot shrinks the star to 0.998 of its mass (`BEAM_COST`); none that would leave it under 0.3 suns (`BEAM_MIN`): "Beam off: the star is too small to feed it", and Fire sends a slug again.
-- Look: two cyan glows round a white core for 0.45 s. Toast "Energy beam". The control is the existing Fire; no new button.
-- Computed (`rules.test.ts`, 2026-11-16): shots to destroy (red dwarf 20% / sun 20% / sun full / blue giant full): a 10% body 13 / 9 / 4 / 2, a 50% world 65 / 49 / 22 / 11; a red dwarf hits the 0.3-sun floor after 143 shots.
-- Measured (sun, Dyson 30%, P 1.22, undated): a level-1 rival at 0.53 of you was beaten after 23 shots for 4.5% of the star.
+- Removed 2026-11-17 (user): Fire is always a rocket ([civilizationgameplay.md](civilizationgameplay.md) → Rockets), Dyson cover or not. The Dyson sphere keeps its energy and the stronger engine.
 
 ### Colonies and terraforming [L]
 
@@ -155,7 +148,7 @@ reach = your outer moon slot + 0.5 r):
 - **Page and sprites:** one 1024² star page baked once; 12 sprites a star in one batch, plus the Dyson halves and the link filaments. Star page and frame cost: [techandperformance.md](techandperformance.md).
 - **Fill-rate fallback:** a star wider than half the screen drops far light, haze and corona.
 - **Lighting:** a shadow sprite on your world only (your night side, fading in from 16 to 8 R★).
-- The Star panel (name, temperature, mass, link or Dyson bar, a why row, "Seas liquid" range, planets and colonies; no engine row) shows in your HUD card near a star: [hudandcontrols.md](hudandcontrols.md).
+- The Star section (header: star name and mass; body: Orbit and Planets cells and one short "what waits" line, its reasons in the tooltip; the goal bar shows the link or Dyson; no engine row) shows in your HUD card near a star: [hudandcontrols.md](hudandcontrols.md).
 
 ## Planned
 
@@ -171,7 +164,6 @@ reach = your outer moon slot + 0.5 r):
 - **[D]** The 80%-need contact path is not playtested.
 - **[D] Red-dwarf link trap:** a playtest before the stylised scale lost people at 6 R★ and found no liquid band at 0.10 atm; the compressed flux now keeps a red dwarf's dose low in the band; not re-playtested.
 - **[L] No colony formed in the playtest:** the ≥ 1.5 bn at home rule was never met.
-- **[K]** The beam is slow against worlds: ~70 s of steady fire (23 shots) and 4.5% of the star to beat a level-1 rival half your mass at a sun's 30%; first lever: shield heat (20 K × P). Not playtested by a person.
 - **[C]** The wide-star fallback was not checked visually. Hot stars above 4,700 K are untested for link balance.
 
 ## Decisions

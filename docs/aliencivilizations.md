@@ -65,7 +65,9 @@ of `civilization/rules.ts`. Tests: `app/test/rivals/ledger.test.ts`; `away.ts` i
 `civilization/rivals.ts` flies them; numbers in `civilization/rules.ts`; the pure rules in `rivals/ledger.ts`. They come
 only once you host a civilization.
 
-- **Arrival:** by travel (3 view widths after your civilization starts, then every 8), ≤ 2 loaded, at the quietest of
+- **Arrival:** by travel × the local pace (`rules.ts` `pace`: fill at you ÷ 0.2, clamped 0.02–1.5, sampled once a second;
+  user, 2026-11-17: isolated space should feel isolated). View widths between rivals: void 400 (effectively never), median
+  plain belt 28, median Kuiper 17, fill 0.2 8, dense biome 5.3. 3 paced view widths after your civilization starts, then every 8; ≤ 2 loaded, at the quietest of
   six spots 1.25–1.6 camera half-diagonals ahead of you, never nearer than 12 of your radii. When one drops out of reach,
   the next waits a full 8 view widths from there, so fleeing never summons the next at once.
 - **Mass by temper** (`RIVAL_MASS`): Careful 0.5–0.7×, Raider 0.7–1×, Hungry (and unnamed) 0.9–1.08× you; none eats you
@@ -81,10 +83,14 @@ only once you host a civilization.
   ([planetgameplay.md](planetgameplay.md) → Stealing).
 - **Gravity and engines** (user, 2026-11-14: "that planet's gravity doesn't affect my planet at all"): a rival world is
   an ordinary gravity body all its life (`WORLD_FLAGS` = `held` + `pulls`), alive, beaten or open; `held` still means
-  hands-off. Within 30 of your radii its engines (`ledger.ts` `stationStep`, ≤ `A_ENG` 0.6 of your radii/s²) steer it
+  hands-off. Within 30 of your radii (no longer pulled in from off screen) and while it still follows you, its engines (`ledger.ts` `stationStep`, ≤ `A_ENG` 0.6 of your radii/s²) steer it
   onto an orbit 8–12 of your radii off you, sideways at the pair's circular speed, so gravity supplies the turn and the
-  two worlds waltz. It keeps 6 R clear of another rival world and dodges your missiles (Fighting a rival world).
+  two worlds waltz. It keeps 6 R clear of another rival world and dodges your rockets (Fighting a rival world).
   Beaten: engines off; it stays your gravitating companion. One plume quad shows its thrust.
+  - **Giving up** (user, 2026-11-17; `ledger.ts` `pursueStep`): time spent outside its kept distance + 2 R with the gap
+    not shrinking builds up (closing drains it); past its temper's patience (Careful 5 s, Hungry 20 s, Raider 40 s) its
+    engines go off and it lets you go for 90 s, its stance held at gather (a miner to its rocks, no probe, no wave). A world
+    keeping station beside you never gives up; one you outfly does.
   - Computed (ledger.test.ts, 2026-11-16; you 10⁵, a 0.551× rival from 10 R): alive it holds 10.0 R for 120 s with
     engines ≤ 0.6 R/s² and moves you up to 0.77 R/s; beaten and parked it falls in at 9.9 s (then it merges and melts
     you); beaten on its orbit it never touches.
@@ -106,29 +112,32 @@ only once you host a civilization.
 - A wave is `waveFighters(L)` = 1/2/3/3 fighters bought from stock, plus every frigate it has (`rivalFrigates`: 0/1/1/2
   at L1–4; a lost one is rebuilt in 60 s for 4 wave ships' worth of stock).
 - It masses 20 s with its world on screen (the danger is seen, never told): fighters in a V round their world, frigates
-  on their battery circuit, the silo glowing.
+  on their battery circuit.
 - Out, the fighters make strafing runs at you in wings of three, a burst of 3 at 6/s whenever a gun bears; they pick
   your frigate first, then ships and miners within 8 R (`guns.ts` `pick`), else your world: 0.2 K a round on your shield,
   ore once it is down. Flight and top speeds: [shipsandflight.md](shipsandflight.md) → Rival ships away from home [J].
 - The frigates stay home and lance your world (3 bolts of 7.5 K a salvo every 10 s, after a 1.5 s nose glow, only on a
-  clear line). The silo fires `rivalSalvo(L, SALVO_LEAD)` 20 K missiles 1 s after a lance salvo (level + Careful 0,
-  Hungry 2, Raider 1, ≤ 4).
+  clear line). Its pad keeps launching rocket salvos at you while the wave is out (Rocket volleys below).
 - **Home** at 40% losses (a wave of 3 or 4 at its 2nd loss), a frigate lost, after 35 s, outrun, a Careful one's shield
   under 80%, or your people at the raid's floor (one wave kills ≤ 45% of them).
 
-#### Slug volleys, ships, damage
+#### Rocket volleys, ships, damage
 
-- **Slug volleys** [M]: they hold fire 6 s on screen (`T_SEE`), then fire a slug every 4–6 s (45% aimed true at where you
-  will be, the rest wide by 1.5–3 of your radii). None while their wave is out, none while your shield is down, and none
-  for 30 s after it is back (`REST_S`). Checked (ledger.test.ts, 2026-11-16): an L1 shield under a peer's slugs for 10
-  min is down 76% of the time without volleys, 22% with them.
+- **Rocket volleys** [M] (user, 2026-11-17: rivals use your rockets): only within their fire range (2 × their own mining
+  reach off their surface, `mining.ts` `fireReach`; the same gate holds the frigates' lance; no fire from far away). They
+  hold fire 6 s on screen (`T_SEE`); then the pad glows `RIVAL_GLOW` 1.5 s on the surface facing you (the tell, seen, never
+  told) and `rivalSalvo(L, SALVO_LEAD)` rockets (level + Careful 0, Hungry 2, Raider 1, ≤ 4) ripple out 0.25 s apart,
+  every `RIVAL_SALVO` 8 s. Outside a wave they come in volleys: none while your shield is down and for 30 s after it is
+  back (`REST_S`), and a hit then kills none of your people (only your shield takes it); with its wave out the wave's raid
+  caps apply. Checked (ledger.test.ts, 2026-11-17): an L1 shield under a peer's salvos of 2 (half land) for 10 min is down
+  83% of the time without the rest, 33% with it.
 - **Ships:** home patrols (≤ 4, level + 1) break rocks heading for their world, hunt your ships near it and hunt pirate
   raiders [M]. A lost patrol is rebuilt every 20 s, up to `YARD` 2 fleets' worth. Ships away from home (waves, probes,
   miners) steer round rocks and die on any contact.
 - **Damage:** weapon fire goes through `weaponHit` like yours: everything lands on their shield first (`shieldShot`, the
   3 s stun). Through an open one your rounds burn 0.2 u of their stock (≤ 20 u a sortie) and heavy fire lands every
-  20 K (people × 0.8). Other bodies meet their shield's shell like yours, by the same burn-up line. Their air (1 atm)
-  burns your small slugs once the shield is down. Weapon fire leaves no heat on their crust.
+  20 K (people × 0.8). Other bodies meet their shield's shell like yours, by the same burn-up line.
+  Weapon fire leaves no heat on their crust.
 
 #### Defeat
 
@@ -138,7 +147,7 @@ only once you host a civilization.
   Roaming miners and the mining link [G]).
 - **Beaten at 20% people:** lights out, every ship gone, the world opens if it was not yet, and wreckage: 6 unequal
   metal-rich pieces, 1.5% of the world in all, sprayed out slowly (`rivals.ts` `beat`). Toast "Rival beaten". The dead
-  world, engines off, stays your gravitating companion until you leave it behind; beamed down to moon size, it is a free
+  world, engines off, stays your gravitating companion until you leave it behind; mined down to moon size, it is a free
   body you can catch. A world swallowed with its people: "A world swallowed".
 - Achievement "Duelist": beat a rival world ([hudandcontrols.md](hudandcontrols.md)).
 
@@ -148,20 +157,20 @@ User: "early-game encounters should feel more dangerous, sometimes forcing playe
 
 - **The siege starts** from 18 R (`RECALL`) when the world is your priority, and by itself within 14 R (`STRIKE`). Its
   geometry: [shipsandflight.md](shipsandflight.md) → Strike.
-- **Duels by temper** (ledger.test.ts, 2026-11-16, each rival at the level it meets you; win / lose, median time):
+- **Duels by temper** (ledger.test.ts, 2026-11-17, rockets both sides, each rival at the level it meets you; win / lose, median time):
 
   | You | Careful | Hungry | Raider |
   |---|---|---|---|
-  | tier 1 (L1, 2 fighters, 10 ore) | L1: 0 / 0% (hold) | L1: 0 / 100%, 453 s; L2: 0 / 100%, 256 s | L2: 0 / 100%, 245 s (run) |
-  | tier 3 (L2, 4 fighters, a frigate) | L1: 100 / 0%, 91 s | L2: 100 / 0%, 118 s; L3: 100 / 0%, 131 s | L3: 83 / 17%, 121 s |
-  | tier 5 (L3, 6 fighters, two frigates) | L2: 100 / 0%, 40 s | L3: 40 s; L4: 50 s, both 100 / 0% | L4: 100 / 0%, 50 s |
+  | tier 1 (L1, 2 fighters, 10 ore) | L1: 0 / 0% (hold) | L1: 0 / 73%, 625 s; L2: 0 / 100%, 263 s | L2: 0 / 100%, 243 s (run) |
+  | tier 3 (L2, 4 fighters, a frigate, 60 ore) | L1: 100 / 0%, 50 s | L2: 100 / 0%, 91 s; L3: 99 / 1%, 141 s | L3: 92 / 8%, 142 s |
+  | tier 5 (L3, 6 fighters, two frigates, 120 ore) | L2: 100 / 0%, 40 s | L3: 60 s; L4: 67 s, both 100 / 0% | L4: 100 / 0%, 80 s |
 
   A new civilization (no anti-world weapon) never wins a duel, and keeps ≥ 50% of its people for the first minute in
   every run: time to leave. **Fleeing works:** from 10 R at 2 R/s² you are past their 30 R reach in 5.3 s. Tier 5 breaks
   any rival before a wave leaves (late rivals need another lever).
 - **Sustained K/s on a shield** (computed): a fighter 0.48 (16 rounds × 0.2 K × 75% a 5 s run), a frigate 2.03, your
-  driver 3.1; missiles one salvo × 20 K per 20 s. Ring ships hunting enemy ships add nothing on the shield.
-- **Time to break an equal shield** L1 / L2 / L3, in s (rules.test.ts, 2026-11-16; planned = mean rates, measured = real
+  rockets 3.3 (one 20 K rocket per 6 s refill); a rival's rockets one salvo × 20 K per 8 s. Ring ships hunting enemy ships add nothing on the shield.
+- **Time to break an equal shield** L1 / L2 / L3, in s (rules.test.ts, 2026-11-17; planned = mean rates, measured = real
   `shieldShot` and `shieldRegen` with the stun, volley by volley, over 20 start phases):
 
   | Fire | Planned | Measured |
@@ -170,34 +179,34 @@ User: "early-game encounters should feel more dangerous, sometimes forcing playe
   | 3 fighters | 21 / 42 / 62 | 24 / 44 / 65 |
   | frigate alone | 16 / 37 / 63 | 15 / 35 / 55 |
   | frigate + 2 fighters | 10 / 20 / 30 | 13 / 23 / 33 |
-  | missiles, all land (salvo = level) | 40 | 30 |
-  | missiles, half land | 122 | 110 |
-  | your driver | 10 / 19 / 29 | 10 / 18 / 30 |
+  | rival rockets, all land (salvo = level) | 13 | 12 |
+  | rival rockets, half land | 28 | 28 |
+  | your rockets, all land | 9.5 / 20 / 31 | 9 / 21 / 33 |
 
   Volleys land whole, so the measured time can be up to one firing cycle off the mean.
 - **Ground phase** (rules.test.ts, 2026-11-16; people 1 → 0.2 from an open shield): a frigate alone 79 s of fire,
-  frigate + missiles 53 s; fighters alone never. A lone frigate cannot keep a shield down (its 10 s reload is longer
+  frigate + a rival's rockets (salvo 2, half land) 35 s; fighters alone never. A lone frigate cannot keep a shield down (its 10 s reload is longer
   than the 3 s stun); fighters can.
-- **A rival world dodges your missiles** (`ledger.ts` `DODGE`, `evade`): it sees the launch, reacts after 0–0.4 s,
-  builds its own thrust over 0.3 s across the missile's line of sight, the way it already crosses it, up to 5 R/s, then
-  brakes 1.2 s back onto its station. Checked (ledger.test.ts, 2026-11-16; salvos of 1–3 from your surface, burn 7
-  R/s²): 58 / 50 / 52 / 72% land from 8 / 12 / 16 / 20 R, 52% over its kept 8–12 R (burn 5 R/s²: 64%, 14 R/s²: 50%),
-  100% on its cruise engines alone; every salvo of 2–3 lands at least one.
-- **A rival's salvo at you:** its silo flies in your radii, so its size does not matter. Holding still, coasting or
-  reacting late, every missile lands; a burn across just after the flash slips about half; an early burn straight away
-  outruns the salvo (scratch sim and browser, 2026-11-15). Missile flight: [shipsandflight.md](shipsandflight.md) →
-  Missiles and rockets.
+- **A rival world dodges your rockets** (`ledger.ts` `DODGE`, `evade`): it sees the launch, reacts after 0–0.4 s,
+  builds its own thrust over 0.3 s across the rocket's line of sight, the way it already crosses it, up to 5 R/s, then
+  brakes 1.2 s back onto its station. Checked (ledger.test.ts, 2026-11-17; salvos of 1–3 of your rockets, 16.8 R of
+  fuel, burn 7 R/s²): 65 / 58% land from 8 / 12 R, 53% over its kept 8–12 R (burn 5 R/s²: 56%, 14 R/s²: 49%), 100% on
+  its cruise engines alone; every salvo of 2–3 lands at least one; 2.2 s after the last one it sails its station again,
+  easing back to its distance at ≤ 0.83 R/s.
+- **A rival's salvo at you:** its rockets fly in your radii, so its size does not matter. Holding still, coasting or
+  reacting late, every rocket lands; a burn across just after the launch slips about half; an early burn straight away
+  outruns the salvo (sim on the real flight code, 2026-11-17). Rocket flight: [shipsandflight.md](shipsandflight.md) →
+  Rockets.
 
-### Rule: no undefeatable guided missiles
+### Rule: no undefeatable guided rockets
 
 Concept 8: "we want realistic enemies here, not enemies with guided missiles that can never be defeated."
 
-- Rival slugs are aimed once with `intercept` at where you will be, then fly straight; only 45% are aimed true. Slugs
-  can be dodged, absorbed by your shield or burnt by your air. Rounds and lance bolts fly straight; any body stops them.
-- Silo missiles are guided (11 of your radii/s, kicked ±0.9 rad to alternating sides, seeker on until 0.15 s out) but
-  turn only so hard: an early burn across or away beats them, and a round (41% for one fighter), a slug, the beam or any
-  body stops one. Unguided, the same missile misses a target that turns back (guns.test.ts).
-- Rival ships are ships, not missiles: they can be shot (a frigate takes 2 hits) and die on rocks. Age I cores look only
+- Rounds and lance bolts fly straight; any body stops them.
+- Rockets are guided (12 R/s, pads ±0.5 rad alternating) but turn at most 1.4 rad/s and fly only the fire range: an
+  early burn across or away beats them, a ship at 10 R/s outruns them, and a round (40% for one fighter) or any body
+  stops one. Unguided, the same rocket misses a target that turns back (orders.test.ts).
+- Rival ships are ships, not rockets: they can be shot (a frigate takes 2 hits) and die on rocks. Age I cores look only
   every 0.6–1.1 s and tire.
 
 ## Planned
@@ -228,7 +237,7 @@ Not built yet:
 - Rivals stealing your moon, at a low rate, only when you are weaker.
 - Army strength (ship cost × tendency) and a war decision by the target's defence (1.5× for a Raider, 2.5× Careful).
 - Rival-vs-rival war; targets beyond you.
-- No fire until the army is ready (today slugs start once a rival has seen you 6 s, in any stance).
+- No fire until the army is ready (today rockets start once a rival has seen you 6 s within its fire range, in any stance).
 - Carriers carrying fighters further.
 - The target panel's verdict edge turning red when a wave is on course.
 - Shots at Dyson haulers.
@@ -257,7 +266,7 @@ Standing (README): you cyan, rivals violet; danger is seen, never told; fun firs
   attack you directly in the asteroid stage, and build an army before they attack other planets.
 - **One life step** (2026-11-13): rival worlds use LIFE as you do.
 - **Rivals by temper** (user, 2026-11-15: "rivals can beat me, some don't"): only a Careful rival turtles; a Hungry or
-  Raider one keeps attacking, and their silo loads while the wave masses (`SALVO_LEAD` Careful +0, Hungry +2, Raider
+  Raider one keeps attacking, and their rocket salvos grow by temper (`SALVO_LEAD` Careful +0, Hungry +2, Raider
   +1). A Careful one cannot beat a new civilization (hold), a Hungry one beats it if it stays, a Raider fast (run).
 - **No rival throw** (user, 2026-11-15): rivals never launch their rock moon; it only circles their world as a passive
   guard, and you can steal it there.

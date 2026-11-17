@@ -10,7 +10,7 @@ export type Sound = 'eat' | 'hit' | 'crack' | 'death' | 'eaten' | 'boom'
   // Age II moons
   | 'capture' | 'steal' | 'grip' | 'snap' | 'loose' | 'grind'
   // civilization and star
-  | 'shot' | 'beam' | 'launch' | 'shield' | 'segment' | 'link'
+  | 'shot' | 'launch' | 'shield' | 'segment' | 'link' | 'warp' | 'rocket' | 'blast'
   // banners (announce)
   | 'chime' | 'tier' | 'milestone' | 'achieve' | 'setback' | 'comet';
 
@@ -71,11 +71,6 @@ const RECIPES: Record<string, Recipe> = {
   shot1: rec(...bolt(0, 3000, -14)),
   shot2: rec(...bolt(0, 2600, -14), ...bolt(0.075, 2400, -17)),
   shot3: rec(...bolt(0, 3400, -15), ...bolt(0.06, 3200, -17), ...bolt(0.12, 3000, -19)),
-  // Energy beam: a heavy cannon bolt: zaps a fifth apart diving low, a square growl, a sub hit, a warm buzz under it.
-  beam1: rec(zap(0, 1600, 70, 0.5, -12), zap(0, 2400, 105, 0.42, -16), zap(0.01, 1200, 50, 0.55, -16, 'square', 1.5), note(100, 0, -8, 0.35, 35),
-    ['sawtooth', 'lowpass', 55, 48, 6, [[0, -80], [0.02, -20], [0.3, -24], [0.6, -80]]]),
-  beam2: rec(zap(0, 1400, 60, 0.55, -12), zap(0, 2100, 90, 0.46, -16), zap(0.01, 1050, 45, 0.6, -16, 'square', 1.5), note(90, 0, -8, 0.4, 32),
-    ['sawtooth', 'lowpass', 49, 43, 6, [[0, -80], [0.02, -20], [0.35, -24], [0.65, -80]]]),
   // A ship launches: ignition thump, an engine roar opening up and fading as it leaves, a faint rising engine tone.
   launch1: rec(click(0, 1200, -8), note(70, 0, -12, 0.25, 40), ['brown', 'lowpass', 250, 1800, 0.7, [[0, -60], [0.05, -14], [0.35, -8], [0.9, -60]]],
     ['triangle', 'lowpass', 80, 170, 0, [[0, -80], [0.3, -22], [0.9, -80]]], swish(0.1, 0.7, 400, 2500, -14, 0.8)),
@@ -88,6 +83,18 @@ const RECIPES: Record<string, Recipe> = {
     ['sawtooth', 'lowpass', 98, 52, 12, [[0, -80], [0.01, -18], [0.17, -24], [0.65, -80]]], ['sawtooth', 'lowpass', 99.4, 53, 12, [[0, -80], [0.01, -19], [0.17, -25], [0.65, -80]]]),
   shield3: rec(note(160, 0, -10, 0.3, 62), zap(0, 2100, 240, 0.22, -18, 'sawtooth', 2),
     ['sawtooth', 'lowpass', 123, 68, 12, [[0, -80], [0.01, -18], [0.13, -24], [0.55, -80]]], ['sawtooth', 'lowpass', 124.7, 69, 12, [[0, -80], [0.01, -19], [0.13, -25], [0.55, -80]]]),
+  // A pirate jumps to light speed: a whine gliding up under a rising hiss for 0.9 s (escape.ts JUMP.spool), then a click,
+  // a low thump and a falling whoosh as it goes.
+  warp1: rec(['sine', 'lowpass', 180, 1400, 0, [[0, -80], [0.1, -26], [0.85, -16], [0.9, -40], [0.95, -80]]], swish(0, 0.9, 600, 5000, -20, 2),
+    click(0.9, 2500, -8), note(90, 0.9, -8, 0.4, 45), swish(0.9, 0.45, 6000, 400, -12, 1)),
+  warp2: rec(['sine', 'lowpass', 220, 1700, 0, [[0, -80], [0.1, -26], [0.85, -16], [0.9, -40], [0.95, -80]]], swish(0, 0.9, 700, 5500, -20, 2),
+    click(0.9, 2200, -8), note(80, 0.9, -8, 0.45, 40), swish(0.9, 0.5, 5500, 350, -12, 1)),
+  // A rocket leaves its pad: an ignition click and a low pop, a motor hiss opening up and rising as it pitches over.
+  rocket1: rec(click(0, 1400, -10), note(85, 0, -14, 0.18, 50), ['brown', 'lowpass', 300, 2200, 0.8, [[0, -60], [0.04, -16], [0.25, -12], [0.55, -60]]], swish(0.02, 0.45, 500, 3000, -18, 2)),
+  rocket2: rec(click(0, 1200, -10), note(75, 0, -14, 0.2, 45), ['brown', 'lowpass', 260, 1900, 0.8, [[0, -60], [0.05, -16], [0.3, -12], [0.6, -60]]], swish(0.02, 0.5, 450, 2600, -18, 2)),
+  // A rocket bursts: a short thump under a crackle of debris (it does not duck the rest).
+  blast1: rec(note(80, 0, -10, 0.3, 40), ['crackle', 'bandpass', 2000, 1200, 1, [[0, -60], [0.01, -16], [0.12, -26], [0.35, -70]]], ['brown', 'lowpass', 900, 200, 0.7, [[0, -60], [0.01, -12], [0.3, -70]]]),
+  blast2: rec(note(70, 0, -10, 0.32, 36), ['crackle', 'bandpass', 1700, 1000, 1, [[0, -60], [0.01, -16], [0.14, -26], [0.38, -70]]], ['brown', 'lowpass', 800, 180, 0.7, [[0, -60], [0.01, -12], [0.32, -70]]]),
   // A Dyson panel placed: a small far clink.
   segment1: rec(...metal(1320, -24, 0.3)),
   segment2: rec(...metal(1480, -24, 0.3)),
@@ -156,22 +163,22 @@ const CUES: Record<Sound, Part[][]> = {
   boom: [[['explosion1', 0.9, 0.7]]],
   capture: takes('capture', 3), steal: takes('steal', 2), grip: takes('grip', 3), snap: takes('snap', 2), loose: takes('loose', 2),
   grind: takes('grind', 1),
-  shot: takes('shot', 3), beam: takes('beam', 2, 0.6), launch: takes('launch', 2, 0.35), shield: takes('shield', 3, 0.9), segment: takes('segment', 3), link: takes('link', 2),
+  shot: takes('shot', 3), launch: takes('launch', 2, 0.35), shield: takes('shield', 3, 0.9), segment: takes('segment', 3), link: takes('link', 2), warp: takes('warp', 2, 0.5), rocket: takes('rocket', 2, 0.5), blast: takes('blast', 2, 0.6),
   chime: takes('chime', 3), tier: takes('tier', 3), milestone: takes('milestone', 3), achieve: takes('achieve', 2), setback: takes('setback', 2), comet: takes('comet', 1),
 };
 // Higher survives when voices run out.
 const PRIORITY: Record<Sound, number> = {
-  hit: 0, shot: 0, grind: 0, segment: 0, eat: 1, snap: 1, grip: 1, launch: 1, crack: 2, capture: 2, steal: 2, loose: 2, shield: 2, beam: 2,
+  hit: 0, shot: 0, grind: 0, segment: 0, eat: 1, snap: 1, grip: 1, launch: 1, crack: 2, capture: 2, steal: 2, loose: 2, shield: 2, warp: 2, rocket: 1, blast: 2,
   boom: 3, link: 3, chime: 3, tier: 3, milestone: 3, achieve: 3, setback: 3, comet: 3, death: 4, eaten: 4,
 };
 // s between two of a kind: the rate limit (the first of a burst plays; callers pass the loudest when they can).
 const GAP: Record<Sound, number> = {
   eat: 0.06, hit: 0.06, crack: 0.09, death: 0, eaten: 0, boom: 0.4, shot: 0.05, grind: 0.12, segment: 0.1, snap: 0.08, grip: 0.1,
-  capture: 0.15, steal: 0.15, loose: 0.3, launch: 0.3, shield: 0.12, beam: 0.1, link: 1,
+  capture: 0.15, steal: 0.15, loose: 0.3, launch: 0.3, shield: 0.12, link: 1, warp: 0.25, rocket: 0.15, blast: 0.12,
   chime: 0.3, tier: 0.3, milestone: 0.3, achieve: 0.3, setback: 0.3, comet: 0.3,
 };
 const UI: Sound[] = ['chime', 'tier', 'milestone', 'achieve', 'setback', 'comet']; // banners: never ducked, steady pitch
-const STEADY: Sound[] = [...UI, 'link']; // chords: no random pitch, so they stay in tune
+const STEADY: Sound[] = [...UI, 'link', 'warp']; // chords: no random pitch, so they stay in tune (a warp's snap stays on its flash)
 const VARIANTS = 3; // renders of each noisy recipe, each with its own noise (tonal ones render once)
 const CRACKLE_HZ = 350; // clicks per second in 'crackle' noise
 const MAX_VOICES = 12; // sounds playing at once
@@ -196,7 +203,7 @@ const PRESENCE: [hz: number, dB: number] = [1800, 3]; // attacks stay readable o
 const EXCITE = 0.35; // level of the low-end harmonics (heard as bass where there is no bass)
 const BANNER = 0.6; // banner sounds sit under gameplay
 // News keys whose event already made its own sound (moons.ts, star/stage.ts): their banner stays silent.
-const QUIET = new Set(['moon', 'stolen', 'lost', 'ground', 'starlink', 'swallow', 'starlost']);
+const QUIET = new Set(['moon', 'stolen', 'lost', 'ground', 'starlink', 'swallow', 'starlost', 'pirates-jump']);
 // Bad news (keys, or titles of keyless toasts): two falling notes, never an alarm.
 const SETBACK = new Set(['overwhelmed', 'rad', 'starrad', 'needsun', 'roche', 'swallowed', 'gas-warn', 'boil', 'Impact winter', 'Mass extinction']);
 

@@ -1,16 +1,16 @@
 # Civilization gameplay (from LIFE on)
 
 The civilization starts when LIFE appears and runs by itself on top of Age II: population and tier, energy and dose,
-stocks, the shield, miners and the mining AI, builds, the fleet, the priority target, surface rockets, the mass driver,
+stocks, the shield, miners and the mining AI, builds, the fleet, the priority target, your rockets,
 battles and star contact. Stage 4 of the stage table in [README.md](README.md), which also holds the labels
 (measured, computed) and standing decisions.
 
 Code (under `app/src/evolution/civilization/`): `rules.ts` (numbers), `stage.ts` (the loop), `view.ts` (your look),
-`lattice.ts` (shield lattice maths), `ships.ts` (defence, frigate, rockets, silo), `orders.ts` (priority rules and
-notes), `mining.ts` (mining AI), `slots.ts` (the HUD's fleet slots), `bolts.ts` (projectile looks), `combat.ts`,
-`weapon.ts`; also `render/tech.ts`. Elsewhere: ship flight, guns and art in [shipsandflight.md](shipsandflight.md);
+`lattice.ts` (shield lattice maths), `ships.ts` (defence, frigate), `orders.ts` (priority rules and
+notes), `mining.ts` (mining AI), `slots.ts` (the HUD's fleet slots, energy `balance`, `MAKE`/`USE`, rate `track`), `bolts.ts` (projectile looks), `combat.ts`
+(Fire, rockets); also `render/tech.ts`. Elsewhere: ship flight, guns and art in [shipsandflight.md](shipsandflight.md);
 pirates in [gameevents.md](gameevents.md) → Pirates; rival worlds and fighting them in
-[aliencivilizations.md](aliencivilizations.md); stars, Dyson, the beam and colonies in [stargameplay.md](stargameplay.md);
+[aliencivilizations.md](aliencivilizations.md); stars, Dyson and colonies in [stargameplay.md](stargameplay.md);
 the HUD, fleet slots and controls in [hudandcontrols.md](hudandcontrols.md).
 
 ## Built
@@ -18,7 +18,7 @@ the HUD, fleet slots and controls in [hudandcontrols.md](hudandcontrols.md).
 ### Start
 
 - Starts at LIFE on the rocky line (not past Super-Earth on the gas line, `planet/stage.ts`), with city lights, a
-  level-1 shield, 2 fighters on patrol (`START_SHIPS`) and 10 ore (`START_ORE`: five rockets). The mass driver works from
+  level-1 shield, 2 fighters on patrol (`START_SHIPS`) and 10 ore (`START_ORE`: two rockets). Fire (rockets) works from
   the start. First toast: "A shield and two patrols guard your world · catch moons: miners bring what it lacks".
   1 stock unit = 10⁻⁴ of your mass.
 - No tech ladder (user, 2026-11-13): Radio, First launches, Moon landing and Interplanetary ships were only decoration;
@@ -56,10 +56,10 @@ rockets, and ship production… collect radiation sources to maintain their ener
 
   Light is `star/rules.ts` `sunlight`: 1 at 3 R★ from a sun, falling as 1/x, 0 with no star. No moon makes energy.
 - **Need** (shown in the panel) = 0.1 E/s per bn + shield upkeep + 0.2 E/s (`WORK_E`) per working industry (a build, the
-  rockets on a priority, the shield mending). Star contact and the mass driver's charge use the same need.
+  rockets on a priority, the shield mending). Star contact uses the same need.
 - **Burn** (`fuelBurn`): fuel pays only for what the need exceeds inner heat + solar + Dyson, at most the reactors'
   power. A unit gives 40 E·s at Planet mass (`FUEL_E`): a full reactor burns 1.5 u/min, the same u/s at any size.
-- **Fed** = clamp(energy / need). It scales build speed, the frigate, silo and rocket reloads, and the shield's mending
+- **Fed** = clamp(energy / need). It scales build speed, the frigate and rocket reloads, and the shield's mending
   (the shield's cap is paid first, `shieldFed`). City lights dim with it. Out of fuel the people fall at 0.25/min toward
   what the free energy feeds; nobody dies of it.
 - Computed (rules.test.ts, 2026-11-16; Planet mass, L3 shield):
@@ -86,12 +86,17 @@ rockets, and ship production… collect radiation sources to maintain their ener
 
 - **Fuel** is mined radioactive ore plus what your people dig out of eaten green rock. **Ore** is mined metal only.
   **Volatiles** are mined water. Rock is never mined; gas lands on your world. Sources: moons and other mining sites,
-  open rival worlds, star lifting, and home mines. Meals give no stock.
+  open rival worlds, star lifting, home mines, and salvage from enemy wrecks within your fire range
+  ([gameevents.md](gameevents.md) → Pirates). Meals give no stock.
 - **Home mines** (user, 2026-11-15: "even when there's nothing to mine, civilizations should slowly extract and use
-  their own planet's natural resources"; `homeDig`): every frame while awake, your people dig `HOME_RATE` 5·10⁻⁶ × tier
+  their own planet's natural resources"; `homeDig`): only while awake and with nothing else to mine (user, 2026-11-17):
+  no mineable moon (a rock-only moon does not count) and no miner site. Then your people dig `HOME_RATE` 5·10⁻⁶ × tier
   of your metal share a second into ore (shares over 20% count as 20%), and of your water share into volatiles while
   that stock is under 20 u. Never the element your world lacks. Mass is kept; the dug share becomes rock. Toast "Home
-  mines" once, when ore comes in with no moons. Home ore does not raise the fighter or miner caps.
+  mines" once, when ore first comes in. Home ore does not raise the fighter or miner caps. `CivState.homeIdle` says why
+  they dig nothing (asleep; busy: miners have work; volatiles full; the world lacks water; no metal to spare), and the HUD's
+  Home mines row shows it ([hudandcontrols.md](hudandcontrols.md) → HUD). The Stocks section shows ore, volatiles and fuel
+  with their net rates a minute.
 
   | 10% metal, 8% water | tier 1 | tier 3 | tier 6 |
   |---|---|---|---|
@@ -101,7 +106,7 @@ rockets, and ship production… collect radiation sources to maintain their ener
   That is a tenth of a rocky 2% moon at the same tier (computed).
 - **Fleet metal:** a running total of the metal in every mined haul (`metal` in `stage.ts`). Never spent or stolen; it
   sets the fighter cap and the miner cap.
-- Stock is spent on ships, shield levels, slugs, missiles, Dyson segments, colony fleets and terraforming.
+- Stock is spent on ships, shield levels, rockets, Dyson segments, colony fleets and terraforming.
 - Pirates steal stock from an unshielded world, and with stock gone knock a little water or air off (≤ 2% a raid):
   [gameevents.md](gameevents.md) → Pirates.
 
@@ -212,7 +217,7 @@ based on distance, resource requirements, resource density, efficiency, and dang
 
 - **Upkeep** [F] (Q7): 0.1 E/s per level, paid first; the people live on the rest. `shieldFed` = clamp(E / upkeep):
   only a world with less energy than the upkeep itself loses strength and regen.
-- **Weapon fire** (`shieldShot`): rounds, lance bolts, missiles, slugs, pirate rounds and the beam always land on the
+- **Weapon fire** (`shieldShot`): rounds, lance bolts, rockets and pirate rounds always land on the
   shield (no 20 K minimum). It takes what it holds down to its floor, the rest gets through, and every weapon hit, up or
   down, stops its mending for 3 s (`SHIELD_STUN`). Through an open shield: Battles.
 - Toasts: "Shield holds", "Shield broken" (with the share it stopped).
@@ -275,26 +280,24 @@ Every gun of yours (probes, fighters, frigate, rockets) uses the same rules (`ru
 - **The priority** (user, 2026-11-15: "selecting a target should set it as the priority, not trigger an immediate
   attack. If there are multiple enemies, I want to choose which one my ships focus on"; `stage.ts` `order`, `orders.ts`
   `status`): a Command tap (right-click, E, a touch long press) on anything but you and your moons (a body, a rival
-  world, an enemy ship or missile; a ship under the tap first) makes it your one priority target. The same target again
+  world, an enemy ship or rocket; a ship under the tap first) makes it your one priority target. The same target again
   clears it, another replaces it. Setting it fires nothing: each weapon keeps its rhythm and, when it next comes free,
   takes the priority first if it can hurt and reach it. A run in progress finishes first.
-- **Who takes it** (`orders.ts` `hurts`; reach: ships 1.15 × the gold reach from your centre, rockets
-  `rocketRange(T)` off your surface, the siege `RECALL`):
+- **Who takes it** (`orders.ts` `hurts`; reach: ships 1.15 × the gold reach from your centre
+  the siege `RECALL`; your rockets are yours to fire, Fire above):
 
-  | Weapon | Enemy ship / missile | Free rock | Rival's rock or over 25% | Fighting rival world |
+  | Weapon | Enemy ship / rocket | Free rock | Rival's rock or over 25% | Fighting rival world |
   |---|---|---|---|---|
   | Fighters (home) | every idle one, over any other enemy | ≤ 2% break; any size on course push | only on course (push) | the siege wing |
-  | Probes | never (their own pick, missiles first) | ≤ 0.5% | never | never |
+  | Probes | never (their own pick, rockets first) | ≤ 0.5% | never | never |
   | Frigate | never | 2–25%, at its next reload | never | lances from its post |
-  | Surface rockets | one a reload | 1–25% cut | chip (`ships.ts` `chip`: 0.25% of you a hit, two chunks, +40 K) | never |
-  | Silo missiles | never | never | never | a salvo after each lance salvo |
 
-  The siege wing never leaves its ring for a priority ship. A rocket acts on the body it was launched at, whatever the
-  priority is when it lands. On a fighting world the priority brings the siege on from `RECALL` instead of `STRIKE`
+  The siege wing never leaves its ring for a priority ship.
+  On a fighting world the priority brings the siege on from `RECALL` instead of `STRIKE`
   (Battles).
 - **Honest notes** (user, 2026-11-15: "it says my ship isn't ready when I actually have one that's just on cooldown"):
-  one small note over the target on the tap (`fx.note`), the best state any weapon has: "Priority set" ("Rockets chip
-  it" when only rockets act and only chip), "Reloading · 2 s", "Ships busy", "Not enough ore", "Shield down · fleet
+  one small note over the target on the tap (`fx.note`), the best state any weapon has: "Priority set",
+  "Reloading · 2 s", "Ships busy", "Shield down · fleet
   holds", "Out of range", "No fighters", "Nothing can hurt it"; also "No life · fleet idle", "Already beaten",
   "Priority cleared", and before LIFE "No fleet yet" (`planet/moons.ts`). While it waits, the note shows again whenever
   the reason changes. Low energy shows as a longer reload.
@@ -302,8 +305,8 @@ Every gun of yours (probes, fighters, frigate, rockets) uses the same rules (`ru
 - **Seen:** four turning cyan arcs round it (dim and slow while nothing can act); a besieged world gets the same arcs,
   no siege ring (user, 2026-11-15: "why does such a huge ring appear around my opponent?"). The cursor glows cyan over anything a tap would take. Toasts "Priority target" once,
   and a calm tip the first time something on course comes inside the ring.
-- Still automatic: point defence against enemy ships and missiles, the shield, orbiting moons.
-- Tried in a test tab 2026-11-15; not seen: probes on missiles while a ship is the priority.
+- Still automatic: point defence against enemy ships and rockets, the shield, orbiting moons.
+- Tried in a test tab 2026-11-15; not seen: probes on rockets while a ship is the priority.
 
 ### Frigate [F]
 
@@ -312,52 +315,43 @@ Every gun of yours (probes, fighters, frigate, rockets) uses the same rules (`ru
   fires a salvo of 3 heavy bolts (`ARMS.lance`) 0.15 s apart, straight at 22 R/s for 2.7 s. The first bolt that hits
   breaks the body into up to 8 pieces (Breaking into food; toast "Frigate strike"). In battle it lances the enemy world
   (Battles).
-- To the enemy it is a ship like any other, with 3 hull points: each round or slug takes one (`ships.ts` `lose`).
+- To the enemy it is a ship like any other, with 3 hull points: each round or rocket takes one (`ships.ts` `lose`).
 - Flight and accuracy: [shipsandflight.md](shipsandflight.md) → Frigate [F].
 
 ### Rockets
 
-- Your world launches guided rockets from its surface from tier 1 (user, 2026-11-14; `ships.ts` `rockets`, `ROCKET`):
-  2 ore each, one every 8 s (× the energy fed), only at your priority within `rocketRange(T)` = 8 + 2T radii off your
-  surface. Launch aim error `rocketSpread(T)` = 0.08·(6 − T)/5 rad.
-- A hit breaks a 1–25% body into up to 8 pieces (toast "Rocket hit"), chips a bigger one or a rival's rock (0.25% of
-  you, +40 K), and kills ships within 0.3 R.
-- They fly slower than rounds (12 R/s against 22), kicked off the aim line and arcing in (user, 2026-11-15). Flight,
-  seeker and checks: [shipsandflight.md](shipsandflight.md) → Missiles and rockets.
-
-### Mass driver
-
-- Steel white (`STEEL`): a hair-thin long streak, a shock ring on your surface, a low `boom`. A slug is 0.05% of you
-  (5 ore) plus a 2 E charge, fired at 50 of your diameters/s on top of your velocity at the cursor, every 4 s at best,
-  swept. It flies 1.6 s (about 80 diameters).
-- The charge fills from the energy the people and the shield do not need, at least 0.25 E/s.
-- Shields absorb it (~12.6 K on a peer's shield, rules.test.ts), air burns it, else it hits with WARHEAD 0.5: it
-  destroys a ship or a 0.3% body, chips a 1% moon, does nothing to a 3% moon or a planet (rules.test.ts, 2026-11-16,
-  you 3·10⁴ to 8·10⁵).
-- Fire is the mass driver alone (nothing before LIFE); from Dyson 20% the energy beam replaces it
-  ([stargameplay.md](stargameplay.md) → Energy beam). Controls: [hudandcontrols.md](hudandcontrols.md) → Controls.
+- **Fire** (left-click, a tap, the stick's point; Space: the HUD target) launches a guided rocket from your surface (user,
+  2026-11-17; `combat.ts`, `rules.ts` `ROCKET`, one rocket for you and rival worlds). It locks the enemy ship or rocket
+  under the aim, else the body there, else flies at the point and on. Nothing fires before LIFE.
+- **Magazine** (`stage.ts` `fire`, `mag`): holds `salvo(T)` 1 / 2 / 3 rockets at tiers 1 / 3 / 5; each launch costs
+  `ROCKET.ore` 5 ore; one refills every 6 s × the energy fed, drawing `WORK_E` while it refills (the Rockets use in
+  Energy). Notes "Reloading" (empty) and "No ore". The reticle's ring and the Rockets row in Fleet show the magazine.
+- **Range:** its fuel is 2 × your mining reach off your surface (`mining.ts` `fireReach`: 16.8 R with one moon slot, 21.8
+  with three, 26.8 with five; user, 2026-11-17: no shots across the map); turning costs range.
+- **Hits:** a free body ≤ 25% of you breaks into up to 8 pieces (toast "Rocket hit"); a bigger one or a rival's rock is
+  chipped (`ships.ts` `chip`: 0.25% of you, two chunks, +40 K); a rival world takes 20 K weapon fire (`weaponHit`); a
+  ship takes the direct hit (through a pirate's shield), ships within 0.6 R the blast.
+- Flight (turn cap, pads, guidance) and checks: [shipsandflight.md](shipsandflight.md) → Rockets.
 
 ### Battles
 
 User, 2026-11-14: wanted gravity between the worlds, fighters that chip shields (low damage), frigates for real damage
-and rare, missiles from planets, roles, coordination, cinematic battles. The same rules on both sides (`rules.ts`
+and rare, rockets from planets, roles, coordination, cinematic battles. The same rules on both sides (`rules.ts`
 `ARMS`, `weaponHit`).
 
-| Unit | Role | Picks (`guns.ts` `pick`: distance × class weight, missile 0.5, frigate 0.7, fighter 1, probe/miner 1.5) |
+| Unit | Role | Picks (`guns.ts` `pick`: distance × class weight, rocket 0.5, frigate 0.7, fighter 1, probe/miner 1.5) |
 |---|---|---|
-| Probe (1 a tier) | point defence | missiles; your priority if ≤ 0.5%; enemy ships within 9 R; never strikes a world |
-| Fighter, home (one) | screen | missiles; your priority (a ship: every idle one); enemy ships within 9 R of your world |
+| Probe (1 a tier) | point defence | rockets; your priority if ≤ 0.5%; enemy ships within 9 R; never strikes a world |
+| Fighter, home (one) | screen | rockets; your priority (a ship: every idle one); enemy ships within 9 R of your world |
 | Fighter, siege wing (all but one, ≤ 5: `siegeWing`) | ring the world, harass | enemy ships within 6 R of their world; a strafing turn at their shield every 4 s |
 | Frigate | heavy battery | your priority rock first (2–25%); then the enemy world from its post on the siege ring |
-| Missile silo | salvo weapon | the enemy world, 1 s after its frigate's lance salvo |
-| World | shield, range, bearing | your thrust, driver, beam, priority; a rival's engines |
+| World | shield, range, bearing | your thrust, rockets, priority; a rival's engines |
 
 | Weapon | Speed (shooter's radii/s) | Life / reach | On a shield | Through an open shield | Counter |
 |---|---|---|---|---|---|
 | Fighter round | 22 | 0.68 s / 15 R | 0.2 K (probe 0.15 K) | burns 0.2 u of stock, ≤ 20 u a raid, never people | bodies stop it; ships jink |
 | Lance bolt (frigate) | 22 | 2.7 s / ~60 R | 7.5 K, 3 a salvo, 10 s reload, 1.5 s nose glow | wound | block the line with any body; kill the frigate (hull 3; a rival's 2) |
-| Missile (silo) | 11, guided | 3 s | 20 K; salvo 1/2/3 at tiers 1/3/5 (rivals: level + temper, ≤ 4); 20 s reload; 4 ore each | wound; kills enemy ships within 0.6 R | an early burn across or away; one round, slug or beam; any body |
-| Slug | 50 diameters/s | 1.6 s | ~12.6 K | air burns it | dodge |
+| Rocket (yours, rival worlds') | 12, guided (≤ 1.4 rad/s) | 2 × the mining reach | 20 K; yours a magazine of 1/2/3 at tiers 1/3/5, 5 ore each, 6 s refill; a rival's salvo of level + temper (≤ 4) every 8 s after a 1.5 s pad glow | wound; outside a wave a rival's kills none of your people; the direct hit kills a ship | an early burn across or away; one round; any body |
 
 - **Wound and landings:** heavy fire through an open shield fills a wound; every 20 K (`LANDING`) lands as one hit:
   people × 0.8, a surface flash, a dust puff, flickering lights. 8 landings take a world from 1 to 0.17. One raid (a war
@@ -368,12 +362,10 @@ and rare, missiles from planets, roles, coordination, cinematic battles. The sam
   priority, the fleet engages it. It is recalled past `RECALL`, on another target, when the priority that alone brought
   it on is cleared outside `STRIKE`, or with your shield down (then `CALM_S` 20 s before it engages again). Never for
   losses. Distance is the throttle: no menu.
-- **The silo** fires `salvo(T)` missiles 1 s after each lance salvo, only while ore covers the whole salvo above
-  `RESERVE` 20 u (kept for slugs); a full pool takes fewer.
 - Siege geometry (the ring, the strafing turn, the frigate's post): [shipsandflight.md](shipsandflight.md) → Strike.
   Time to break a shield, the ground phase and the duel table: [aliencivilizations.md](aliencivilizations.md) →
   Fighting a rival world. Rival waves: [aliencivilizations.md](aliencivilizations.md) → War waves.
-- **Look:** the lance's nose glow growing 1.5 s and a long glowing bolt; missiles with a teardrop head and a flame;
+- **Look:** the lance's nose glow growing 1.5 s and a long glowing bolt; rockets with a fin-and-nose hull and a flame;
   a landing flashes, puffs dust and flickers the lights; a collapsing shield bursts its veil. All weapon looks:
   [shipsandflight.md](shipsandflight.md) → Guns.
 
@@ -461,3 +453,7 @@ Standing decisions for every stage are in [README.md](README.md). The ones that 
   close-range shots are harder to dodge, while long-range shots give enemies more time to evade"; then "almost as fast
   as lasers … the opponent seems to dodge nearly 100%". Built: guided, slower than rounds (missiles 11, rockets 12, a
   round 22 R/s), kicked to alternating sides and arcing in, so a dodge slips some but not all.
+- **Rockets on Fire** (user, 2026-11-17): left-click launches a guided rocket (turn ≤ 1.4 rad/s, fuel = 2 × the mining
+  reach); right-click / E sets the fleet priority. The mass driver, the Dyson energy beam, the surface rockets at the
+  priority, your silo and the rival slugs and silo are removed; rival worlds launch the same rocket. Duel balance kept by
+  `ROCKET.ore` 5 and `RIVAL_SALVO` 8 s (ledger.test.ts temper asserts).

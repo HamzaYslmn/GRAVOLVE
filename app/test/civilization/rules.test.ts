@@ -1,5 +1,5 @@
 // node test/civilization/rules.test.ts: population, energy and dose (by tier), tier, mining (the weighted mix),
-// shield, fleet caps, rockets, a sample run (tiers, builds and bare moons printed), slug damage and duels, planetary combat
+// shield, fleet caps, rockets, a sample run (tiers, builds and bare moons printed), planetary combat
 // (ARMS: weapon fire on shields, the stun, landings, time-to-break table, a rival's rock), the shield as a shell (a damage
 // table), its burn-up rule, shield layers, the siege switch, rival level and mass by temper.
 import assert from 'node:assert/strict';
@@ -7,17 +7,16 @@ import { burnShare, collide, COMP, pieceShares, radiusOf, shellPass, SPECK, V_ST
 import { GAP, RATE } from '../../src/evolution/civilization/flight.ts';
 import { pull, trigger } from '../../src/evolution/civilization/guns.ts';
 import { EXTINCT, magnet, PLANET_M, SUPER_M } from '../../src/evolution/planet/rules.ts';
-import { beamK, sunlight } from '../../src/evolution/star/rules.ts';
+import { sunlight } from '../../src/evolution/star/rules.ts';
 import {
   buildSpeed, capacity, cityLevel, dose, energy, fedCapacity, GEO, geo, killRate, RADIO_LIMIT, radioDose, radioLimit, lack, mineable, mineMix, MINE_RATE, NEED, P0, popHit, popStep,
-  ASLEEP_FALL, FLEET, shellR, fleetCap, FRAG, ROCKET, rocketRange, rocketSpread, shieldFed, shieldMax, upkeep, units, type Ore,
+  ASLEEP_FALL, FLEET, shellR, fleetCap, FRAG, ROCKET, shieldFed, shieldMax, upkeep, units, type Ore,
   FUEL_E, FUEL_LOW, fuelBurn, reactor, REACTOR, refine, SOLAR, solar, solarWings, UNIT, WORK_E, SHIELD_FLOOR, SHIELD_K, shieldCost, shieldHolds, shieldMeet, shieldPunch, shieldRegen, SHIELD_STOP, START_SHIPS, tier, TIER_MAX,
-  BEATEN, chargeRate, DRIVER_COOL, fireDir, fleetSize, HIT_MIN, intercept, RIVAL_LEAD, RIVAL_MASS, RIVAL_HIT_MAX, rivalLevel, SLUG_E, SLUG_ORE, SLUG_SHARE,
-  BEAM_BITE, BEAM_COOL, beamLeft, beamPop, CUT, CUT_SPREAD, cutSpread, edible, KEEP, pieceSize, split, strikeK, type Shield,
+  BEATEN, pace, RIVAL_PACE, RIVAL_SALVO, SALVAGE, fleetSize, HIT_MIN, intercept, RIVAL_LEAD, RIVAL_MASS, RIVAL_HIT_MAX, rivalLevel,
+  CUT, CUT_SPREAD, cutSpread, edible, KEEP, pieceSize, split, strikeK, type Shield,
   ARMS, buildOrder, BURN_WAVE, LANDING, raid, rivalFrigates, SHIELD_REGEN, SHIELD_STUN, shieldShot, weaponHit, shieldLayers, siegeWing, SIEGE, sortieStep, CALM_S,
   homeDig, HOME_RICH, HOME_VOL,
 } from '../../src/evolution/civilization/rules.ts';
-import { slugK } from '../helpers.ts';
 
 const near = (a: number, b: number, eps = 1e-6) => Math.abs(a - b) <= eps;
 const clock = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
@@ -225,8 +224,6 @@ assert.equal(lack({ water: 0.7, air: 0.8, magnet: 0.6 }), undefined);
 assert.ok(START_SHIPS === 2 && fleetCap('fighter', 1, 0) === 2 && fleetCap('fighter', 1, 19.9) === 2 && fleetCap('fighter', 1, 20) === 3 && fleetCap('fighter', 6, 1e4) === 6);
 assert.ok(fleetCap('probe', 1, 0) === 1 && fleetCap('probe', 6, 0) === 6 && [1, 2, 3, 4, 5, 6].map((T) => fleetCap('frigate', T, 1e4)).join() === '0,0,1,1,2,2');
 assert.ok(FLEET.probe.breaks < FLEET.fighter.breaks && FLEET.fighter.breaks === FRAG && FLEET.frigate.breaks > FRAG && FLEET.probe.ore < FLEET.fighter.ore && FLEET.fighter.ore < FLEET.frigate.ore);
-// Rockets: from tier 1, the range grows and the aim error shrinks with the tier (exact at tier 6); cheaper than a slug.
-assert.ok(rocketRange(1) < rocketRange(6) && rocketSpread(1) > rocketSpread(3) && rocketSpread(6) === 0 && ROCKET.ore > 0 && ROCKET.ore < SLUG_ORE);
 // Mined metal counts toward the fighter cap: a stony 2% moon (15% metal) gives 30 u of metal.
 assert.ok(near(units(mineMix(COMP.stony, 0.02 * 1e5, 1e9, ['radio', 'metal', 'ice']).take.metal!, 1e5), 30));
 // Breaking: a break keeps KEEP in pieces cut under pieceSize, none under the
@@ -279,9 +276,9 @@ for (const k of ['probe', 'fighter'] as const) {
   assert.ok(gapMin >= f.cool && fired / 60 <= cap / f.cool, `${k}: ${fired} rounds a minute, ${gapMin.toFixed(2)} s between runs`);
   console.log(`${k} gun, held a minute: ${fired} rounds (${(fired / 60).toFixed(1)}/s), ≤ ${cap} a run, ${gapMin.toFixed(1)} s between runs`);
 }
-// Each class its own feel (user, 2026-11-15): fighters fire fast and light, probes slow; the frigate and missiles are slow and heavy.
-assert.ok(FLEET.fighter.rate > FLEET.probe.rate && FLEET.fighter.cool < FLEET.probe.cool && ARMS.lance.reload >= 10 && ARMS.missile.reload >= 10 && ARMS.missile.k >= LANDING && ROCKET.reload > FLEET.fighter.cool, 'fighters fast, probes slow, frigate, missiles and rockets slow but heavy');
-assert.ok(ROCKET.speed <= 0.6 * ARMS.round.u && ARMS.missile.u <= 0.5 * ARMS.round.u, 'rockets and missiles fly well under a round: seen coming');
+// Each class its own feel (user, 2026-11-15): fighters fire fast and light, probes slow; the frigate and rockets are slow and heavy.
+assert.ok(FLEET.fighter.rate > FLEET.probe.rate && FLEET.fighter.cool < FLEET.probe.cool && ARMS.lance.reload >= 10 && ROCKET.k >= LANDING && ROCKET.reload > FLEET.fighter.cool, 'fighters fast, probes slow, the frigate and rockets slow but heavy');
+assert.ok(ROCKET.speed <= 0.6 * ARMS.round.u, 'rockets fly well under a round: seen coming');
 // Lost habitability: a minute asleep leaves ≤ 40% of the people (1/min, was 0.25/min).
 {
   let P = 4;
@@ -399,13 +396,8 @@ assert.ok(cityLevel(0.2) === 0.25 && cityLevel(2.4) === 0.5 && cityLevel(9) === 
   assert.ok(landed > 0 && fuel > 0, 'a dry world gets ice from its icy moon, fuel from its green one');
 }
 // ---- Combat
-assert.ok(SLUG_ORE === 5 && SLUG_SHARE === 5e-4 && DRIVER_COOL === 4);
-// Charge: a fed civilization fires every 4 s; an energy-starved one every SLUG_E / CHARGE_MIN = 8 s.
-assert.ok(SLUG_E / chargeRate(0.5, 0.5) === 8 && SLUG_E / chargeRate(1.5, 0.5) <= DRIVER_COOL);
-// Aim: the slug's world velocity points at the cursor while you fly sideways; intercept meets a moving target.
+// intercept meets a moving target (flight.ts, nav.ts lead points).
 {
-  const v = { x: 0, y: 30 }, u = 100, d = fireDir(100, 0, v.x, v.y, u), wx = v.x + d.x * u, wy = v.y + d.y * u;
-  assert.ok(near(Math.hypot(d.x, d.y), 1) && Math.abs(wy / wx) < 1e-9 && wx > 0, 'fires where you click');
   const t = intercept(100, 0, 0, 20, 50)!;
   assert.ok(t > 0 && near(Math.hypot(100, 20 * t), 50 * t, 1e-6), 'intercept time');
 }
@@ -414,21 +406,6 @@ assert.ok(rivalLevel(0, 2) === 1 && rivalLevel(300, 2) === 2 && rivalLevel(3000,
 assert.ok(rivalLevel(0, 2, RIVAL_LEAD.careful) === 1 && rivalLevel(0, 2, RIVAL_LEAD.hungry) === 2 && rivalLevel(0, 2, RIVAL_LEAD.raider) === 3 && rivalLevel(600, 2, RIVAL_LEAD.raider) === 3);
 assert.ok(Object.values(RIVAL_MASS).every(([lo, hi]) => lo >= 0.5 && lo < hi && hi < 1.1) && RIVAL_MASS.careful[1] <= RIVAL_MASS.hungry[0]);
 
-// Slug damage through the real collide (with the slug's warhead): a slug of 0.05% of you at 50 of your diameters/s
-// destroys a ship or a 0.3% satellite, chips a 1% moon, does nothing to a 3% moon or a planet.
-console.log('slug damage (d on the target; destroyed ≥ 5, shatter ≥ 1, chip ≥ 0.3, first loss 0.1):');
-for (const you of [10 ** 4.5, 1e5, 10 ** 5.5, 796e3]) {
-  const D = 2 * radiusOf(you, COMP.stony), slug: Phys = { m: SLUG_SHARE * you, comp: { rock: 0.8, metal: 0.2 } };
-  const hit = (share: number, comp: Phys['comp'] = COMP.stony) => collide(slug, { m: share * you, comp }, 50 * D, 0, { warhead: D });
-  const ship = hit(1e-6, COMP.metallic), sat = hit(0.003), m1 = hit(0.01), m3 = hit(0.03), peer = hit(1);
-  console.log(`  you ${you.toExponential(2)}: ship ${ship.b.d.toPrecision(2)}, 0.3% ${sat.b.d.toFixed(1)}, 1% moon ${m1.b.d.toFixed(2)} (−${(100 * (1 - m1.b.rest / (0.01 * you))).toFixed(0)}%), 3% moon ${m3.b.d.toFixed(3)}, peer ${peer.b.d.toExponential(1)}`);
-  assert.ok(ship.b.d >= 5 && sat.b.d >= 5, 'a slug destroys a ship and a 0.3% satellite');
-  assert.ok(m1.b.d >= 0.3 && m1.b.d < 1, 'a slug chips a 1% moon');
-  assert.ok(m3.b.d < 0.1 && m3.b.rest === 0.03 * you, 'a 3% moon loses nothing');
-  assert.ok(peer.b.d < 0.01 && peer.b.rest === you, 'a peer planet is unaffected');
-}
-// Raw heat on a shield (what weapon.ts puts on it): ~12.6 K a slug on a peer.
-assert.ok(slugK(1e5) > 12 && slugK(1e5) < 13.5, `slug on a shield ${slugK(1e5)}`);
 
 // Pirate fleets: 1–14 ships over a sweep of 10⁴ rolls, mostly few, sometimes many; a hauler per 5 (at least one), a marauder from 10.
 {
@@ -464,7 +441,7 @@ assert.ok(slugK(1e5) > 12 && slugK(1e5) < 13.5, `slug on a shield ${slugK(1e5)}`
   const at144 = Q;
   heavy(16);
   assert.ok(landed === 8 && Q <= BEATEN && at144 > BEATEN, `160 K of heavy fire: ${landed} landings, people ${Q.toFixed(3)} (144 K: ${at144.toFixed(3)})`);
-  const capped = weaponHit({ level: 1, s: -1 }, { k: 0 }, 1, 'missile', 500, raid(1));
+  const capped = weaponHit({ level: 1, s: -1 }, { k: 0 }, 1, 'rocket', 500, raid(1));
   assert.ok(near(capped.P, 1 - RIVAL_HIT_MAX), `one raid kills at most ${RIVAL_HIT_MAX} (${capped.P})`);
   // Sustained K/s and the classes: a fighter 0.3–0.5, a frigate 4–6 fighters, a full strike wing (3) less than one frigate.
   const kps = (k: number, n: number, hit: number, cycle: number) => (k * n * hit) / cycle; // n hits of k K, a share `hit` landing, every `cycle` s
@@ -479,8 +456,7 @@ assert.ok(slugK(1e5) > 12 && slugK(1e5) < 13.5, `slug on a shield ${slugK(1e5)}`
   const F = FLEET.fighter, burst = Array.from({ length: F.rounds * F.bursts }, (_, i) => (i % F.rounds) / F.rate + Math.floor(i / F.rounds) * ((F.rounds - 1) / F.rate + GAP)); // a run: bursts of rounds at rate, GAP between
   const fu = (t0: number): U => ({ k: ARMS.round.k * ARMS.round.hit, at: burst, every: ARMS.round.run, t0 });
   const fr: U = { k: ARMS.lance.k * ARMS.lance.hit, at: [0, ARMS.lance.gap, 2 * ARMS.lance.gap], every: ARMS.lance.reload, t0: 0 };
-  const mi = (n: number, hit: number): U => ({ k: ARMS.missile.k * hit, at: Array(n).fill(0), every: ARMS.missile.reload, t0: 0 });
-  const dr: U = { k: slugK(1e5), at: [0], every: DRIVER_COOL, t0: 0 };
+  const ro = (n: number, hit: number, every: number): U => ({ k: ROCKET.k * hit, at: Array(n).fill(0), every, t0: 0 }); // a rival's salvo (rivalSalvo, landing together: RIVAL_RIPPLE is short, every RIVAL_SALVO s) or your magazine (one every ROCKET.reload s)
   const measure = (L: number, us: U[]) => {
     let sum = 0;
     for (let p = 0; p < 20; p++) {
@@ -505,9 +481,9 @@ assert.ok(slugK(1e5) > 12 && slugK(1e5) < 13.5, `slug on a shield ${slugK(1e5)}`
     ['3 fighters', () => [fu(0), fu(ARMS.round.run / 3), fu((2 * ARMS.round.run) / 3)], () => [fire(3)], [21, 42, 62]],
     ['frigate alone', () => [fr], () => [rate(fr)], [16, 37, 63]],
     ['frigate + 2 fighters', () => [fr, fu(0), fu(ARMS.round.run / 2)], () => [rate(fr), fire(2)], [10, 20, 30]],
-    ['missiles, all land (salvo = level)', (L) => [mi(L, 1)], (L) => [rate(mi(L, 1))], [40, 40, 40]],
-    ['missiles, half land (salvo = level)', (L) => [mi(L, 0.5)], (L) => [rate(mi(L, 0.5))], [122, 122, 122]],
-    ['your driver', () => [dr], () => [rate(dr)], [10, 19, 29]],
+    ['rival rockets, all land (salvo = level)', (L) => [ro(L, 1, RIVAL_SALVO)], (L) => [rate(ro(L, 1, RIVAL_SALVO))], [13, 13, 13]],
+    ['rival rockets, half land (salvo = level)', (L) => [ro(L, 0.5, RIVAL_SALVO)], (L) => [rate(ro(L, 0.5, RIVAL_SALVO))], [28, 28, 28]],
+    ['your rockets, all land', () => [ro(1, 1, ROCKET.reload)], () => [rate(ro(1, 1, ROCKET.reload))], [9.5, 20, 31]],
   ];
   console.log('time to break an equal shield L1 / L2 / L3 (s): planned | ttk | measured');
   for (const [name, us, f, plan] of table) {
@@ -519,38 +495,12 @@ assert.ok(slugK(1e5) > 12 && slugK(1e5) < 13.5, `slug on a shield ${slugK(1e5)}`
     });
   }
   // Ground phase: from an open shield, 8 landings (160 K) of heavy fire beat a world; a frigate's 3 × 6.75 K per 10 s does it in
-  // ~79 s, with missiles (salvo 2, half land) ~53 s; fighters alone never (rounds take no people).
+  // ~79 s, with a rival's rockets (salvo 2, half land, every RIVAL_SALVO s) ~35 s; fighters alone never (rounds take no people).
   const ground = (k: number) => (8 * LANDING) / k;
-  const missK = kps(ARMS.missile.k, 2, 0.5, ARMS.missile.reload);
-  console.log(`ground phase (people 1 → ${BEATEN}): frigate alone ${ground(frigate).toFixed(0)} s, frigate + missiles ${ground(frigate + missK).toFixed(0)} s, fighters never`);
+  const missK = kps(ROCKET.k, 2, 0.5, RIVAL_SALVO);
+  console.log(`ground phase (people 1 → ${BEATEN}): frigate alone ${ground(frigate).toFixed(0)} s, frigate + rockets ${ground(frigate + missK).toFixed(0)} s, fighters never`);
 }
 console.log('civilization rules: ok');
-// Energy beam on a rival world (P = 1: a sun at 20% cover; 2.24: full cover): its shield takes beamK(P) a shot (shieldShot) and, stunned SHIELD_STUN = BEAM_COOL s, never mends
-// between shots; while it holds nothing is removed. Then each shot bites BEAM_BITE × P of you off the world and kills
-// BEAM_KILL × the share removed, until the rival is beaten.
-{
-  const duel = (L: number, P: number, m = 1) => {
-    const sh: Shield = { level: L, s: SHIELD_K * L };
-    let pop = 1, held = 0, bit = 0, down = 0;
-    while (pop > BEATEN && m > 0) {
-      const up = sh.s > 0; // weapon fire (rivals.ts shieldTake): taken while up, and every shot stuns it (BEAM_COOL = SHIELD_STUN: it never mends)
-      shieldShot(sh, beamK(P));
-      if (up) held++;
-      else {
-        down ||= held;
-        const left = beamLeft(m, BEAM_BITE * P);
-        [pop, m, bit] = [beamPop(pop, (m - left) / m), left, bit + 1];
-      }
-      shieldRegen(sh, BEAM_COOL);
-    }
-    return { down, held, bit, m };
-  };
-  const [l1, l3, sun, full] = [duel(1, 1), duel(3, 1), duel(1, 1), duel(1, Math.sqrt(5))];
-  assert.ok(l1.down === 2 && l3.down === 5, `shield breaks after ${l1.down} (L1) / ${l3.down} (L3) shots`);
-  assert.ok(full.bit + full.held >= 15 && full.m > 0.5 && sun.m > 0.5, `equal-mass rival beaten in ${full.bit + full.held} shots at full sun cover`);
-  console.log(`beam vs rival: shield down after ${l1.down} (L1) / ${l3.down} (L3) shots at P 1 · equal-mass L1 rival beaten after ${sun.held} + ${sun.bit} shots (P 1), ${full.held} + ${full.bit} (full sun), ${(100 * full.m).toFixed(0)}% of its world left`);
-}
-console.log('civilization beam: ok');
 // Shield layers (view.ts shieldLook veils): one per level, innermost first, the outer drains first; down: all empty.
 {
   const L = (level: number, s: number) => shieldLayers({ level, s });
@@ -583,3 +533,26 @@ console.log('civilization beam: ok');
   assert.ok(sortieStep(st, Infinity, false, 60, true, 1 / 60) === 'recall' && !st.on, 'target gone: off');
 }
 console.log('civilization shield layers and siege: ok');
+
+// Encounter pace by local fill: a void is lonely, PACE_FILL gives today's rate, a dense biome 1.5×; monotonic.
+{
+  assert.equal(pace(0.002, RIVAL_PACE), 0.02);
+  assert.equal(pace(0.2, RIVAL_PACE), 1);
+  assert.equal(pace(1, RIVAL_PACE), 1.5);
+  const fills = [0, 0.002, 0.05, 0.1, 0.2, 0.3, 1];
+  fills.slice(1).forEach((f, i) => assert.ok(pace(f, RIVAL_PACE) >= pace(fills[i], RIVAL_PACE), 'pace grows with fill'));
+  console.log(`encounter pace: void ${pace(0.002, RIVAL_PACE)}, plain belt ${pace(0.058, RIVAL_PACE).toFixed(2)}, rich ${pace(0.2, RIVAL_PACE)}, dense ${pace(1, RIVAL_PACE)} (× distance)`);
+}
+// Salvage: every wreck gives ore and fuel; rival hulls give at most half their build; a marauder outweighs a raider.
+{
+  for (const [k, v] of Object.entries(SALVAGE)) assert.ok(v.ore > 0 && v.fuel > 0 && v.vol >= 0, `salvage ${k}`);
+  for (const k of ['fighter', 'probe', 'frigate'] as const) assert.ok(SALVAGE[k].ore <= FLEET[k].ore / 2, `${k}: at most half its build`);
+  assert.ok(SALVAGE.marauder.ore > SALVAGE.raider.ore && SALVAGE.frigate.ore > SALVAGE.fighter.ore);
+  console.log('salvage: ' + Object.entries(SALVAGE).map(([k, v]) => `${k} ${v.ore} ore/${v.fuel} fuel${v.vol ? '/' + v.vol + ' Water' : ''}`).join(', '));
+}
+// The rocket (ROCKET, guns.ts createRockets): slower than a round (seen coming), a 90° turn takes over a second,
+// one hit through an open shield lands as one hit on people, a ship target gets the smaller pad.
+{
+  assert.ok(ROCKET.speed <= 0.6 * ARMS.round.u && Math.PI / 2 / ROCKET.turn >= 1.1, 'a rocket is slower than a round and cannot snap round');
+  assert.ok(ROCKET.k >= LANDING && ROCKET.padShip < ROCKET.pad && ROCKET.cone > ROCKET.aim);
+}

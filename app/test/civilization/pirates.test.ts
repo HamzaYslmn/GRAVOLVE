@@ -282,12 +282,62 @@ const models = { pirates: book() };
     w.pirates.launch(U(10));
     for (let t = 0; t < 8; t += dt) w.frame(dt);
     const doomed = what === 'half' ? alive(w).filter((s) => s.kind !== 'hauler').slice(0, Math.ceil(alive(w).length / 2)) : alive(w).filter((s) => s.kind === 'hauler');
-    const marks = w.pirates.marks(), ships = alive(w);
-    for (const s of doomed) marks[ships.indexOf(s)].kill();
+    for (const s of doomed) s.kill(true); // a rocket's direct hit
     let t = 0;
     for (; t < 1 && w.pirates.fleet?.state !== 'leave'; t += dt) w.frame(dt);
     console.log(`retreat: ${what === 'half' ? 'half the ships' : 'every hauler'} lost → leaving after ${t.toFixed(2)} s`);
     assert.equal(w.pirates.fleet?.state, 'leave', `they leave when ${what} are lost`);
+  }
+
+  // 7b. Shields (escape.ts): a raider's first round is soaked (alive, hull kept), the second kills it; a soaked shield is
+  // back after REST + MEND s; a rocket's direct hit (kill(true)) still kills a shielded ship outright.
+  {
+    const w = world(11), dt = 1 / 60;
+    w.pirates.launch(U(6));
+    for (let t = 0; t < 2; t += dt) w.frame(dt);
+    const raiders = () => w.pirates.foes().filter((s) => s.kind === 'raider'), [a, b, c] = raiders();
+    a.kill();
+    assert.ok(!a.dead && a.hull === 1 && a.sh < 1, 'the first round is soaked');
+    a.kill();
+    assert.ok(a.dead, 'the second kills a raider');
+    b.kill();
+    for (let t = 0; t < 4 + 2 + 0.2; t += dt) w.frame(dt);
+    assert.ok(!b.dead && b.sh >= 1, `a shield mends after REST + MEND: ${b.sh}`);
+    c.kill(true);
+    assert.ok(c.dead, "a rocket's direct hit kills a shielded ship outright");
+  }
+
+  // 7c. Rout and jump: half a 10-ship fleet killed, it leaves pressed (routed at once); the camera on the fleet, every
+  // survivor spools and jumps out within ROUT_S + 3 s: one wake each, no wreck, no kill, no "destroyed" news. A ship
+  // shot while it spools dies to one round (its shield is down).
+  for (const shoot of [false, true]) {
+    const w = world(12), dt = 1 / 60, news: string[] = [];
+    let wrecks = 0;
+    Object.assign(w.ctx, { wreck: () => void wrecks++, news: (k: string) => void news.push(k) });
+    rock(w, 1.1);
+    w.pirates.launch(U(10));
+    for (let t = 0; t < 8; t += dt) w.frame(dt);
+    const ships = alive(w);
+    for (const s of ships.filter((q) => q.kind !== 'hauler').slice(0, Math.ceil(ships.length / 2))) s.kill(true);
+    const fl = w.pirates.fleet!, follow = () => {
+      const a = alive(w);
+      if (a.length) [w.ctx.cam.x, w.ctx.cam.y] = [a.reduce((t, s) => t + s.x, 0) / a.length, a.reduce((t, s) => t + s.y, 0) / a.length];
+    };
+    let t = 0, shot = 0;
+    for (; t < 1 && fl.state !== 'leave'; t += dt) w.frame(dt, follow);
+    const left = alive(w).length, w0 = wrecks, d0 = w.pirates.deaths.shot;
+    assert.ok(fl.state === 'leave' && fl.rout >= 0, `pressed as it leaves: routed (${fl.state}, ${fl.rout})`);
+    for (t = 0; t < 8 + 3 && w.pirates.fleet === fl; t += dt) {
+      w.frame(dt, follow);
+      const sp = alive(w).find((s) => s.spool > 0 && s.kind !== 'hauler');
+      if (shoot && !shot && sp) [shot] = [1, sp.kill()];
+    }
+    console.log(`rout${shoot ? ' (one shot while spooling)' : ''}: ${left} survivors gone ${t.toFixed(1)} s after leaving, ${w.pirates.wakes.length} wakes, ${wrecks - w0} wrecks`);
+    assert.ok(w.pirates.fleet !== fl, `gone within ROUT_S + 3 s: ${t}`);
+    assert.equal(w.pirates.wakes.length, left, 'every survivor spooled on screen');
+    assert.ok(!news.includes('pirates-down') && news.includes('pirates-jump'), 'a jump, not a kill');
+    assert.equal(wrecks - w0, shot, shoot ? 'the ship shot while spooling breaks up' : 'jumped ships leave no wreck');
+    assert.equal(w.pirates.deaths.shot - d0, shot, 'one round kills a spooling ship');
   }
 
   // 8. Rules kept: never at you unless an attack is due and your civilization is active; chips ≤ CHIP_MAX of your water and air a raid; stolen ≤ STEAL a hauler.

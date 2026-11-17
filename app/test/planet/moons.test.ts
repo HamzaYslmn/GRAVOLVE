@@ -1,4 +1,4 @@
-// node test/planet/moons.test.ts: the Sling is gone (the user, 2026-11-14): no moon is thrown (nor a rival's), Fire is the mass driver's
+// node test/planet/moons.test.ts: the Sling is gone (the user, 2026-11-14): no moon is thrown (nor a rival's), Fire is your rockets'
 // alone, no moon has a role, no body carries `foe`; Command no longer starts a lasso (a tap orders an attack, a hold grinds
 // your moon; capture is skill-based, see capture.test.ts). Source checks: moons.ts needs Pixi, so it is read, not run.
 import assert from 'node:assert/strict';

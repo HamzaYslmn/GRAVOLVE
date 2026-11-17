@@ -9,6 +9,9 @@ import type { Vec } from './entity';
 // Two fingers moving apart or together zoom (a pinch, sent to the camera as a wheel event); steering pauses, you coast.
 // Points are kept in screen pixels and turned into world points when read (`toWorld`, from the camera), so a still
 // cursor keeps aiming at what is under it while the camera moves. Verbs wait at most STALE_S for a reader.
+// HUD tap zones (`claim`): a mouse press or a finger landing where a claim hits belongs to the HUD, never to the game;
+// its tap is a release within PINCH_PX (a first finger: one that never left the deadzone), however long it took: the first
+// press of a page can stall (audio start-up). A drag that starts there still steers.
 
 const KEYS: Record<string, Vec> = {
   KeyW: { x: 0, y: -1 },
@@ -30,6 +33,7 @@ const STALE_S = 0.3; // an unread verb is dropped after this
 const PINCH_PX = 8; // a second finger that travels this far while the finger gap changes this much starts a pinch
 
 type Pt = { x: number; y: number }; // screen px relative to the canvas
+type Claim = { hit: (x: number, y: number) => boolean; tap: (x: number, y: number) => void }; // client px
 /** A verb's target: a world point, or 'target' (Space: the HUD target) / 'cursor' (E with no point under it). */
 export type Aim = Vec | 'target' | 'cursor';
 /** A steering direction; `stick`: it comes from the touch joystick (the player turns it into a wanted velocity). */
@@ -49,6 +53,9 @@ export function createInput(surface: HTMLElement, toWorld: (sx: number, sy: numb
   let fire: { at: Pt | 'target'; t: number } | null = null;
   let tap: { at: Pt | 'cursor'; t: number } | null = null;
   let press: { at: Pt | 'cursor'; t: number; by: string } | null = null; // a Command being held down
+  const claims: Claim[] = [];
+  const owner = (e: PointerEvent) => claims.find((c) => c.hit(e.clientX, e.clientY)) ?? null;
+  let click: { x: number; y: number; t: number; c: Claim } | null = null; // a left press the HUD owns: a release within PINCH_PX of it is its tap, however long it took
   const world = (at: Pt | 'target' | 'cursor'): Aim => (typeof at === 'string' ? at : toWorld(at.x, at.y));
   const commandDown = (at: Pt | 'cursor', by: string) => (press = { at, t: now(), by });
   const commandUp = (by: string) => {
@@ -69,7 +76,7 @@ export function createInput(surface: HTMLElement, toWorld: (sx: number, sy: numb
     held.delete(e.code);
     if (e.code === 'KeyE') commandUp('key');
   });
-  window.addEventListener('blur', () => [held.clear(), (press = null)]); // no stuck keys after alt-tab
+  window.addEventListener('blur', () => [held.clear(), (press = click = null)]); // no stuck keys after alt-tab
 
   // Mouse: left = Fire at the cursor, right = Command on what is under it (no context menu over the game).
   surface.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -77,8 +84,8 @@ export function createInput(surface: HTMLElement, toWorld: (sx: number, sy: numb
     if (e.pointerType !== 'mouse') return;
     [cursor, lastKind] = [local(e), 'mouse'];
     // A button pressed or let go while another is held comes as a move (chorded buttons), never as a pointerdown or up.
-    if (e.button === 0 && e.buttons & 1) fire = { at: cursor, t: now() };
-    else if (e.button === 2) void (e.buttons & 2 ? commandDown(cursor, 'mouse') : commandUp('mouse'));
+    if (e.button === 0 && e.buttons & 1) owner(e) || (fire = { at: cursor, t: now() });
+    else if (e.button === 2) void (e.buttons & 2 ? owner(e) || commandDown(cursor, 'mouse') : commandUp('mouse'));
   });
   surface.addEventListener('pointerleave', (e) => e.pointerType === 'mouse' && (cursor = null));
 
@@ -89,8 +96,8 @@ export function createInput(surface: HTMLElement, toWorld: (sx: number, sy: numb
   base.innerHTML = '<div id="joystick-knob"></div>';
   document.body.appendChild(base);
   const knob = base.firstElementChild as HTMLDivElement;
-  let touch: { id: number; ox: number; oy: number; x: number; y: number; at: Pt; t: number; moved: boolean; cmd: boolean } | null = null;
-  let second: { id: number; ox: number; oy: number; x: number; y: number; at: Pt; t: number; moved: boolean; d: number } | null = null; // quick tap: Fire; a drag: pinch
+  let touch: { id: number; ox: number; oy: number; x: number; y: number; at: Pt; t: number; moved: boolean; cmd: boolean; c: Claim | null } | null = null;
+  let second: { id: number; ox: number; oy: number; x: number; y: number; at: Pt; t: number; moved: boolean; d: number; c: Claim | null } | null = null; // quick tap: Fire; a drag: pinch
   let pinch = false; // latched until every finger lifts: no steering, no tap, no long press
   const gap = () => Math.max(1, Math.hypot(second!.x - touch!.x, second!.y - touch!.y));
   const joy: Vec = { x: 0, y: 0 };
@@ -98,6 +105,8 @@ export function createInput(surface: HTMLElement, toWorld: (sx: number, sy: numb
   surface.addEventListener('pointerdown', (e) => {
     if (e.pointerType === 'mouse') {
       [cursor, lastKind] = [local(e), 'mouse'];
+      const c = e.button === 0 || e.button === 2 ? owner(e) : null;
+      if (c) return void (e.button === 0 && (click = { x: e.clientX, y: e.clientY, t: e.timeStamp, c })); // the HUD's: no Fire, no Command
       if (e.button === 0) fire = { at: cursor, t: now() };
       else if (e.button === 2) commandDown(cursor, 'mouse');
       return;
@@ -106,10 +115,10 @@ export function createInput(surface: HTMLElement, toWorld: (sx: number, sy: numb
     lastKind = 'touch';
     if (touch) {
       // A second finger: fires on a quick release, or pinches (a third finger is ignored).
-      if (!second) (second = { id: e.pointerId, ox: e.clientX, oy: e.clientY, x: e.clientX, y: e.clientY, at: local(e), t: now(), moved: false, d: 0 }), (second.d = gap());
+      if (!second) (second = { id: e.pointerId, ox: e.clientX, oy: e.clientY, x: e.clientX, y: e.clientY, at: local(e), t: now(), moved: false, d: 0, c: owner(e) }), (second.d = gap());
       return;
     }
-    const t = { id: e.pointerId, ox: e.clientX, oy: e.clientY, x: e.clientX, y: e.clientY, at: local(e), t: now(), moved: false, cmd: false };
+    const t = { id: e.pointerId, ox: e.clientX, oy: e.clientY, x: e.clientX, y: e.clientY, at: local(e), t: now(), moved: false, cmd: false, c: owner(e) };
     touch = t;
     if (second) second.d = gap(); // a finger landing again while the other pinch finger stays down
     base.style.left = `${e.clientX}px`;
@@ -117,7 +126,7 @@ export function createInput(surface: HTMLElement, toWorld: (sx: number, sy: numb
     knob.style.transform = '';
     setTimeout(() => touch === t && !t.cmd && !pinch && (base.hidden = false), JOY_SHOW_S * 1000);
     setTimeout(() => {
-      if (touch !== t || t.moved || second || pinch) return; // long press, still: a Command at that point (the joystick steps aside)
+      if (touch !== t || t.moved || second || pinch || t.c) return; // long press, still: a Command at that point (the joystick steps aside); none on the HUD
       t.cmd = true;
       base.hidden = true;
       joy.x = joy.y = 0;
@@ -158,10 +167,11 @@ export function createInput(surface: HTMLElement, toWorld: (sx: number, sy: numb
   const end = (e: PointerEvent) => {
     if (e.pointerType === 'mouse') return; // the right button's release is heard on the window (it may leave the canvas)
     if (e.pointerId === second?.id) {
-      if (e.type === 'pointerup' && !pinch && !second.moved && now() - second.t < TAP_S) fire = { at: second.at, t: now() }; // a quick second finger fires there
+      if (e.type === 'pointerup' && !pinch && !second.moved && now() - second.t < TAP_S) second.c ? second.c.tap(second.ox, second.oy) : (fire = { at: second.at, t: now() }); // a quick second finger fires there
       second = null;
     } else if (e.pointerId === touch?.id) {
       if (touch.cmd) commandUp('touch');
+      else if (!pinch && !touch.moved && touch.c) touch.c.tap(touch.ox, touch.oy); // the HUD's tap, however long it took
       else if (!pinch && !touch.moved && now() - touch.t < TAP_S) fire = { at: touch.at, t: now() }; // a quick tap fires there
       touch = null;
       joy.x = joy.y = 0;
@@ -170,7 +180,14 @@ export function createInput(surface: HTMLElement, toWorld: (sx: number, sy: numb
     if (!touch && !second) pinch = false;
   };
   surface.addEventListener('pointerup', end);
-  window.addEventListener('pointerup', (e) => e.pointerType === 'mouse' && e.button === 2 && commandUp('mouse'));
+  window.addEventListener('pointerup', (e) => {
+    if (e.pointerType !== 'mouse') return;
+    if (e.button === 2) commandUp('mouse');
+    else if (e.button === 0 && click) {
+      if (Math.hypot(e.clientX - click.x, e.clientY - click.y) < PINCH_PX) click.c.tap(click.x, click.y); // no time limit: the first press of a page can stall (audio start-up)
+      click = null;
+    }
+  });
   surface.addEventListener('pointercancel', end);
 
   const out: Axis = { x: 0, y: 0, stick: false };
@@ -206,5 +223,11 @@ export function createInput(surface: HTMLElement, toWorld: (sx: number, sy: numb
     },
     /** While a Command is held past HOLD_S: where it was pressed; else null. */
     hold: (): Aim | null => (press && now() - press.t >= HOLD_S ? world(press.at) : null),
+    /** A HUD tap zone (client px): presses where hit() is true never reach the game; a quick release calls tap(). Returns its removal. */
+    claim(hit: Claim['hit'], tap: Claim['tap']) {
+      const c = { hit, tap };
+      claims.push(c);
+      return () => void claims.splice(claims.indexOf(c) >>> 0, 1);
+    },
   };
 }

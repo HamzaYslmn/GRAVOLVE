@@ -47,15 +47,16 @@ Code: `rules.ts`, `body.ts`.
 | Partial accretion | V < 3·v_m, T not shattered | T keeps ξ = (3v_m − V)/(2v_m) of P's rest; never you as P | yellow |
 | Bounce / erosion | otherwise | both chip; either can shatter or die | orange; pink you break; red you die |
 
-- Your sliding speed counts 40% (GRAZE). Rock–rock pairs count full sliding, stick below half their mutual escape speed and get no game pull, so belts don't clump.
+- Your sliding speed counts 40% (GRAZE). Rock–rock pairs count full sliding, stick below half their mutual escape speed and get no game pull, so belts don't clump. They rub (user, 2026-11-17): Coulomb friction (`MU` 0.6, dry rock on rock) plus surface relief (`ROUGH` 0.25 of the sliding speed per contact length, below escape speed only) slow a skim until it sticks; friction also sets both spinning (angular momentum kept). Measured (test/asteroid/body.test.ts): a skim at 0.55–0.65 of escape merges in 0.3–1.6 s, the same within 10% at 30/60/144 Hz; from about orbital speed the rock lifts off onto an orbit and comes back. Near-equal masses: the tougher body is T and keeps the other (`rank` = m·(durability·(0.5 + hardness))^0.1: metallic leads stony down to 0.96 of its mass; never a body under 1/1.4 of the other); exact ties by chance. Rub sparks scale with the energy the contact lost (no flash every frame).
 - Restitution: solid 0.5, rubble to 0.15, molten ~0. MAX_SPIN 1 rad/s. Every loaded rock is swept against you (`contactTime`): no tunnelling.
-- **Shared mass helpers** (`body.ts`, every stage): `absorb` adds dust mass, `shed` shrinks a body, `drop` removes it (m = 0, never ticked again). `shatter` keeps `BURST_KEEP` 0.4 of a body as up to 6 fragments on a ring wide enough that none touch at birth (`burstRing`). Fighters, probes, the frigate, rockets and the beam use it ([civilizationgameplay.md](civilizationgameplay.md) → Defence ships). `field.spawn(…, from)` takes the body a piece broke off.
+- **Shared mass helpers** (`body.ts`, every stage): `absorb` adds dust mass, `shed` shrinks a body, `drop` removes it (m = 0, never ticked again). `shatter` keeps `BURST_KEEP` 0.4 of a body as up to 6 fragments on a ring wide enough that none touch at birth (`burstRing`). Fighters, probes, the frigate and rockets use it ([civilizationgameplay.md](civilizationgameplay.md) → Defence ships). `field.spawn(…, from)` takes the body a piece broke off.
 
 ### Heat
 
 Code: `rules.ts`, `core/water.ts`.
 
 - **Impact heat** (`impactHeat`): Δheat = 1.5·e + 2·s²·√(r/16), e = s·(v/v_m)², s = the other's mass share. Slow meals barely heat; the infall term lets giant mergers melt a world.
+- **Rock pairs heat by the energy lost** (`rub`, `workHeat`, 2026-11-17): a graze or bounce heats both by the relative kinetic energy restitution and friction took out, split by softness (the softer deforms more), over each body's heat capacity; the infall term only on merges, where the meal's own impact heat mixes in too. Calibrated so an equal pair's head-on bounce heats like the kinetic term above: two 1000 u stony rocks at 16 diameters/s bounce at +3.2 heat each (measured, every tick rate). A rubbing equal pair merges at about +0.8.
 - **Swallowing** (`mergeHeat`, user 2026-11-14): energy is kept. Each side brings heat capacity × mass × heat (rock 1, metal 0.56, ice 2.6, gas 1.3, heavy elements 0.16) and the hit's heat is added once, so a cold meal cools you. Computed (2026-11-16): a 1% ice meal at 120 K takes a 550 K body to 543 K.
 - 1 heat unit = 430 K above 120 K: > 1 heated, > 3 molten (stick ×1.5), > 5 molten metal, > 8 vaporizing; clamped at MAX_HEAT 10 (4420 K). Cooling COOL 0.08/s at the start radius, ∝ 1/r.
 - **Radioactive matter neither decays nor heats** (user, 2026-11-14): it is a civilization's fuel ([civilizationgameplay.md](civilizationgameplay.md) → Energy and dose). Before that, a little helps life ([planetgameplay.md](planetgameplay.md) → Life). Green rocks are 25% radioactive.
@@ -125,6 +126,7 @@ Code: `player.ts`, `wells.ts`, `feedback.ts`.
 |---|---|---|
 | Cracks lower durability and heal | No cracks | Unused bloat |
 | A body 1–1.15× you bounces you lightly | Anything below 1.15× you merges into you | Equal bodies never flip between bounce and stick (user) |
+| Heat formula on every hit | Rock pairs: the energy the contact lost (`rub`) | A rubbing pair was heated every frame (+2–4 a frame, measured) |
 | Merge and partial accretion on any slow touch | Age I only; Age II below | A world is not a magnet for every rock (user, 2026-11-14) |
 | A red ring marks the point of no return | Wells are a natural aura | User rejected crisp rings |
 | Death card: "Play again" | After Age I: "Continue as a planetoid" | One body, one run |

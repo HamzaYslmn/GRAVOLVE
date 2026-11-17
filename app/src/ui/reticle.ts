@@ -3,6 +3,7 @@ import type { Graphics } from 'pixi.js';
 import type { Aim, Controls } from '../core/input';
 import type { Vec } from '../core/entity';
 import { clamp } from '../core/rng';
+import { overCard } from './tip';
 
 // The soft reticle: replaces the OS cursor over the game while you have a weapon (the mass driver
 // or the beam). The cooldown is a ring that fills around it; full = ready. No aim line, numbers or mode switch. Two weapons may
@@ -41,12 +42,12 @@ function createReticle(canvas: HTMLElement) {
   };
 }
 
-/** A weapon's readout (combat.ts driver/beam): the reticle under the mouse, on touch the cooldown as an arc of radius r round x, y. */
+/** A weapon's readout (combat.ts driver/beam): the reticle under the mouse (the OS cursor over a HUD card), on touch the cooldown as an arc of radius r round x, y. */
 export function createReadout(canvas: HTMLElement, input: Controls) {
   const reticle = createReticle(canvas);
   return {
     update(on: boolean, ready: number, g: Graphics, x: number, y: number, r: number, width: number, color: number) {
-      reticle.update(on && input.kind() === 'mouse' ? input.cursor() : null, ready);
+      reticle.update(on && input.kind() === 'mouse' && !overCard() ? input.cursor() : null, ready);
       if (on && input.kind() === 'touch' && ready < 1) g.moveTo(x, y - r).arc(x, y, r, -Math.PI / 2, -Math.PI / 2 + ready * 2 * Math.PI).stroke({ width, color, alpha: 0.5 });
     },
     /** The world point a Fire aims at: the HUD target, the cursor, or the stick's point. */

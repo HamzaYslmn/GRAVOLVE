@@ -3,15 +3,15 @@
 // you, and the Hungry one ends ahead of the Careful one; each forges a world (melts through, reaches LIFE in a few minutes
 // as a careful player does, never crosses the gas line); round robin skips the dead and those on the map.
 import assert from 'node:assert/strict';
-import { A_ENG, alarmStep, BAND, DODGE, evade, GATHER_U, MASS_S, newWave, next, ODDS, REST_S, restStep, roster, sidestep, stance, stationStep, STOCK_RATE, tick, volley, want, WAVE_COST, WAVE_S, waveStep, WORLD_FLAGS, type Mood, type Temper, type Wave } from '../../src/evolution/rivals/ledger.ts';
+import { A_ENG, alarmStep, BAND, DODGE, evade, GATHER_U, MASS_S, newWave, next, ODDS, PURSUIT, pursueStep, REST_S, restStep, roster, sidestep, stance, stationStep, STOCK_RATE, tick, volley, want, WAVE_COST, WAVE_S, waveStep, WORLD_FLAGS, type Mood, type Temper, type Wave } from '../../src/evolution/rivals/ledger.ts';
 import {
-  ARMS, BEATEN, CALM_S, DRIVER_COOL, FLEET, raid, RESERVE, RIVAL_AIM, RIVAL_FIRE, RIVAL_LEAD, rivalFrigates, rivalLevel, rivalSalvo, SALVO_LEAD, salvo, SHIELD_K, shieldMax, shieldRegen,
-  shieldShot, SIEGE, siegeWing, SLUG_ORE, START_ORE, START_SHIPS, strength, waveFighters, weaponHit, type Shield,
+  ARMS, BEATEN, CALM_S, FLEET, raid, RIVAL_GLOW, RIVAL_LEAD, RIVAL_SALVO, rivalFrigates, rivalLevel, rivalSalvo, ROCKET, SALVO_LEAD, salvo, SHIELD_K, shieldMax, shieldRegen,
+  shieldShot, SIEGE, siegeWing, START_ORE, START_SHIPS, strength, waveFighters, weaponHit, type Shield,
 } from '../../src/evolution/civilization/rules.ts';
 import { COMP, G_WORLD, gravitates, pairPull, pullMass, radiusOf, youPull } from '../../src/evolution/asteroid/rules.ts';
-import { createMissiles } from '../../src/evolution/civilization/guns.ts';
-import { silo } from '../civilization/fakes.ts';
-import { lcg, slugK } from '../helpers.ts';
+import { createRockets } from '../../src/evolution/civilization/guns.ts';
+import { rocketAt } from '../civilization/fakes.ts';
+import { lcg } from '../helpers.ts';
 import { LIFE_S } from '../../src/evolution/planet/rules.ts';
 
 const comp = { rock: 0.8, metal: 0.1, ice: 0.08, gas: 0.02 };
@@ -67,6 +67,7 @@ console.log(`rival worlds ok: ${[...marks].map(([e, k]) => `${e.name} melts at $
   assert.equal(stance(mood), 'gather', 'no stock: gather');
   assert.equal(stance({ ...mood, stock: 99 }), 'attack', 'stock ready: attack');
   assert.equal(stance({ ...mood, temper: 'careful', stock: 99, shield: 0.3 }), 'defend', 'a Careful one with its shield low: defend');
+  assert.equal(stance({ ...mood, stock: 99, rest: true }), 'gather', 'resting after you outran it: gather, no wave');
   for (const temper of ['hungry', 'raider'] as const) assert.equal(stance({ ...mood, temper, stock: 99, shield: 0.05 }), 'attack', `a ${temper} one keeps attacking with its shield low`);
   assert.equal(stance({ ...mood, stock: 99, fleetShort: true }), 'defend', 'fleet short: defend');
   assert.equal(stance({ ...mood, shield: 0, wave: true }), 'attack', 'a wave out keeps its course');
@@ -112,22 +113,23 @@ console.log(`rival worlds ok: ${[...marks].map(([e, k]) => `${e.name} melts at $
   for (let t = 0; t < WAVE_S + 0.2; t += 0.1) waveStep(late, 0.1, true);
   assert.equal(late.phase, 'home', 'goes home after WAVE_S');
 
-  // Duels without the Sling (the user, 2026-11-14): you stay and fight a rival of level L, both shields under slugs (shieldShot
-  // with its stun; your slugs cost SLUG_ORE from your stock, 60% hit; theirs in volleys, RIVAL_AIM true), their war wave by its temper's odds, its silo loaded while it masses and firing rivalSalvo(L, SALVO_LEAD) (as before: each fighter's rounds,
-  // each frigate's lance salvo, a silo salvo, within the wave's raid caps; your slugs snipe a frigate that is out; your home
-  // fighters, at most two, each kill one wave ship per 3.5 s pass half the time). Your sortie while your shield holds (CALM_S
-  // after it falls): every SIEGE.pass s a pair of the siege wing strafes (rounds chip their shield and burn their stock, never
-  // people), each frigate's lance salvo every reload (90% land), your silo's salvo(T) every reload while RESERVE ore is left
-  // (half land). Win = their people at BEATEN; lose = yours.
-  const rnd = lcg(11), shotK = slugK(1e5), F = ARMS.round, Lc = ARMS.lance, M = ARMS.missile;
+  // Duels without the Sling (the user, 2026-11-14): you stay and fight a rival of level L. Your rockets (ROCKET: a magazine of
+  // salvo(T), one refilled every ROCKET.reload s, ROCKET.ore each from your stock, half land on its dodging world; a frigate
+  // of its that is out first). Its rockets: a salvo of rivalSalvo(L, SALVO_LEAD) every RIVAL_SALVO s, half land on you as you
+  // stay: outside its wave in volleys (restStep) and never on your people (floor: your people), with its wave out within the
+  // wave's raid caps. Its war wave by its temper's odds: each fighter's rounds, each frigate's lance salvo; your home fighters,
+  // at most two, each kill one wave ship per 3.5 s pass half the time. Your sortie while your shield holds (CALM_S after it
+  // falls): every SIEGE.pass s a pair of the siege wing strafes (rounds chip their shield and burn their stock, never people),
+  // each frigate's lance salvo every reload (90% land). Win = their people at BEATEN; lose = yours.
+  const rnd = lcg(11), F = ARMS.round, Lc = ARMS.lance;
   type You = { T: number; level: number; fighters: number; frigates: number; ore: number };
   const duel = (you: You, L: number, temper: Temper) => {
     const a: Shield = { level: you.level, s: SHIELD_K * you.level }, b: Shield = { level: L, s: SHIELD_K * L }, wa = { k: 0 }, wb = { k: 0 }, capb = { floor: 0, burnt: 0 };
     const yours = strength(you.fighters, you.frigates, you.level), wing = siegeWing(you.fighters), n = salvo(you.T);
-    let pa = 1, pb = 1, p60 = 1, ore = you.ore, ca = 0, cb = 3, stock = 0, mineT = 15, rest = 0, frig = rivalFrigates(L), fhp = 0, lanceT = 0, siloT = 0;
-    let on = true, calm = 0, passT = SIEGE.pass, myLance = Lc.reload, mySilo = M.reload, wave: Wave | undefined, cap = raid(1);
-    const hit = (arm: 'round' | 'lance' | 'missile', k: number) => void (pa = weaponHit(a, wa, pa, arm, k, cap).P);
-    const hurt = (arm: 'round' | 'lance' | 'missile', k: number) => {
+    let pa = 1, pb = 1, p60 = 1, ore = you.ore, mag = n, load = 0, cb = 3, stock = 0, mineT = 15, rest = 0, frig = rivalFrigates(L), fhp = 0, lanceT = 0;
+    let on = true, calm = 0, passT = SIEGE.pass, myLance = Lc.reload, wave: Wave | undefined, cap = raid(1);
+    const hit = (arm: 'round' | 'lance' | 'rocket', k: number, c = cap) => void (pa = weaponHit(a, wa, pa, arm, k, c).P);
+    const hurt = (arm: 'round' | 'lance' | 'rocket', k: number) => {
       const h = weaponHit(b, wb, pb, arm, k, capb);
       [pb, stock] = [h.P, Math.max(0, stock - h.burn)];
     };
@@ -136,30 +138,29 @@ console.log(`rival worlds ok: ${[...marks].map(([e, k]) => `${e.name} melts at $
       shieldRegen(a, 0.1);
       shieldRegen(b, 0.1);
       const gone = wave?.phase === 'go';
-      if ((ca -= 0.1) <= 0 && ore >= SLUG_ORE) {
-        [ca, ore] = [DRIVER_COOL, ore - SLUG_ORE];
-        if (gone && wave!.frig > 0) { if (rnd() < 0.6 && ++fhp >= Lc.rivalHull) [wave!.frig, frig, fhp] = [wave!.frig - 1, frig - 1, 0]; } // snipe the frigate
-        else if (rnd() < 0.6 && b.s > 0) shieldShot(b, shotK);
+      if (mag < n && (load += 0.1) >= ROCKET.reload) [mag, load] = [mag + 1, 0];
+      if (mag >= 1 && ore >= ROCKET.ore) {
+        [mag, ore] = [mag - 1, ore - ROCKET.ore];
+        if (gone && wave!.frig > 0) { if (rnd() < 0.5 && ++fhp >= Lc.rivalHull) [wave!.frig, frig, fhp] = [wave!.frig - 1, frig - 1, 0]; } // at its frigate first
+        else if (rnd() < 0.5) hurt('rocket', ROCKET.k);
       }
       rest = restStep(rest, a.s <= 0, 0.1);
-      if (volley(!!wave, rest) && (cb -= 0.1) <= 0) {
-        cb = RIVAL_FIRE[0] + rnd() * (RIVAL_FIRE[1] - RIVAL_FIRE[0]);
-        if (rnd() < RIVAL_AIM && a.s > 0) shieldShot(a, shotK);
+      if ((gone || volley(!!wave, rest)) && (cb -= 0.1) <= 0) {
+        cb = RIVAL_SALVO;
+        for (let i = 0; i < rivalSalvo(L, SALVO_LEAD[temper]); i++) if (rnd() < 0.5) hit('rocket', ROCKET.k, gone ? cap : { floor: pa, burnt: 0 });
       }
       // Your sortie (rules.ts sortieStep: off with your shield down, then CALM_S).
       calm = Math.max(0, calm - 0.1);
       if (on && a.s <= 0) [on, calm] = [false, CALM_S];
       else if (!on && !calm && a.s > 0) on = true;
-      mySilo = Math.max(0, mySilo - 0.1);
       if (on) {
         if ((passT -= 0.1) <= 0) [passT] = [SIEGE.pass, ...Array.from({ length: Math.min(2, wing) * FLEET.fighter.rounds * FLEET.fighter.bursts }, () => rnd() < F.hit && hurt('round', F.k))];
         if (you.frigates && (myLance -= 0.1) <= 0) [myLance] = [Lc.reload, ...Array.from({ length: Lc.salvo * you.frigates }, () => rnd() < Lc.hit && hurt('lance', Lc.k))];
-        if (!mySilo && ore >= RESERVE + n * M.ore) [mySilo, ore] = [M.reload, ore - n * M.ore, ...Array.from({ length: n }, () => rnd() < 0.5 && hurt('missile', M.k))];
       }
       stock += STOCK_RATE * L * 0.1;
       if (!wave && (mineT -= 0.1) <= 0) [mineT, stock] = [15, stock + GATHER_U];
       const st = stance({ temper, wave: !!wave, shield: b.s / shieldMax(b), fleetShort: false, far: false, seen: t, stock, level: L, odds: strength(L + 1 + waveFighters(L), frig, L) / yours });
-      if (st === 'attack' && !wave) [wave, stock, lanceT, siloT] = [newWave(waveFighters(L) + frig, frig), stock - WAVE_COST[temper] * waveFighters(L), Lc.reload, M.glow];
+      if (st === 'attack' && !wave) [wave, stock, lanceT] = [newWave(waveFighters(L) + frig, frig), stock - WAVE_COST[temper] * waveFighters(L), Lc.reload];
       if (wave) {
         const was = wave.phase;
         waveStep(wave, 0.1, true);
@@ -168,7 +169,6 @@ console.log(`rival worlds ok: ${[...marks].map(([e, k]) => `${e.name} melts at $
           const fighters = wave.alive - wave.frig;
           if (rnd() < (fighters * FLEET.fighter.rounds * FLEET.fighter.bursts * F.hit * 0.5 * 0.1) / F.run) hit('round', F.k); // half of each fighter's run lands on your world
           if (wave.frig > 0 && (lanceT -= 0.1) <= 0) [lanceT] = [Lc.reload, ...Array.from({ length: Lc.salvo * wave.frig }, () => rnd() < Lc.hit && hit('lance', Lc.k))];
-          if ((siloT -= 0.1) <= 0) [siloT] = [M.reload, ...Array.from({ length: rivalSalvo(L, SALVO_LEAD[temper]) }, () => rnd() < 0.5 && hit('missile', M.k))];
           if (pa <= cap.floor * 1.001) wave.phase = 'home';
           for (let k = 0; k < Math.min(2, on ? you.fighters - wing : you.fighters); k++) if (fighters > 0 && rnd() < (0.5 * 0.1) / 3.5) wave.alive--;
         }
@@ -207,7 +207,7 @@ console.log(`rival worlds ok: ${[...marks].map(([e, k]) => `${e.name} melts at $
   assert.ok(hungry3.win >= 0.7, `with a frigate you win >= 70% vs an equal rival (${hungry3.win})`);
   assert.ok(raider3.win >= 0.5 && raider3.lose >= 0.02, `a Raider one level up is a contest: it sometimes beats you (win ${raider3.win}, lose ${raider3.lose})`);
   for (const [t, L] of [['careful', 2], ['hungry', 3], ['hungry', 4], ['raider', 4]] as const) row(5, L, t, rate(5, L, t), '(L3 shield, 6 fighters, two frigates, 120 ore)');
-  assert.ok(MASS_S >= ARMS.missile.reload, 'a rival silo loads while its wave masses: the first salvo leaves with the wave');
+  assert.ok(RIVAL_GLOW >= 1 && RIVAL_GLOW < MASS_S, "a rival's pad glows a second or more before each salvo: the tell");
   assert.ok(rivalLevel(0, 1, RIVAL_LEAD.raider) === 2, 'a Raider meets a new civilization one level up');
   // You can flee: a rival world's engines (A_ENG) cannot hold you accelerating away at 2 R/s² from 10 R: past ENGAGE (30 R) within 8 s.
   {
@@ -257,17 +257,16 @@ console.log(`rival worlds ok: ${[...marks].map(([e, k]) => `${e.name} melts at $
   assert.ok(parked.touch < 20, 'a beaten world parked beside you falls in within 20 s');
   assert.ok(coast.touch === Infinity && coast.hi < 30, 'a beaten world on its orbit stays bound, never touching, 120 s');
   // Its dodge (DODGE, as civilization/rivals.ts keepStation runs it, at DODGE.a where the game passes its own thrust, asteroid/
-  // player.ts thrustOf): your silo's salvo of 1–3 (ARMS.missile, fanned) from your surface at it on its circular station
-  // `keep` R off you; it sees the launch, reacts after 0–0.4 s, builds its thrust over DODGE.ramp (its last thrust fed back)
-  // across the missile's line of sight, the way it already crosses it, until they are gone, then brakes back onto its
-  // station (A_ENG engines alone cannot get it out of the way). Each missile leaves kicked ARMS.missile.arc off the aim line,
-  // sides alternating (guns.ts launch), and arcs back in (guns.ts steer nav): whichever way it steps, about half land at
-  // every burn and from 8–16 R (more from 20 R, ~70%), and a salvo of 2–3 always lands one.
+  // player.ts thrustOf): your rockets (rules.ts ROCKET, guns.ts createRockets: a salvo of 1–3 off your surface, pads
+  // alternating) at it on its circular station `keep` R off you; it sees the launch, reacts after 0–0.4 s, builds its thrust
+  // over DODGE.ramp (its last thrust fed back) across the rocket's line of sight, the way it already crosses it, until they
+  // are gone, then brakes back onto its station (A_ENG engines alone cannot get it out of the way). The rockets turn at most
+  // ROCKET.turn and fly 16.8 R (one moon slot): whichever way it steps about half land, and a salvo of 2–3 always lands one.
   const s0 = sidestep(5, 0.1, 9, 0);
-  assert.ok(s0.y > 0 && Math.abs(s0.x) < 0.03 * DODGE.v, 'it steps across a missile\'s line of sight, on its miss\'s side');
+  assert.ok(s0.y > 0 && Math.abs(s0.x) < 0.03 * DODGE.v, 'it steps across a rocket\'s line of sight, on its miss\'s side');
   assert.ok(sidestep(5, 0.1, 9, 0, -1).y < 0, 'or the way it already crosses that line');
   const fan = evade({ x: 0, y: 0, vx: 0, vy: 0 }, [{ x: -5, y: -0.1, vx: 9, vy: 0 }, { x: -5, y: -0.2, vx: 9, vy: 0 }, { x: 5, y: 0, vx: 9, vy: 0 }]);
-  assert.ok(fan.n === 2 && Math.abs(Math.hypot(fan.x, fan.y) - DODGE.v) < 1e-9, 'sidesteps sum up to DODGE.v; a missile that passed is no threat');
+  assert.ok(fan.n === 2 && Math.abs(Math.hypot(fan.x, fan.y) - DODGE.v) < 1e-9, 'sidesteps sum up to DODGE.v; a rocket that passed is no threat');
   { // the ramp: a goal velocity alone (on station, no pull, at rest), cap 7 R/s²; thrust = Δv / dt
     const dt = 1 / 60, go = (ay: number, was?: { x: number; y: number }) => stationStep(10, 0, 0, 0, 10, 0, 1, dt, false, 0, ay, 7, was).y / dt, step = (7 / DODGE.ramp) * dt;
     let T = 0, n = 0;
@@ -279,18 +278,17 @@ console.log(`rival worlds ok: ${[...marks].map(([e, k]) => `${e.name} melts at $
     assert.ok(Math.abs(go(0.001, { x: 0, y: 7 }) - 0.001 / dt) < 1e-9, 'cutting is instant');
     assert.ok(Math.abs(go(50) - 7) < 1e-12, 'without `was`, full thrust at once (as before)');
   }
-  const rnd = lcg(11), M = ARMS.missile, sideRnd = lcg(23); // sideRnd: the launch kick's own stream, it never shifts the dodge's draws
+  const rnd = lcg(11), sideRnd = lcg(23); // sideRnd: the pads' own stream, it never shifts the dodge's draws
   /** `n` salvos of 1–3 at a rival keeping `keepOf()` R off, dodging at `burn` R/s² (or on A_ENG alone). Land share, the fewest landed of a salvo of 2–3, slowest station speed after, steepest thrust rise. */
   const salvos = (n: number, keepOf: () => number, dodge = true, burn = DODGE.a) => {
-    let fired = 0, landed = 0, slow = 0, rise = 0, floor = Infinity;
+    let fired = 0, landed = 0, slow = 0, ease = 0, rise = 0, floor = Infinity;
     for (let i = 0; i < n; i++) {
       const keep = keepOf(), turn = rnd() < 0.5 ? -1 : 1, b = rnd() * 2 * Math.PI, pull = (d: number) => (G_WORLD * k * (mY + mR)) / Math.max(d, R + r) ** 2;
       const c = Math.sqrt((pull(keep * R) / R) * keep) * turn * R, w = { x: Math.cos(b) * keep * R, y: Math.sin(b) * keep * R, vx: -Math.sin(b) * c, vy: Math.cos(b) * c };
-      const world = { m: mR, r, motion: w }, pool = createMissiles(9, sideRnd), salvo = 1 + Math.floor(rnd() * 3), dt = 1 / 60;
-      const lx = Math.cos(b) * 1.05 * R, ly = Math.sin(b) * 1.05 * R, seek = () => ({ ...w, r });
-      for (let j = 0; j < salvo; j++) pool.launch(silo(M, R, { x: lx, y: ly, tx: w.x, ty: w.y, tvx: w.vx, tvy: w.vy, fan: salvo > 1 ? M.fan * ((2 * j) / (salvo - 1) - 1) : 0, target: world, seek }));
+      const world = { m: mR, r, motion: w }, pool = createRockets(12, sideRnd), salvo = 1 + Math.floor(rnd() * 3), dt = 1 / 60, seek = () => ({ ...w, r });
+      for (let j = 0; j < salvo; j++) pool.launch(rocketAt(R, { tx: w.x, ty: w.y, target: world, seek }));
       fired += salvo;
-      let alarm = -DODGE.react[1] * rnd(), gone = Infinity, worst = 0, was = { x: 0, y: 0 }, got = 0;
+      let alarm = -DODGE.react[1] * rnd(), gone = Infinity, worst = 0, back = 0, was = { x: 0, y: 0 }, got = 0;
       const end = () => gone + DODGE.brake + 1;
       for (let t = 0; t < end(); t += dt) {
         const ev = evade(w, pool.live.filter((m) => !m.dead)), [ax, ay] = (alarm = alarmStep(alarm, ev.n > 0, dt, rnd)) > 0 ? [ev.x, ev.y] : [0, 0];
@@ -299,39 +297,40 @@ console.log(`rival worlds ok: ${[...marks].map(([e, k]) => `${e.name} melts at $
         was = { x: e.x / dt, y: e.y / dt };
         [w.vx, w.vy] = [w.vx - w.x * g + e.x * R, w.vy - w.y * g + e.y * R];
         if (pool.live.length) pool.step(dt, [world], [], 0, () => void got++, () => {});
-        if (!ev.n && gone === Infinity) gone = t; // the last one has hit, died or passed
+        if (ev.n) gone = Infinity; // one coming round again: still dodging
+        else if (gone === Infinity) gone = t; // the last one has hit, died or passed
         [w.x, w.y] = [w.x + w.vx * dt, w.y + w.vy * dt];
         const cd = Math.sqrt((pull(d) / R) * (d / R)) * turn * R; // its circular speed here: off the dodge, it sails on its station again
-        if (t > end() - dt) worst = Math.hypot(w.vx + (w.y / d) * cd, w.vy - (w.x / d) * cd) / R;
+        if (t > end() - dt) [worst, back] = [Math.abs((w.x * w.vy - w.y * w.vx) / d - cd) / R, Math.abs((w.x * w.vx + w.y * w.vy) / d) / R]; // off its circular speed; easing back to its kept distance
       }
-      [slow, landed] = [Math.max(slow, worst), landed + got];
+      [slow, ease, landed] = [Math.max(slow, worst), Math.max(ease, back), landed + got];
       if (salvo > 1) floor = Math.min(floor, got);
     }
-    return { land: landed / fired, slow, rise, floor, burn };
+    return { land: landed / fired, slow, ease, rise, floor, burn };
   };
-  const l8 = salvos(200, () => 8), l12 = salvos(200, () => 12), l16 = salvos(200, () => 16), l20 = salvos(200, () => 20);
+  const l8 = salvos(200, () => 8), l12 = salvos(200, () => 12);
   const all = salvos(300, () => 8 + 4 * rnd()), soft = salvos(200, () => 8 + 4 * rnd(), true, 5), hard = salvos(200, () => 8 + 4 * rnd(), true, 14);
   const cruise = salvos(100, () => 8 + 4 * rnd(), false), pc = (x: number) => (100 * x).toFixed(0);
-  console.log(`your silo's missiles (${M.u} R/s, kicked ±${M.arc} rad, alternating) at a dodging rival world (burn ${DODGE.a} R/s² built over ${DODGE.ramp} s, react 0–${DODGE.react[1]} s): land ${pc(l8.land)} / ${pc(l12.land)} / ${pc(l16.land)} / ${pc(l20.land)}% from 8 / 12 / 16 / 20 R, ${pc(all.land)}% over keep 8–12 R (burn 5: ${pc(soft.land)}%, 14: ${pc(hard.land)}%), ${pc(cruise.land)}% on A_ENG engines alone; a salvo of 2–3 lands at least ${Math.min(all.floor, l8.floor, l12.floor, l16.floor, l20.floor, soft.floor, hard.floor)}; thrust rises ≤ ${Math.max(all.rise, l8.rise, l16.rise).toFixed(1)} R/s³; ${all.slow.toFixed(2)} R/s at worst ${DODGE.brake + 1} s after the last one`);
-  for (const [L, l] of [[8, l8], [12, l12], [16, l16], [20, l20]] as const) assert.ok(l.land >= 0.4 && l.land <= 0.8, `from ${L} R about half land (${l.land})`);
-  assert.ok(all.land >= 0.45 && all.land <= 0.7, `about half land over keep 8–12 R (${all.land})`);
-  assert.ok([soft, hard].every((l) => l.land >= 0.4 && l.land <= 0.8), `a weak (5 R/s²) or strong (14 R/s²) burn still lands about half (${soft.land}, ${hard.land})`);
-  assert.ok([l8, l12, l16, l20, all, soft, hard].every((l) => l.floor >= 1), 'every salvo of 2–3 lands at least one');
+  console.log(`your rockets (${ROCKET.speed} R/s, ≤ ${ROCKET.turn} rad/s, pads ±${ROCKET.pad} rad, alternating) at a dodging rival world (burn ${DODGE.a} R/s² built over ${DODGE.ramp} s, react 0–${DODGE.react[1]} s): land ${pc(l8.land)} / ${pc(l12.land)}% from 8 / 12 R, ${pc(all.land)}% over keep 8–12 R (burn 5: ${pc(soft.land)}%, 14: ${pc(hard.land)}%), ${pc(cruise.land)}% on A_ENG engines alone; a salvo of 2–3 lands at least ${Math.min(all.floor, l8.floor, l12.floor, soft.floor, hard.floor)}; thrust rises ≤ ${Math.max(all.rise, l8.rise).toFixed(1)} R/s³; ${DODGE.brake + 1} s after the last one at worst ${all.slow.toFixed(2)} R/s off its circular speed, easing back to its distance at ≤ ${all.ease.toFixed(2)} R/s`);
+  for (const [L, l] of [[8, l8], [12, l12]] as const) assert.ok(l.land >= 0.35 && l.land <= 0.8, `from ${L} R about half land (${l.land})`);
+  assert.ok(all.land >= 0.4 && all.land <= 0.7, `about half land over keep 8–12 R (${all.land})`);
+  assert.ok([soft, hard].every((l) => l.land >= 0.35 && l.land <= 0.85), `a weak (5 R/s²) or strong (14 R/s²) burn still lands about half (${soft.land}, ${hard.land})`);
+  assert.ok([l8, l12, all, soft, hard].every((l) => l.floor >= 1), 'every salvo of 2–3 lands at least one');
   assert.ok(cruise.land >= 0.95, `A_ENG engines alone hardly get it out of the way (${cruise.land})`);
-  assert.ok(all.slow < 0.5, `it is back on its station (under 0.5 R/s) DODGE.brake + 1 s after the last missile (${all.slow})`);
-  for (const s of [l8, l12, l16, l20, all, soft, hard, cruise]) assert.ok(s.rise <= s.burn / DODGE.ramp + 1e-6, `thrust builds, never jumps (${s.rise} R/s³)`);
+  assert.ok(all.slow < 0.5 && all.ease <= 3, `DODGE.brake + 1 s after the last rocket it sails its station again (under 0.5 R/s off: ${all.slow}), only easing back to its distance (${all.ease} R/s, ledger CLOSE_V 3)`);
+  for (const s of [l8, l12, all, soft, hard, cruise]) assert.ok(s.rise <= s.burn / DODGE.ramp + 1e-6, `thrust builds, never jumps (${s.rise} R/s³)`);
 }
-// Slug volleys (playtest J): no slugs while a wave is out; none while your shield is down and for REST_S after. An L1
-// shield (30 K, 0.3 K/s) under a peer's slugs (12.6 K, RIVAL_AIM true, every RIVAL_FIRE s) for 10 min: without volleys it
-// sits at 0; with them it mends between volleys.
+// Rocket volleys outside a wave (playtest J): none while your shield is down and for REST_S after. An L1 shield (30 K,
+// 0.3 K/s) under a peer's salvos of 2 rockets (ROCKET.k, half land, every RIVAL_SALVO s) for 10 min: without the rest it
+// stays low; with it it mends between volleys.
 {
-  assert.ok(!volley(true, 0) && volley(false, 0) && !volley(false, 1), 'slugs pause while a wave is out or resting');
+  assert.ok(!volley(true, 0) && volley(false, 0) && !volley(false, 1), 'volleys pause while a wave is out or resting');
   let rest = 5;
   for (let t = 0; t < 20; t += 0.1) rest = restStep(rest, true, 0.1);
   assert.equal(rest, REST_S, 'the rest holds while your shield is down');
   rest = restStep(rest, false, REST_S - 0.05);
   assert.ok(!volley(false, rest) && volley(false, restStep(rest, false, 0.1)), 'and runs out REST_S after it is back up');
-  const rnd = lcg(5), shotK = slugK(1e5);
+  const rnd = lcg(5);
   const run = (volleys: boolean) => {
     const sh: Shield = { level: 1, s: SHIELD_K };
     let cb = 3, rest = 0, down = 0, broke = false, top = 0;
@@ -339,8 +338,8 @@ console.log(`rival worlds ok: ${[...marks].map(([e, k]) => `${e.name} melts at $
       shieldRegen(sh, 0.1);
       rest = restStep(rest, sh.s <= 0, 0.1);
       if ((!volleys || volley(false, rest)) && (cb -= 0.1) <= 0) {
-        cb = RIVAL_FIRE[0] + rnd() * (RIVAL_FIRE[1] - RIVAL_FIRE[0]);
-        if (rnd() < RIVAL_AIM) shieldShot(sh, shotK); // weapon fire (rules.ts shieldShot), as rivals.ts fires it
+        cb = RIVAL_SALVO;
+        for (let i = 0; i < 2; i++) if (rnd() < 0.5) shieldShot(sh, ROCKET.k); // weapon fire (rules.ts shieldShot), as rivals.ts lands it
       }
       if (sh.s <= 0) [down, broke] = [down + 0.1, true];
       else if (broke && t > 120) top = Math.max(top, sh.s / shieldMax(sh)); // after the first volleys
@@ -348,8 +347,26 @@ console.log(`rival worlds ok: ${[...marks].map(([e, k]) => `${e.name} melts at $
     return { down: down / 600, top };
   };
   const off = run(false), on = run(true);
-  console.log(`L1 shield under a peer's slugs for 10 min: without volleys down ${(100 * off.down).toFixed(0)}% of the time, back to ${(100 * off.top).toFixed(0)}% at best; with volleys (rest ${REST_S} s) down ${(100 * on.down).toFixed(0)}%, back to ${(100 * on.top).toFixed(0)}% between volleys`);
-  assert.ok(off.top < 0.5, `without volleys the shield stays low (${off.top})`);
-  assert.ok(on.top >= 0.3 && on.down < 0.4, `with volleys it mends between them (${on.top}, down ${on.down})`);
+  console.log(`L1 shield under a peer's rocket salvos for 10 min: without the rest down ${(100 * off.down).toFixed(0)}% of the time, back to ${(100 * off.top).toFixed(0)}% at best; with it (rest ${REST_S} s) down ${(100 * on.down).toFixed(0)}%, back to ${(100 * on.top).toFixed(0)}% between volleys`);
+  assert.ok(off.top < 0.5, `without the rest the shield stays low (${off.top})`);
+  assert.ok(on.top >= 0.3 && on.down < 0.4, `with it it mends between volleys (${on.top}, down ${on.down})`);
+}
+// Pursuit: outrun (outside its keep + slack, the gap growing) a world lets go after its temper's patience, then rests
+// PURSUIT.rest s; one keeping station beside you (at its distance, or closing) never lets go.
+{
+  const dt = 0.1, letGo = (t: Temper, d: number, dd: number, T = 120) => {
+    const p = { slow: 0, rest: 0 };
+    for (let s = 0; s < T; s += dt) if (!pursueStep(p, t, d, 10, dd, dt)) return s + dt;
+    return Infinity;
+  };
+  const at = (['careful', 'hungry', 'raider'] as Temper[]).map((t) => letGo(t, 20, 2));
+  at.forEach((s, i) => assert.ok(Math.abs(s - PURSUIT.s[(['careful', 'hungry', 'raider'] as Temper[])[i]]) < 0.2, `lets go at its patience: ${s}`));
+  assert.equal(letGo('careful', 10, 0, 600), Infinity, 'at station beside you: follows');
+  assert.equal(letGo('careful', 20, -1, 600), Infinity, 'closing on you: follows');
+  const p = { slow: 0, rest: 0 };
+  let s = 0, back = -1;
+  for (; s < 300 && back < 0; s += dt) if (pursueStep(p, 'careful', 20, 10, 2, dt) && p.slow > 0 && s > PURSUIT.s.careful) back = s;
+  assert.ok(back >= PURSUIT.s.careful + PURSUIT.rest - 0.2, `rests ${PURSUIT.rest} s before it follows again: ${back}`);
+  console.log(`pursuit: outrun, a world lets go after ${at.map((v) => v.toFixed(1)).join(' / ')} s (careful / hungry / raider), follows again after ${PURSUIT.rest} s; at station it never lets go`);
 }
 console.log('rival civilizations ok');

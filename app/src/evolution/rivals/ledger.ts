@@ -132,7 +132,7 @@ export function next(list: Entry[], last: Entry | undefined) {
 //   attack   a wave is out (it keeps its course), or stock for one is ready and the odds suit its temper (ODDS)
 //   defend   a Careful one with its shield under DEFEND_SHIELD, or no home fleet is left
 //   explore  you are far, or it has seen you for under EXPLORE_S s: a probe looks you over, harmless
-//   gather   otherwise: a miner strips free rocks near its world for stock
+//   gather   otherwise, or while it rests after you outran it (pursueStep): a miner strips free rocks near its world for stock
 // A war wave masses round its world MASS_S s in view before it leaves (the danger is seen, never told), and turns home
 // once it has lost RETREAT of its ships or a frigate, or after WAVE_S s (rivals.ts adds: outrun, its own shield under
 // DEFEND_SHIELD, your people at the raid's floor). Every shot is a bolt aimed once that flies straight.
@@ -149,10 +149,12 @@ export const GATHER_U = 4; // u a miner brings home from a free rock
 /** The least odds (its strength ÷ yours: civilization/rules.ts strength) each temper attacks at. */
 export const ODDS: Record<Temper, number> = { careful: 1.2, hungry: 0.8, raider: 0.6 };
 
-export type Mood = { temper: Temper; wave: boolean; shield: number; fleetShort: boolean; far: boolean; seen: number; stock: number; level: number; odds?: number };
+/** `rest`: it gave up following you (pursueStep) and minds its own rocks. */
+export type Mood = { temper: Temper; wave: boolean; shield: number; fleetShort: boolean; far: boolean; seen: number; stock: number; level: number; odds?: number; rest?: boolean };
 export function stance(w: Mood): Stance {
   if (w.wave) return 'attack';
   if (w.shield < DEFEND_SHIELD[w.temper] || w.fleetShort) return 'defend';
+  if (w.rest) return 'gather';
   if (w.far || w.seen < EXPLORE_S) return 'explore';
   return w.stock >= WAVE_COST[w.temper] * waveFighters(w.level) && (w.odds ?? Infinity) >= ODDS[w.temper] ? 'attack' : 'gather';
 }
@@ -169,7 +171,7 @@ export function waveStep(w: Wave, dt: number, inView: boolean) {
   } else if (w.phase === 'go' && ((w.t += dt) >= WAVE_S || retreats(w))) w.phase = 'home';
 }
 
-// Slugs come in volleys: none while its war wave is out, none while your shield is down and for REST_S after it is back up, so your shield mends between volleys.
+// Rockets outside a war wave come in volleys: none while your shield is down and for REST_S after it is back up, so your shield mends between volleys.
 export const REST_S = 30;
 /** s until the next volley: held at REST_S while your shield is down, then counting down. */
 export const restStep = (rest: number, down: boolean, dt: number) => (down ? REST_S : rest - dt);
@@ -178,18 +180,18 @@ export const volley = (wave: boolean, rest: number) => !wave && rest <= 0;
 // ---- A rival world's engines (civilization/rivals.ts). It is an ordinary gravity body all its life (asteroid/rules.ts
 // gravitates: WORLD_FLAGS); its engines thrust at most A_ENG of your radii/s² toward a goal velocity relative to you:
 // easing to its kept distance (≤ CLOSE_V), sideways at the pair's circular speed √(a·d) so gravity supplies the turn (the
-// two worlds waltz), plus `away` (from another rival world, a sidestep across a missile's line of sight). Beaten: engines off, a free companion.
+// two worlds waltz), plus `away` (from another rival world, a sidestep across a rocket's line of sight). Beaten: engines off, a free companion.
 export const WORLD_FLAGS = { held: true, pulls: true } as const;
 export const A_ENG = 0.6; // your radii/s²
-/** Its emergency burn at a missile of yours: `a` R/s² (your own thrust near 1e5; the game passes its own, asteroid/player.ts thrustOf) built up over `ramp` s, across the line up to `v` R/s, `react` s after it sees the launch, `brake` s after the last one is gone. */
+/** Its emergency burn at a rocket of yours: `a` R/s² (your own thrust near 1e5; the game passes its own, asteroid/player.ts thrustOf) built up over `ramp` s, across the line up to `v` R/s, `react` s after it sees the launch, `brake` s after the last one is gone. */
 export const DODGE = { a: 7, v: 5, react: [0, 0.4], brake: 1.2, ramp: 0.3 };
-/** The goal velocity (your radii/s) across the line of sight to a missile, the world (px, py) off it, the missile moving at (wx, wy) relative to it: the way the world already crosses that line (`lat`, any units), else the side its miss is on. */
+/** The goal velocity (your radii/s) across the line of sight to a rocket, the world (px, py) off it, the rocket moving at (wx, wy) relative to it: the way the world already crosses that line (`lat`, any units), else the side its miss is on. */
 export function sidestep(px: number, py: number, wx: number, wy: number, lat = 0) {
   const p = Math.hypot(px, py) || 1, s = (lat || wx * py - wy * px) >= 0 ? 1 : -1;
   return { x: (-py / p) * s * DODGE.v, y: (px / p) * s * DODGE.v };
 }
 type Moving = { x: number; y: number; vx: number; vy: number };
-/** Its sidesteps off the missiles `ms` still closing on a world moving as `w` (one that passed is no threat), summed and held to DODGE.v; `n` how many close. */
+/** Its sidesteps off the rockets `ms` still closing on a world moving as `w` (one that passed is no threat), summed and held to DODGE.v; `n` how many close. */
 export function evade(w: Moving, ms: readonly (Moving & { v0x?: number; v0y?: number })[]) {
   let x = 0, y = 0, n = 0;
   for (const m of ms) {
@@ -199,8 +201,18 @@ export function evade(w: Moving, ms: readonly (Moving & { v0x?: number; v0y?: nu
   const k = Math.min(1, DODGE.v / (Math.hypot(x, y) || 1));
   return { x: x * k, y: y * k, n };
 }
-/** The alarm clock: counts up from −reaction while a missile is seen (> 0: burning), then brakes DODGE.brake s, then a new reaction time. */
+/** The alarm clock: counts up from −reaction while a rocket is seen (> 0: burning), then brakes DODGE.brake s, then a new reaction time. */
 export const alarmStep = (t: number, seen: boolean, dt: number, rnd = Math.random) => (seen ? t + dt : t > dt ? Math.min(t, DODGE.brake) - dt : -between(DODGE.react, rnd));
+// A world follows you only while it can: time outside its kept distance (+ PURSUIT.slack R) with the gap not shrinking
+// builds `slow` (closing on you drains it); past its temper's patience it lets you go and minds its own business PURSUIT.rest s.
+export const PURSUIT = { slack: 2, rest: 90, s: { careful: 5, hungry: 20, raider: 40 } as Record<Temper, number> };
+/** One step of a world's will to follow you: `d` its distance, `keep` the distance it keeps (your R), `dd` how fast d grows (R/s). True: it follows. */
+export function pursueStep(p: { slow: number; rest: number }, temper: Temper, d: number, keep: number, dd: number, dt: number) {
+  if (p.rest > 0) return (p.rest -= dt), (p.slow = 0), false;
+  p.slow = Math.max(0, p.slow + (d > keep + PURSUIT.slack && dd >= 0 ? dt : -dt));
+  if (p.slow >= PURSUIT.s[temper]) p.rest = PURSUIT.rest;
+  return p.rest <= 0;
+}
 const CLOSE_V = 3; // your radii/s relative to you at most
 const EASE_K = 0.25; // 1/s: speed toward the kept distance per unit of distance still to go
 /**

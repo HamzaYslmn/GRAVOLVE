@@ -13,8 +13,8 @@ The authoritative list of user decisions is `.claude/CLAUDE.md` → Design prefe
 | [asteroidgameplay.md](asteroidgameplay.md) | Age I: tiers, bodies and collisions, heat, gravity, flight and camera, shapes |
 | [worldgen.md](worldgen.md) | The field every stage shares: chunks, spawn masses, biomes, regions, cosmic web |
 | [planetgameplay.md](planetgameplay.md) | Age II: world tiers, gas line, water, air, climate, life, moons, survival |
-| [civilizationgameplay.md](civilizationgameplay.md) | From LIFE on: people, energy, fuel, shield, miners, fleet, rockets, mass driver, priority target |
-| [stargameplay.md](stargameplay.md) | Stars, link, star control, system planets, Dyson, energy beam, colonies |
+| [civilizationgameplay.md](civilizationgameplay.md) | From LIFE on: people, energy, fuel, shield, miners, fleet, rockets on Fire, priority target |
+| [stargameplay.md](stargameplay.md) | Stars, link, star control, system planets, Dyson, colonies |
 | [gameevents.md](gameevents.md) | Meteors, comets, clashes, pirates; the events director (planned) |
 | [shipsandflight.md](shipsandflight.md) | Ship flight model, routes, classes and roles, faction art |
 | [aliencivilizations.md](aliencivilizations.md) | Rivals: Age I cores, roster and ledger, rival worlds, strategy, defeat |
@@ -72,9 +72,9 @@ Short form. Numbers and details live in the linked doc.
 - **Watch and feed:** no build menu. The one player order is the priority target. **Stars only by takeover**, link automatic.
 - **Target panel: composition only** (no density, hardness, durability, change line).
 - **Priority target** (user, 2026-11-15): one right-click / E / tap sets one fleet priority; it fires nothing by itself; each weapon takes it when it can ([civilizationgameplay.md](civilizationgameplay.md) → Priority target).
-- **Weapons read by shape and motion;** hue says the faction. Rockets and missiles fly with a flame ([shipsandflight.md](shipsandflight.md)).
+- **Weapons read by shape and motion;** hue says the faction. Rockets fly with a flame ([shipsandflight.md](shipsandflight.md)).
 - **Moons:** at most 5, caught by flying (match speed on a free ring), never by a click; never thrown (no Sling); ore for your miners, guards by orbiting ([planetgameplay.md](planetgameplay.md) → Moons).
-- **Fire** is the mass driver, later the energy beam.
+- **Fire** launches a guided rocket from your surface (one rocket for you and rival worlds).
 - **Pirates never destroy a world or kill you:** harm is capped (shield, stock, ≤ ~2% water/air a raid) ([gameevents.md](gameevents.md) → Pirates).
 - **Look:** you cyan, rivals violet; BASE_ZOOM 1.02 (`main.ts`); ship cell floor `SHIP_MIN_PX` 8 screen px (`render/tech.ts`), so a fighter can draw at ~4 px far out.
 
@@ -107,7 +107,7 @@ Where the concept changed earlier rules: vision.md → Concept vs standing decis
 | `evolution/asteroid/rival.ts`, `evolution/rivals/ledger.ts` | aliencivilizations |
 | `evolution/asteroid/hud.ts`, `planet/hud.ts`, `civilization/hud.ts`, `civilization/slots.ts`, `star/hud.ts` (+ `hud.css`) | hudandcontrols |
 | `evolution/planet/rules.ts`, `stage.ts`, `moons.ts` | planetgameplay |
-| `evolution/civilization/rules.ts`, `stage.ts`, `view.ts`, `lattice.ts`, `combat.ts`, `weapon.ts`, `mining.ts`, `orders.ts` | civilizationgameplay |
+| `evolution/civilization/rules.ts`, `stage.ts`, `view.ts`, `lattice.ts`, `combat.ts`, `mining.ts`, `orders.ts` | civilizationgameplay |
 | `evolution/civilization/flight.ts`, `nav.ts`, `crash.ts`, `guns.ts`, `ships.ts`, `bolts.ts` | shipsandflight |
 | `evolution/civilization/pirates.ts` | gameevents |
 | `evolution/civilization/rivals.ts`, `away.ts` | aliencivilizations |
@@ -115,5 +115,5 @@ Where the concept changed earlier rules: vision.md → Concept vs standing decis
 | `render/shipArt.ts` | shipsandflight |
 | `render/background.ts`, `bake.ts`, `fx.ts`, `overlays.ts`, `tech.ts` | techandperformance |
 | `audio/sfx.ts` | techandperformance |
-| `ui/` settings, toast, reticle, gameover, achievements, debug, minimap, panel (+ css); `styles/base.css` | hudandcontrols |
+| `ui/` settings, toast, reticle, gameover, achievements, debug, minimap, panel, rows, tip, pick, hud.css (+ css); `styles/base.css` | hudandcontrols |
 | `app/test/**` (`helpers.ts`, `civilization/fakes.ts`, `*.test.ts`) | techandperformance → Testing, and the doc of the module checked |

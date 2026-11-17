@@ -14,7 +14,7 @@ const ramp = (a: number, b: number, x: number) => clamp01((x - a) / (b - a));
 export const PROTO_M = 1e4; // Protoplanet while molten, Dwarf planet once solid
 export const PLANET_M = 10 ** 4.5;
 export const SUPER_M = 1e5; // Super-Earth (rocky) / Mini-Neptune (gas line)
-const ICE_GIANT_M = 10 ** 5.5; // ice + gas ≥ 60%
+const ICE_GIANT_M = 10 ** 5.5; // ice + gas ≥ 60%, on the gas line
 const GAS_GIANT_M = 1e6; // gas ≥ 70%
 const SUPER_JUPITER_M = 10 ** 6.5;
 export const BROWN_DWARF_M = 1e7; // Age III starts
@@ -40,7 +40,7 @@ export function tierName(m: number, comp: Comp, heat: number, line = gasPath(com
   if (m >= BROWN_DWARF_M && line) return 'Brown dwarf';
   if (m >= SUPER_JUPITER_M && gas >= 0.7) return 'Super-Jupiter';
   if (m >= GAS_GIANT_M && gas >= 0.7) return 'Gas giant';
-  if (m >= ICE_GIANT_M && gas + iceOf(comp) >= 0.6) return 'Ice giant';
+  if (m >= ICE_GIANT_M && line && gas + iceOf(comp) >= 0.6) return 'Ice giant'; // on the gas line, like envelope: a wet rocky world stays Super-Earth
   if (m >= SUPER_M) return line ? 'Mini-Neptune' : 'Super-Earth';
   if (m >= PLANET_M) return solidOf(comp) >= 0.6 ? 'Rocky planet' : 'Planet';
   if (m >= PROTO_M) return heat > MOLTEN ? 'Protoplanet' : 'Dwarf planet';
@@ -146,6 +146,8 @@ export const magnet = (m: number, comp: Comp, diff: number) =>
 export const lifeSpeed = (water: number, temp: number, air: number, field: number) =>
   field > 0 ? Math.min(water, temp, air) * (0.5 + 0.5 * field) : 0;
 export const COLD_RAMP = 8; // K above melting for a full temperature score
+export const HOT_RAMP = 30; // K under boiling where seas start to suffer (the temperature score falls to 0 at boiling)
+export const AIR_LO = 0.2; // atm where the air score starts (life needs air)
 // Radioactive rock and life: a little warms the crust and stirs mutation (best at 1%), past the tier-1 safe share (3%) it slows life, never to a stop.
 const RADIO_BEST = 0.01, RADIO_HARM = 0.03, RADIO_WORST = 0.12, RADIO_BONUS = 0.25, RADIO_FLOOR = 0.25;
 /** Life speed factor from the radioactive share: 1 clean, 1.25 at 1%, 1 at 3%, RADIO_FLOOR from 12% on. */
@@ -163,10 +165,27 @@ export function habitability(b: World): Hab {
   const gas = gasOf(b.comp), w = iceOf(b.comp), p = pressure(b.m, gas), k = kelvin(b.heat), bp = boilingK(p);
   const state = waterState(b.m, b.heat, gas);
   const water = ramp(0.1, 0.3, w) * (1 - 0.5 * ramp(0.6, 0.9, w)); // doc: from 10%, 30–60% ideal; deeper buries all land
-  const temp = state === 'liquid' ? ramp(MELT_K, MELT_K + COLD_RAMP, k) * ramp(bp, bp - 30, k) : 0;
-  const air = ramp(0.2, 0.7, p) * (1 - ramp(10, 30, p));
+  const temp = state === 'liquid' ? ramp(MELT_K, MELT_K + COLD_RAMP, k) * ramp(bp, bp - HOT_RAMP, k) : 0;
+  const air = ramp(AIR_LO, 0.7, p) * (1 - ramp(10, 30, p));
   const mag = magnet(b.m, b.comp, b.diff ?? 0);
   return { water, temp, air, magnet: mag, rate: lifeSpeed(water, temp, air, mag) * radioLife(b.comp.radio ?? 0), k, p, bp, state };
+}
+
+/**
+ * Growing at today's `gas` share thickens the air and the resting climate (+ `warm` starlight) climbs toward boiling: the masses
+ * where seas start to suffer (HOT_RAMP under boiling) and where they boil; `m` if already there, Infinity if never. Bisects from
+ * `m` up, from AIR_LO only (no seas in thinner air): climate − boiling dips until ~0.199 atm, then only rises, so one crossing.
+ */
+export function airLimits(m: number, gas: number, warm = 0) {
+  const at = (off: number) => {
+    const over = (x: number) => { const p = pressure(x, gas); return p >= AIR_LO && climateK(p) + warm >= boilingK(p) - off; };
+    let lo = Math.max(1, m), hi = 1e12;
+    if (over(lo)) return m;
+    if (!(gas > 0) || !over(hi)) return Infinity;
+    while (hi / lo > 1 + 1e-6) { const mid = Math.sqrt(lo * hi); if (over(mid)) hi = mid; else lo = mid; }
+    return hi;
+  };
+  return { suffer: at(HOT_RAMP), boil: at(0) };
 }
 
 // ---- Life
@@ -222,6 +241,8 @@ export const moonCap = (m: number, r: number, M: number, R: number) => Math.min(
 // a full moon (MOON_SHARE[1]) takes about 8 s and letting go keeps what is left.
 export const FEED = 0.015;
 export const moonSlots = (m: number) => (m < AGE_GOAL ? 0 : Math.min(5, 1 + Math.floor(2 * Math.log10(m / AGE_GOAL) + 1e-9)));
+/** Mass where the next moon ring opens (moonSlots); undefined at five. */
+export const nextMoonMass = (m: number) => { const k = moonSlots(m); return k >= 5 ? undefined : AGE_GOAL * 10 ** (k / 2); };
 
 // Capture by match (the old game's capture made a skill, no click): a free body of MOON_SHARE on the catch lane round
 // any free slot (the ring it sits nearest: pickSlot), moving with you within the match window, fills a ring (q = 1 − (v / window)², MATCH_S at a

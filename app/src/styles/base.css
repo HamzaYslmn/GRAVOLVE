@@ -13,10 +13,34 @@
   --ui-family: 'Oxanium', 'Segoe UI', system-ui, sans-serif;
   --ui-font: 500 12px/1.4 var(--ui-family);
   --ui-cut: 10px; /* cut corners */
+  /* HUD layout (ui/hud.css): every gap and padding from the spacing scale, every icon, row and track one size. */
+  --ui-s1: 2px;
+  --ui-s2: 4px;
+  --ui-s3: 8px;
+  --ui-s4: 12px; /* card padding, all sides */
+  --ui-icon: 12px;
+  --ui-icon-lg: 16px;
+  --ui-row: 16px; /* one line of icon · caption · value */
+  --ui-track: 4px; /* bars and scales */
+  --ui-bar: 14px; /* labelled stacked bars (composition, energy) */
+  --ui-caption: 10px; /* the three type sizes, nothing smaller */
+  --ui-value: 12px;
+  --ui-title: 14px;
+  --ui-card: 320px; /* your card's width (evolution/asteroid/hud.ts innerPx: less 2 × --ui-s4) */
+  --ui-label: 72px; /* the label column every row shares ("Population", "Home mines") */
+  --ui-val: 64px; /* the value column every row shares ("×6.0 mass", "+12/min") */
+  --ui-gap: var(--ui-s1); /* between rows inside a section */
+  --ui-tap: 28px; /* section headers on touch screens: a finger's target */
+  --ui-optical: -0.085em; /* without text-box trim: Oxanium's cap centre sits this far above its line box centre (measured) */
   --safe-t: env(safe-area-inset-top, 0px); /* phone notches */
   --safe-r: env(safe-area-inset-right, 0px);
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-l: env(safe-area-inset-left, 0px);
+}
+
+/* Tall screens: one step up, real sizes (no transform). The bars' labels keep their 12 px icons (ui/panel.ts measures them). */
+@media (min-height: 1000px) {
+  :root { --ui-icon: 14px; --ui-icon-lg: 18px; --ui-value: 13px; --ui-title: 15px; --ui-row: 18px; --ui-card: 340px; --ui-label: 78px; --ui-val: 70px; }
 }
 
 /* The shared panel: dark glass with two cut corners and two bright corner brackets in the panel's

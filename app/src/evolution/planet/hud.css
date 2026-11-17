@@ -1,5 +1,20 @@
-/* Age II rows in your card (planet/hud.ts); asteroid/hud.css provides .cells, .cell, .scale, .band, .needle, .sub. */
+/* Age II rows in your card's World section (planet/hud.ts); ui/hud.css provides .row, .scale, .band, .needle; asteroid/hud.css .cells, .cell, .pips. */
 #game-hud .world .temp .scale { background: linear-gradient(90deg, #3a5a9a55, #ff7a2a55); }
 #game-hud .world .temp .band { background: #3fa0ff; }
 #game-hud .world .temp .band.thin { background: repeating-linear-gradient(135deg, #3fa0ff88 0 2px, transparent 2px 4px); } /* air too thin to hold seas */
 #game-hud .world .water .band { background: #6fd3ff; }
+
+/* Moons (with the next ring): the moons' blue, neutral. */
+#game-hud .world .moons { color: #9fdcff; }
+
+/* Limits: a scale with you as the needle; the band (amber) is where it starts to hurt, red past the limit (--past). The value's
+   state colours the icon. */
+#game-hud .world .lim { color: var(--ui-muted); }
+#game-hud .world .lim:has(.v.ok) { color: var(--ok); }
+#game-hud .world .lim:has(.v.warn) { color: var(--warn); }
+#game-hud .world .lim:has(.v.bad) { color: var(--bad); }
+#game-hud .world .lim .scale { background: linear-gradient(90deg, rgb(255 255 255 / 0.08) var(--past, 100%), rgb(255 138 107 / 0.6) var(--past, 100%)); }
+#game-hud .world .lim .band { background: var(--warn); opacity: 0.6; }
+/* Moons: the ring pips at the track's start, "n/rings · next ×m" right-aligned over the track and value columns. */
+#game-hud .world .moons > .pips { grid-column: 3; grid-row: 1; }
+#game-hud .world .moons > .v { grid-column: 3 / -1; grid-row: 1; justify-self: end; }

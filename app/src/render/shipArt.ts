@@ -28,6 +28,13 @@ const nav = (x: number, y: number) =>
   oval(x, 100 - y, 2.3, 2.3, '#6cf0a0', 0.3) + oval(x, 100 - y, 1.1, 1.1, '#6cf0a0');
 const ySeam = (d: string) => path(d, 'none', '#12303c', 0.9);
 
+// The rocket (both sides; guns.ts createRockets): a 4:1 pale tube, a nose cone a quarter of its length, two swept tail fins
+// spanning 2.2 × its width and one band, nose, fins and band in the side's hue so it reads at 14 px; a dark nozzle bell.
+const rocket = (hue: string, deep: string) =>
+  path(pair('M24 36 L15 18 Q15 16 18 16 L27 16 Q30 16 32 19 L50 36Z'), hue, deep, 1.4) + path('M21 41 L12 37 L12 63 L21 59Z', '#3a4650', '#1d252b', 1) +
+  path('M20 37 Q20 35 23 35 L110 35 L110 65 L23 65 Q20 65 20 63Z', '#e3edf2', '#8fa6b2', 1.4) + rect(23, 39, 87, 5, '#ffffff', 2.5) + rect(23, 57, 87, 4, '#b9cad3', 2) +
+  rect(84, 35, 7, 30, hue) + path('M110 35 Q130 37 140 50 Q130 63 110 65Z', hue, deep, 1.4) + path('M24 50 L52 50', 'none', deep, 2.5);
+
 const YOU = finish({
   // T-shaped sensor beam and broad stern crossbar.
   probe: YD + yEngine(62, 50, 2.5) + yh('M67 33 Q62 33 62 38 L62 44 L65 44 L65 56 L62 56 L62 62 Q62 67 67 67 L71 67 Q75 67 75 62 L75 59 Q75 56 81 56 L103 56 Q108 56 108 50 Q108 44 103 44 L81 44 Q75 44 75 41 L75 38 Q75 33 71 33Z') +
@@ -70,6 +77,7 @@ const YOU = finish({
     path(pair('M69 23 Q74 33 81 33 L106 33 Q114 32 119 23 L113 35 Q111 38 105 38 L80 38 Q73 38 69 23Z'), '#1f4a5a') +
     rect(78, 29, 30, 6, '#2f7088', 3) + rect(78, 65, 30, 6, '#2f7088', 3) + rect(81, 30.5, 24, 3, '#e8fbff', 1.5) + rect(81, 66.5, 24, 3, '#e8fbff', 1.5) +
     rect(45, 46, 98, 8, '#5fb4cc', 2.5) + rect(64, 48.8, 76, 2.4, '#12303c', 1) + [72, 86, 100, 114, 128].map((x) => rect(x, 49.2, 5, 1.6, '#e8fbff', 0.8)).join('') + oval(44, 50, 21, 14, '#1f4a5a') + oval(44, 50, 17, 11, '#5fb4cc') + oval(44, 50, 13, 8, '#2f7088') + oval(44, 50, 10, 6, '#7fe8ff') + oval(44, 50, 6.5, 3.5, '#e8fbff') + rect(14, 40, 3, 20, '#1f4a5a', 1.5) + nav(29, 25),
+  rocket: rocket('#7fe8ff', '#1f4a5a'),
 });
 
 // Approved v3 rivals: open blade silhouettes and central diamond lights.
@@ -153,6 +161,7 @@ const RIVAL = finish({
     [73, 83, 93].map((x) => path(pair(`M${x} 28 L${x + 5} 30 L${x} 32 L${x + 1.5} 30Z`), '#d6bcff')).join('') +
     rh('M74 50 L87 39 L100 50 L87 61Z', '#55398a', 1) +
     rh('M78 50 L87 44 L96 50 L87 56Z', '#3b2763', 0.7) + rCore(87, 6, 3),
+  rocket: rocket('#b48cff', '#3b2763'),
 });
 
 const PIRATE_SCALE = { raider: 1.15, hauler: 1.15 };
@@ -234,8 +243,8 @@ export const SHIP_ART = { you: YOU, rival: RIVAL, pirate: PIRATE };
 /** Engines by ship: [x, y, nozzle size] in the art box (scaled like the art); render/tech.ts drawShip puts the plumes there. */
 const at = (scale: number, ...e: number[][]) => e.map(([x, y, s]) => [n(80 + (x - 80) * scale), n(50 + (y - 50) * scale), n(s * scale)]);
 export const ENGINES: { [F in keyof typeof SHIP_ART]: Record<keyof (typeof SHIP_ART)[F], number[][]> } = {
-  you: { probe: [[62, 50, 2.5]], miner: [[51, 50, 3]], fighter: [[46, 50, 3]], frigate: [[26, 43, 2.8], [26, 57, 2.8]], colonizer: [[42, 50, 3]], carrier: [[14, 50, 3.3]] },
-  rival: { probe: [[68, 50, 1.7]], miner: [[58, 50, 2.2]], fighter: [[57, 50, 2.2]], frigate: [[47, 50, 2.6]], colonizer: [[53, 50, 2.5]], carrier: [[48, 50, 3]] },
+  you: { probe: [[62, 50, 2.5]], miner: [[51, 50, 3]], fighter: [[46, 50, 3]], frigate: [[26, 43, 2.8], [26, 57, 2.8]], colonizer: [[42, 50, 3]], carrier: [[14, 50, 3.3]], rocket: [[12, 50, 3]] },
+  rival: { probe: [[68, 50, 1.7]], miner: [[58, 50, 2.2]], fighter: [[57, 50, 2.2]], frigate: [[47, 50, 2.6]], colonizer: [[53, 50, 2.5]], carrier: [[48, 50, 3]], rocket: [[12, 50, 3]] },
   pirate: { raider: at(PIRATE_SCALE.raider, [48, 43, 3.4], [48, 57, 3]), hauler: at(PIRATE_SCALE.hauler, [40, 43, 3.4], [40, 57, 3.4]), marauder: [[20, 35, 3.6], [20, 50, 3.2], [20, 65, 3]] },
 };
 export const ART_W = 160;

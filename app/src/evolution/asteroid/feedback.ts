@@ -35,16 +35,24 @@ export function burnStreak(fx: Fx, me: Body, rock: Body, x: number, y: number, u
   fx.flash(lx, ly, grain * (whole ? 2.5 : 1.6), whole ? 5 : 3, grain * 6);
 }
 
+const SPARKS = 12; // rock pairs' rub: sparks per touch-at-the-stick-speed of energy lost
+
 export function impactFeedback(player: Body, { fx, sfx, shake, kick, freeze, zoom, hear, slow }: Feel) {
   return (h: Hit) => {
     const small = h.a.r < h.b.r ? h.a : h.b;
     const hard = h.speed / V_STICK; // 1 = the stick limit
     const throwSpeed = h.speed * 2 * h.a.r; // closing speed, world units/s
     const dustShare = h.dust / Math.max(1e-6, small.m + h.dust);
-    const count = Math.round(Math.min(40, 3 + 8 * hard + 40 * dustShare));
+    const k = h.lost === undefined ? 1 : Math.min(1, h.lost), whole = (x: number) => Math.floor(x + Math.random()); // rock pairs: dust and sparks by the energy the contact lost; chance rounding keeps a slow rub's total the same at any tick rate
+    const count = whole(k * Math.min(40, 3 + 8 * hard + 40 * dustShare));
     const grit = mixRgb(compTint(small.comp), 0x000000, 0.4, false); // dusty, darker than the rock
     fx.puff(h.x, h.y, h.nx, h.ny, count, small.r * 0.35 + 1, throwSpeed * 0.35 + 12, grit);
-    if (h.kind === 'graze') fx.flash(h.x, h.y, small.r * 0.45, Math.round(2 + 3 * Math.min(2, hard)), throwSpeed * 0.4); // a scrape: sparks, no blast
+    if (h.kind === 'graze' && k < 1) { // a rub: a few sparks that ride with the pair, no flash
+      for (let i = whole(SPARKS * k); i > 0; i--) {
+        const t = Math.random() * 2 * Math.PI, v = (0.2 + 0.4 * Math.random()) * throwSpeed;
+        fx.ember(h.x, h.y, small.motion.vx + Math.cos(t) * v, small.motion.vy + Math.sin(t) * v, small.r * 0.06 + 0.5, 0xffa04a, 0.25 + 0.3 * Math.random());
+      }
+    } else if (h.kind === 'graze') fx.flash(h.x, h.y, small.r * 0.45, Math.round(2 + 3 * Math.min(2, hard)), throwSpeed * 0.4); // a scrape: sparks, no blast
     // Capped: a hit can be 100s of times the stick speed, and a non-finite count would never end.
     else if (h.kind === 'bounce' || hard > 1) fx.flash(h.x, h.y, small.r * (0.6 + 0.5 * Math.min(hard, 6)), Math.min(40, Math.round(4 * hard)), throwSpeed * 0.6);
     // The lighter body splashed: a small ring of its dust.

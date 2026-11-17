@@ -48,8 +48,9 @@ export function createAchievementUi(ach: Achievements) {
       const { got, all } = ach.count();
       return `Achievements ${got} / ${all}`;
     },
-    openGallery() {
-      closeGallery();
+    /** The same button opens and closes it (settings panel and the card). */
+    toggleGallery() {
+      if (gallery) return closeGallery();
       const tiles = ach.tiles(), { got, all } = ach.count();
       const el = document.createElement('div');
       el.id = 'ach-gallery';

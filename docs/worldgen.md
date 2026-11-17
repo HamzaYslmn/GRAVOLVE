@@ -66,7 +66,7 @@ Map shares: `web.test.ts`, 3 seeds, 2026-11-16.
 
 - web = smoothstep(0.72, 0.87, 1 − |2·fbm(x/40000) − 1|); density × web, void floor 0.002, filaments × 1.3.
 - Measured (`web.test.ts`, 2026-11-16): voids 40% of the map, median 16.5–17.3 start screens wide, quartiles ~9–28.
-- Tail and rivals × max(0.15, web); discoveries, encounters and giants × max(0.3, web).
+- Tail and rivals × max(0.15, web); discoveries, encounters and giants × max(0.3, web). Rival civilizations arrive by distance × local fill (`civilization/rules.ts` `pace`, [aliencivilizations.md](aliencivilizations.md)): voids stay lonely.
 - **Sky:** the backdrop dims in voids, and each biome colours the sky (user: background matches the biome; eased 1.5 s): the nebulae multiplied 28% toward its hue plus an additive wash at 0.09 × saturation. Ice cold blue, metal steel, gas amber, rapids teal, meteors ember, Kuiper a pale radioactive green. Rendering and cost: [techandperformance.md](techandperformance.md).
 
 ### Places

@@ -13,7 +13,7 @@ export const SHIP_SCALE = 0.4; // a fleet cell in radii of your world: ships are
 export const SHIP_MIN_PX = 8; // ...but a cell never shrinks under this many screen px when zoomed far out (a fighter ≥ 4 px)
 /** World units per art px of a ship (and of what belongs to it: plumes, tracers, satellites) around a player world of radius R. */
 export const shipUnit = (R: number, zoom: number) => Math.max(SHIP_SCALE * R, SHIP_MIN_PX / zoom) / SHIP_PX;
-/** A ship's hit and touch radius in world units (raiders are 14 art px long): rounds, bodies and slugs read it. */
+/** A ship's hit and touch radius in world units (raiders are 14 art px long): rounds, rockets and bodies read it. */
 export const shipR = (R: number, zoom: number) => 6 * shipUnit(R, zoom);
 const FLEET_W = 128; // a fleet cell, the art's 160 × 100 box scaled
 const FLEET_H = (FLEET_W * ART_H) / ART_W;
@@ -167,12 +167,12 @@ export function quads(pc: ParticleContainer, max: number) {
 
 // Engine plumes (drawShip): an outer glow and a short white core per engine, stretched along the nose.
 //   len, wide: × the base (nozzle × (3 + 9·burn) long, nozzle × 2.2 wide, art units); flick: ± share of the length per frame
-export const YOU = 0x7fe8ff, VIOLET = 0xb48cff, AMBER = 0xffb46b; // you cyan, rivals violet, your rockets and missiles amber
-export const STEEL = 0xe9f4ff; // your mass driver's slugs: steel white, never a laser's cyan
+export const YOU = 0x7fe8ff, VIOLET = 0xb48cff; // you cyan, rivals violet
+export const RUST = 0xff7a50; // pirate flares, shields and jumps (their rounds' tracer)
 const PLUME = {
   you: { tint: YOU, core: 0xe8fbff, len: 1, wide: 1, alpha: 0.9, flick: 0.12 }, // steady cyan
   rival: { tint: VIOLET, core: 0xf1e6ff, len: 1.6, wide: 0.7, alpha: 0.55, flick: 0.06 }, // one long thin trail
-  pirate: { tint: 0xff7a50, core: 0xffd9a0, len: 1, wide: 1, alpha: 0.9, flick: 0.3 }, // unequal sputtering flares
+  pirate: { tint: RUST, core: 0xffd9a0, len: 1, wide: 1, alpha: 0.9, flick: 0.3 }, // unequal sputtering flares
 };
 
 const BANK = [0.4, 0.5]; // at full bank the hull narrows this share across the nose (length kept), the outer plume grows this share

@@ -7,7 +7,7 @@ import type { Near } from './nav.ts';
 // writes the velocity it wants (`want`); `thrust` eases the nose toward it (≤ `turn` rad/s), burns along it, brakes with a
 // weak retro, never backwards; slip bleeds off over GRIP s; pirates and rival ships away have a top speed in space and a
 // thrust limit (`top`). Frames are cut into sub-steps ≤ STEP s (same paths at any fps).
-// Steering round bodies and the home steppers: nav.ts; collisions: crash.ts; rounds and missiles: guns.ts.
+// Steering round bodies and the home steppers: nav.ts; collisions: crash.ts; rounds and rockets: guns.ts.
 
 /**
  * `near`: its scan this frame (home ships, colony ships); `hurt`: s left at HURT_ACC thrust after a graze; `bank`: −1…1,
@@ -245,6 +245,28 @@ const ROW_AHEAD = 8; // ship radii: a follower steers at a point this far ahead 
 const JOIN = 8; // R: a follower farther than this from its leader flies the route on its own until it is near again
 const FRAME_S = 1; // s: a fleet's frame velocity follows its centre's over this long
 const CATCH = 1; // 1/s: a chasing centre closes this share of its gap a second
+
+type Slot = { kind: string; dead: boolean; back: number; side: number; ward?: Slot };
+/** A pirate wedge's fixed slots (ROW ship radii behind and beside the flag): the point (marauder, else a raider), each hauler a row with an escort either side, the rest in rows behind. */
+export function wedge<S extends Slot>(ships: readonly S[]) {
+  const alive = ships.filter((s) => !s.dead), point = alive.find((s) => s.kind === 'marauder') ?? alive.find((s) => s.kind === 'raider');
+  const haulers = alive.filter((s) => s.kind === 'hauler'), rest = alive.filter((s) => s !== point && s.kind !== 'hauler');
+  rest.sort((a, b) => (a.kind === 'marauder' ? -1 : b.kind === 'marauder' ? 1 : 0));
+  let row = 0;
+  if (point) [point.back, point.side, point.ward, row] = [0, 0, undefined, 1];
+  for (const h of haulers) {
+    [h.back, h.side] = [row * ROW[0], 0];
+    for (const side of [-1, 1]) {
+      const e = rest.shift();
+      if (e) [e.back, e.side, e.ward] = [row * ROW[0], side * ROW[1], h];
+    }
+    row++;
+  }
+  rest.forEach((s, i) => {
+    const k = 1 + (i >> 1);
+    [s.back, s.side, s.ward] = [(row - 1 + k) * ROW[0], (i % 2 ? 1 : -1) * (1 + k) * ROW[1], undefined];
+  });
+}
 
 /**
  * Sets `want` (relative to the centre) for strafing runs: in at the centre, the course bent round radius `keep` of it

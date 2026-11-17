@@ -115,16 +115,23 @@ export const buildOrder = (frigates: number): readonly (ShipClass | 'shield')[] 
 const METAL_SHIP = 20;
 export const fleetCap = (k: ShipClass, T: number, metal: number) =>
   k === 'probe' ? T : k === 'fighter' ? Math.min(6, START_SHIPS + Math.floor(metal / METAL_SHIP)) : T >= 5 ? 2 : T >= 3 ? 1 : 0;
+// Salvage (combat.ts salvage): an enemy wreck within your fire range gives its hull's metal (about half its build: ore), the
+// reactor fuel it flew on and, on pirate ships, the crew's Water; a hauler also bursts its hold (pirates.ts). Your own wrecks give nothing.
+export const SALVAGE = {
+  fighter: { ore: 1.5, fuel: 0.3, vol: 0 }, probe: { ore: 1, fuel: 0.2, vol: 0 }, miner: { ore: 1, fuel: 0.2, vol: 0 }, frigate: { ore: 12, fuel: 2, vol: 0 }, // rival ships (+ a miner's haul)
+  raider: { ore: 1.5, fuel: 0.5, vol: 0.3 }, marauder: { ore: 5, fuel: 1.5, vol: 1 }, hauler: { ore: 2, fuel: 0.5, vol: 0.5 }, // pirates
+};
+export type Wreck = keyof typeof SALVAGE;
 
-// ---- Rockets: launched from your surface from tier 1, only at your priority target (ships.ts rockets) inside the range,
-// ROCKET.ore each, one every ROCKET.reload s (× the energy fed: slower when the reactors run dry). Guided (guns.ts steer:
-// boost, acc R/s², turn rad/s, cone rad, burn s, blind s; arc rad: off the aim line, sides alternating; nav: the aim error
-// is closed at nav / time-to-go, a lazy arc from afar), cruise `speed` R/s on top of you (slower than a round: a rocket is seen coming): a body of `share` breaks into `pieces`, a bigger one or a
-// rival's rock loses `chip.bite` of your mass and warms `chip.k` K (ships.ts chip); a ship dies in the `blast` (R). The
-// range grows and the launch aim error shrinks with the tier.
-export const ROCKET = { ore: 2, reload: 8, speed: 12, share: [0.01, 0.25], pieces: 8, boost: 0.3, acc: 14, turn: 1.4, cone: 1.4, burn: 2.8, blind: 0.1, arc: 0.8, nav: 6, blast: 0.3, chip: { bite: 0.0025, k: 40 } }; // from 1%: a hit of ~90 K (asteroid/rules.ts worldHeat)
-export const rocketRange = (T: number) => 8 + 2 * clamp(T, 1, TIER_MAX); // R off your surface
-export const rocketSpread = (T: number) => (0.08 * (TIER_MAX - clamp(T, 1, TIER_MAX))) / (TIER_MAX - 1); // rad: ±0.6 R at 8 R off you at tier 1
+// ---- Rockets (guns.ts createRockets; one rocket for you and rival worlds): yours on Fire (combat.ts), `ore` each from a
+// magazine of salvo(T), one refilled every `reload` s × the energy fed (stage.ts). In its unit R: off a pad ±`pad` rad off
+// the aim (`padShip` at a ship; sides alternate so a world can sidestep one; × distance / `near` R inside that) at `lift`
+// R/s, `boost` s straight, then `acc` R/s² to `speed` R/s (slower than a round: seen coming), the nose at its velocity +
+// `nav` × the lead error (±`aim`), ≤ `turn` rad/s (a 90° turn ≥ 1.1 s); lock lost for good past `cone`; fuel = the fire
+// range (mining.ts fireReach); bursts within `fuze` R of a locked ship, `blast` R; `k` K on a world; `size` × a ship's
+// radius to rounds; `len` R long, ≥ `px` screen px. A free body ≤ `share` of you breaks into `pieces`; a bigger one or a
+// rival's rock loses `chip.bite` of your mass and warms `chip.k` K (ships.ts chip).
+export const ROCKET = { speed: 12, acc: 10, lift: 2, boost: 0.3, turn: 1.4, nav: 3, aim: 1.5, cone: 1.6, pad: 0.5, padShip: 0.3, near: 10, fuze: 0.6, blast: 0.6, k: 20, ore: 5, reload: 6, size: 0.12, max: 12, len: 0.3, px: 14, share: 0.25, pieces: 8, chip: { bite: 0.0025, k: 40 } };
 
 // ---- Breaking (ships.ts, stage.ts): your guns break only your priority target, into pieces you can take: under `edible`
 // a body burns up whole in your air or lands under HIT_MIN, so it feeds you. Pieces a piece cap left unsafe are kicked
@@ -283,40 +290,6 @@ export function homeDig(c: Comp, T: number, dt: number, vol = 0, need?: Lack) {
 const LIGHTS_FULL = 5;
 export const cityLevel = (P: number) => Math.max(0.25, Math.ceil(Math.min(1, P / LIGHTS_FULL) * 4 - 1e-9) / 4);
 
-// ---- Mass driver: a slug of SLUG_SHARE of your mass (SLUG_ORE u of ore) at SLUG_SPEED of your diameters/s on top of your
-// velocity, every DRIVER_COOL s at best. Each slug also needs SLUG_E of energy, charged from the energy your people do not
-// need (at least CHARGE_MIN E/s). The slug is a real body resolved by the collision regimes (weapon.ts).
-export const SLUG_SHARE = 5e-4;
-export const SLUG_ORE = SLUG_SHARE / UNIT; // 5 u
-export const SLUG_SPEED = 50;
-export const SLUG_LIFE = 1.6; // s of flight (~80 of your diameters)
-export const DRIVER_COOL = 4;
-export const SLUG_E = 2;
-const CHARGE_MIN = 0.25;
-/** E/s the driver's charge fills at: the spare energy flow, never below CHARGE_MIN. */
-export const chargeRate = (E: number, need: number) => Math.max(CHARGE_MIN, E - need);
-// Energy beam (from Dyson star/rules.ts BEAM_COVER, instead of slugs): no ore or charge, every BEAM_COOL s, a gun. Each shot
-// bites BEAM_BITE of your mass × the beam's power P (star/rules.ts beamPower) off the first body, 40% of it as three chunks;
-// a body within BEAM_SHATTER bites shatters. A rival world loses nothing while its shield holds; once it is down, people
-// BEAM_KILL × the share of the world removed. Every enemy ship on the line breaks. Heat and the star's cost: star/rules.ts.
-export const BEAM_COOL = 3;
-export const BEAM_BITE = 0.01;
-export const BEAM_SHATTER = 2;
-export const BEAM_KILL = 3;
-/** A shot of `bite` mass on a body of mass `m`: the mass left, 0 when it shatters. */
-export const beamLeft = (m: number, bite: number) => (m <= BEAM_SHATTER * bite * (1 + 1e-9) ? 0 : m - bite);
-/** A rival's people after a shot that removed `share` of its world. */
-export const beamPop = (P: number, share: number) => P * (1 - Math.min(RIVAL_HIT_MAX, BEAM_KILL * share));
-/**
- * Unit direction to fire so that the slug's world velocity (shooter v + u · dir) points from the muzzle at the aim point.
- * Falls back to the plain direction when you move faster sideways than the slug can make up.
- */
-export function fireDir(dx: number, dy: number, vx: number, vy: number, u: number) {
-  const d = Math.hypot(dx, dy) || 1, ex = dx / d, ey = dy / d, ev = ex * vx + ey * vy, disc = ev * ev - (vx * vx + vy * vy) + u * u;
-  if (disc < 0) return { x: ex, y: ey };
-  const k = ev + Math.sqrt(disc), wx = ex * k - vx, wy = ey * k - vy, w = Math.hypot(wx, wy) || 1;
-  return k > 0 ? { x: wx / w, y: wy / w } : { x: ex, y: ey };
-}
 /** Time for a projectile at speed u (from the origin) to meet a target at offset (px, py) moving at (wx, wy); undefined if never. */
 export function intercept(px: number, py: number, wx: number, wy: number, u: number) {
   const a = wx * wx + wy * wy - u * u, b = 2 * (px * wx + py * wy), c = px * px + py * py;
@@ -327,22 +300,25 @@ export function intercept(px: number, py: number, wx: number, wy: number, u: num
   return t > 0 ? t : undefined;
 }
 
-// ---- Rival civilizations (rivals.ts): only once you host one; they arrive by distance travelled (RIVAL_FIRST view widths,
+// ---- Rival civilizations (rivals.ts): only once you host one; they arrive by distance travelled × pace (RIVAL_FIRST view widths,
 // then every RIVAL_TRAVEL), at most RIVAL_LOADED near you. Lighter than you and drifting; they hold fire until on screen
 // T_SEE s. Level = yours − 1 + its temper's RIVAL_LEAD at first, +1 per LEVEL_UP s, never above yours + 1 (yours = your
 // shield level, at least 1): a Raider starts stronger (its extra veil shows it). Mass by temper, never 1.1× you.
-// A slug every RIVAL_FIRE s (RIVAL_AIM of them aimed true). Their rock moon (RIVAL_ROCK of their mass) only
+// A rocket salvo every RIVAL_SALVO s after a RIVAL_GLOW s pad glow, inside its fire range. Their rock moon (RIVAL_ROCK of their mass) only
 // circles their world, a passive guard. Beaten when their people fall to BEATEN: their world lies open.
 export const RIVAL_MASS = { careful: [0.5, 0.7], raider: [0.7, 1], hungry: [0.9, 1.08] }; // × your mass: no rival eats you on a touch (1.15×)
 export const RIVAL_LEAD = { careful: 0, hungry: 1, raider: 2 };
-export const SALVO_LEAD = { careful: 0, hungry: 2, raider: 1 }; // missiles a silo salvo adds by temper: a Careful rival rarely beats you, a Hungry or Raider one can
+export const SALVO_LEAD = { careful: 0, hungry: 2, raider: 1 }; // rockets a salvo adds by temper: a Careful rival rarely beats you, a Hungry or Raider one can
+export const RIVAL_SALVO = 8, RIVAL_GLOW = 1.5, RIVAL_RIPPLE = 0.25; // s between salvos, s its pad glows first (the tell), s between rockets
 export const RIVAL_LOADED = 2;
 export const RIVAL_FIRST = 3; // view widths travelled after your civilization starts
 export const RIVAL_TRAVEL = 8;
+// Encounters follow the local fill (field.fillAt): distance counts × pace, so voids and thin belt are lonely (a void's
+// median fill 0.002 → 400 view widths a rival), plain belt ~28, PACE_FILL and richer today's 8, a dense biome 5.3.
+export const PACE_FILL = 0.2, RIVAL_PACE = [0.02, 1.5];
+export const pace = (fill: number, [lo, hi]: number[]) => clamp(fill / PACE_FILL, lo, hi);
 export const T_SEE = 6; // s on screen before any enemy may shoot
 const LEVEL_UP = 300;
-export const RIVAL_FIRE = [4, 6];
-export const RIVAL_AIM = 0.45;
 export const RIVAL_ROCK = 0.03;
 export const BEATEN = 0.2;
 // One landed hit kills at most this share of a rival's people: three hits after its shield falls (1 → 0.55 → 0.30 → 0.17).
@@ -355,13 +331,13 @@ export const FRIGATE_STOCK = 4;
 export const FRIGATE_S = 60;
 /** Fighters in a rival war wave (its frigates go too). */
 export const waveFighters = (L: number) => clamp(Math.round(L), 1, 3);
-/** Missiles a silo fires a salvo: yours by tier (1/2/3 from tiers 1/3/5), a rival's by level + its temper's SALVO_LEAD. */
+/** Rockets: your magazine by tier (1/2/3 from tiers 1/3/5), a rival's salvo by level + its temper's SALVO_LEAD. */
 export const salvo = (T: number) => (T >= 5 ? 3 : T >= 3 ? 2 : 1);
 export const rivalSalvo = (L: number, lead = 0) => clamp(Math.round(L) + lead, 1, 4);
 
 // ---- Planetary combat (docs/civilizationgameplay.md "Battles"), the same rules both sides. Every weapon hit lands on the
 // shield first (shieldShot: no minimum; it takes what it holds down to its floor, then stops mending SHIELD_STUN s). Through
-// an open shield, rounds burn BURN_U of stock a hit (≤ BURN_WAVE a raid), never people; heavy fire (lance bolts, missiles)
+// an open shield, rounds burn BURN_U of stock a hit (≤ BURN_WAVE a raid), never people; heavy fire (lance bolts, rockets)
 // fills a wound, and every LANDING K of it lands as one hit (people × 0.8). One raid (a wave, a sortie) kills at most
 // RIVAL_HIT_MAX of the people. Weapon fire never sets life back or heats a crust.
 // Speeds `u` in the shooter's world radii/s on top of it, `life` s, `k` K a hit; `run`/`cycle`: s per firing cycle (balance).
@@ -370,7 +346,6 @@ export const ARMS = {
   probe: { k: 0.15 },
   wave: { range: 8, arc: 0.25, rounds: 3, rate: 6, spread: 0.06 }, // a rival wave fighter's strafing gun (round speed and life)
   lance: { k: 7.5, u: 22, life: 2.7, salvo: 3, reload: 10, glow: 1.5, gap: 0.15, arc: 0.1, spread: 0.01, hull: 3, rivalHull: 2, hit: 0.9 },
-  missile: { k: 20, u: 11, life: 3, blast: 0.6, reload: 20, ore: 4, glow: 1.5, fan: 0.08, after: 1, max: 12, boost: 0.22, acc: 8, turn: 0.9, cone: 1.4, burn: 3, blind: 0.15, arc: 0.9, nav: 4, size: 0.12 }, // guided like ROCKET; max: missiles and rockets in flight; size: × a ship's hit radius, for rounds
 };
 export const BURN_U = 0.2;
 export const BURN_WAVE = 20;
@@ -378,9 +353,8 @@ export const LANDING = HIT_MIN;
 export const STRIKE = 14; // your radii off your surface to a rival's: your fleet engages (from RECALL at your priority world)...
 export const RECALL = 18; // ...and is recalled past this, on another target, with your shield down (then CALM_S s) or that priority cleared; never for losses
 export const CALM_S = 20;
-export const RESERVE = 20; // u of ore your silo leaves for slugs
 // The siege (ships.ts defend, nav.ts ringStep / siegePost), your radii: the wing flies a ring `ring` past the enemy world's
-// surface, never nearer than `clear` to your centre; at most `wing` fighters go, `home` stay to screen missiles with the
+// surface, never nearer than `clear` to your centre; at most `wing` fighters go, `home` stay to screen rockets with the
 // probes; every `pass` s one ring leader (and its wingman) swings `out` further out and strafes the world on its way back in
 // (straight from the ring its nose would not come round before it breaks off); ring ships take enemy ships within `foe` of it.
 export const SIEGE = { ring: [3, 3.8], clear: 2.5, wing: 5, home: 1, pass: 4, out: 3, foe: 6 };
@@ -400,7 +374,7 @@ export function sortieStep(st: Sortie, gap: number, ordered: boolean, s: number,
   if (!st.on && !st.calm && s > 0 && gap <= (ordered ? RECALL : STRIKE)) [st.on, st.by, say] = [true, gap > STRIKE, 'engage'];
   return say;
 }
-export type Arm = 'round' | 'lance' | 'missile';
+export type Arm = 'round' | 'lance' | 'rocket';
 /** One raid's caps: people never below `floor`; `burnt` u of stock so far. */
 export type Raid = { floor: number; burnt: number };
 export const raid = (P: number): Raid => ({ floor: P * (1 - RIVAL_HIT_MAX), burnt: 0 });
@@ -433,11 +407,11 @@ export const fleetSize = (u: number) => {
   const n = 1 + Math.floor(14 * u * u), haulers = Math.max(1, Math.round(n / 5)), marauder = n >= 10 ? 1 : 0;
   return { n, haulers, marauder, raiders: n - haulers - marauder };
 };
-/** Pirate ship classes: speed × cruise, rounds a hull takes (slugs, the beam and bodies kill outright), gun: range (your radii off the target's surface), arc (rad either side of the nose), bursts of `rounds` at `rate`/s `gap` s apart, aim error (rad), rock hits a round. */
+/** Pirate ship classes: speed × cruise, rounds a hull takes, rounds its shield soaks first (rounds and blasts; a rocket's direct hit and bodies kill outright; escape.ts mends it), gun: range (your radii off the target's surface), arc (rad either side of the nose), bursts of `rounds` at `rate`/s `gap` s apart, aim error (rad), rock hits a round. */
 export const PIRATE_CLASS = {
-  raider: { speed: 1, hull: 1, gun: { range: 6, arc: 0.25, rounds: 3, rate: 6, gap: 0.9, spread: 0.06, hits: 1 } },
-  hauler: { speed: 0.8, hull: 2, gun: undefined },
-  marauder: { speed: 0.8, hull: 4, gun: { range: 9, arc: 0.2, rounds: 5, rate: 5, gap: 1.5, spread: 0.04, hits: 3 } },
+  raider: { speed: 1, hull: 1, shield: 1, gun: { range: 6, arc: 0.25, rounds: 3, rate: 6, gap: 0.9, spread: 0.06, hits: 1 } },
+  hauler: { speed: 0.8, hull: 2, shield: 2, gun: undefined },
+  marauder: { speed: 0.8, hull: 4, shield: 3, gun: { range: 9, arc: 0.2, rounds: 5, rate: 5, gap: 1.5, spread: 0.04, hits: 3 } },
 };
 export const PIRATE_SPEED = [4, 5.5]; // cruise, your radii/s
 export const FORM_V = 0.8; // × cruise: a formation with a hauler or marauder (raiders catch up at 1.3 ×)
@@ -462,7 +436,7 @@ export const GUARD_OUT = [1.6, 2.2];
 export const GUARD_V = 0.6; // ...at this × cruise
 export const THREAT = [6, 4, 9]; // R: an enemy ship this close to a hauler, or to the fleet centre, draws 2 raiders until it is this far
 export const RETREAT = 0.5; // share of the ships lost: they leave
-export const JUMP_S = 14; // s leaving before ships still on screen jump out
+export const JUMP_S = 14; // s leaving before ships still on screen jump out (sooner once routed: escape.ts)
 export const GONE = 1.3; // camera half-diagonals: a leaving fleet past this is gone
 export const CHASE_V = 1.5;
 export const LEASH = 1.8;
@@ -470,7 +444,7 @@ export const LEASH_S = 3;
 export const CHASE_S = 20;
 export const RAID_S = [20, 40];
 export const LOOT_BACK = 1.5;
-export const PIRATE_K = 3; // K a pirate shot takes off a shield: a quarter of a slug's
+export const PIRATE_K = 3; // K a pirate shot takes off a shield
 export const CHIP = 2e-4;
 export const CHIP_MAX = 0.02;
 // Raiders shoot ships before the target: the nearest within PREY of your radii (your miner shuttles and fighters while an

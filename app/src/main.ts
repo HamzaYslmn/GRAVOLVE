@@ -66,7 +66,7 @@ const sfx = createSfx();
 // The game area's half sizes (world units): your natural view, never shrunk by zooming in; spawns and ranges use it.
 const gameArea = { halfW: 640, halfH: 360 };
 const kit: Kit = { input, glow, fx, canvas: app.canvas, field: () => field, view: camera.state, area: gameArea, sfx };
-const gameHud = createHud();
+const gameHud = createHud(input, app.canvas);
 const minimap = DEBUG ? createMinimap() : undefined; // debug mode: biome map (settings)
 // Debug mode (ui/debug.ts), localhost dev server only (settings DEBUG): one-click stage jumps and star helpers; a touched run saves no records.
 const debugUi = DEBUG ? createDebug({ me: () => player.body, planet: () => planet, field: () => field, over: () => !!run.cause, touched: () => void (run.debug = true) }) : undefined;
@@ -239,7 +239,7 @@ measureRefreshMs().then((ms) => {
     onSound: (on) => (sfx.enabled = on),
     onVolume: (v) => (sfx.volume = v),
     onDebug: (on) => void (minimap && (minimap.visible = on), debugUi && (debugUi.visible = on)),
-    achievements: { label: achUi.label, open: achUi.openGallery },
+    achievements: { label: achUi.label, open: achUi.toggleGallery },
   });
 });
 
@@ -330,7 +330,7 @@ app.ticker.add((ticker) => {
     const progress = clamp(Math.log(run.peak / run.start) / Math.log(AGE_GOAL / run.start), 0, 1); // in log mass
     ach.moment({ kind: 'death', cause: run.cause, ratio: run.cause === 'eaten' ? eater : 0 });
     checkAchievements(near); // the card shows what this death unlocked
-    showGameOver({ cause: run.cause, detail: run.detail, seconds: run.seconds, peak: run.peak, meals: run.meals, score: runScore(), progress, achievements: achUi.row(), onGallery: achUi.openGallery, debug: run.debug }, startRun, run.aged ? () => respawn() : undefined);
+    showGameOver({ cause: run.cause, detail: run.detail, seconds: run.seconds, peak: run.peak, meals: run.meals, score: runScore(), progress, achievements: achUi.row(), onGallery: achUi.toggleGallery, debug: run.debug }, startRun, run.aged ? () => respawn() : undefined);
   }
   achDt += dt;
   if ((achT += ticker.deltaMS / 1000) >= ACH_S && !run.cause) {

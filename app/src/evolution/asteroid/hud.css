@@ -1,6 +1,6 @@
 /* The stage HUD (hud.ts): your card bottom left, the target card top right, the marker on the target body.
-   Shared .ui-panel look from styles/base.css. The planet, civilization and star sections add rows to your card
-   and reuse .cells / .cell / .bar / .scale / .ok .warn .bad from here. */
+   Shared .ui-panel look from styles/base.css; icons, .row, type, the text trim, .bar / .scale / .needle from ui/hud.css.
+   The planet, civilization and star sections add rows to your card and reuse .cells / .cell / .ok .warn .bad from here. */
 #game-hud {
   --ok: #6cf0a0;
   --warn: #ffd27a;
@@ -18,29 +18,15 @@
   box-sizing: border-box;
   display: grid;
   grid-template-columns: minmax(0, 1fr); /* rows never push past the card (the clip-path would cut them) */
-  gap: 6px;
-  padding: 10px 13px 11px;
+  gap: var(--ui-s3);
+  padding: var(--ui-s4);
 }
 #game-hud .panel [hidden] { display: none; }
 
-/* Segmented bar: the fill shows through 1px gaps every 6px. */
-#game-hud .bar { position: relative; height: 5px; background: rgb(255 255 255 / 0.07); overflow: hidden; }
-#game-hud .bar > i { position: absolute; inset: 0 auto 0 0; background: var(--accent); transition: width 0.25s ease-out; }
-#game-hud .bar::after { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(90deg, transparent 0 5px, rgb(5 9 22 / 0.85) 5px 6px); }
-
-/* A scale: dim track, the bright band is where life wants it, the white needle is you. */
-#game-hud .scale { position: relative; height: 5px; background: rgb(255 255 255 / 0.08); }
-#game-hud .scale .band { position: absolute; top: 0; bottom: 0; background: var(--ok); opacity: 0.7; text-decoration: none; }
-#game-hud .scale .needle { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: #fff; box-shadow: 0 0 6px #fff; transition: left 0.25s; }
-
-#game-hud .icon { width: 12px; height: 12px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linejoin: round; stroke-linecap: round; }
-#game-hud .icon .fill { fill: currentColor; stroke: none; }
-#game-hud .icon { translate: 0 -0.12em; } /* Oxanium sits above its line box centre: lift icons to the text (measured 1-1.5 px) */
-#game-hud .chips .icon { translate: none; } /* icon-only chips */
 #game-hud .ok { color: var(--ok); }
 #game-hud .warn { color: var(--warn); }
 #game-hud .bad { color: var(--bad); }
-#game-hud .sub { color: var(--ui-muted); font-size: 12px; }
+#game-hud .sub { color: var(--ui-muted); font-size: var(--ui-value); line-height: 1.35; }
 #game-hud .sub.warn { color: var(--bad); }
 #game-hud .sub:empty { display: none; }
 
@@ -49,74 +35,70 @@
   --accent: var(--ui-accent); /* you are cyan */
   left: calc(10px + var(--safe-l));
   bottom: calc(10px + var(--safe-b));
-  width: 256px;
-  gap: 5px;
-  padding: 8px 11px 9px;
+  width: var(--ui-card);
 }
 
-#game-hud .head { display: flex; align-items: baseline; gap: 7px; min-width: 0; }
-#game-hud .head .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
-#game-hud .me > .head .name { overflow: visible; white-space: normal; line-height: 1.2; font-size: 13px; } /* your tier is never cut: a second line past ~130 px */
-#game-hud .me .age { flex: none; font-style: normal; font-size: 9px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; padding: 0 5px; color: var(--accent); box-shadow: inset 0 0 0 1px rgb(127 227 255 / 0.4); }
-#game-hud .me .mass { margin-left: auto; flex: none; font-size: 14px; font-weight: 600; color: var(--accent); text-shadow: 0 0 10px rgb(127 227 255 / 0.45); }
-
-/* Moon slots, on the goal label: hollow = free, filled in the moons' blue (as its orbit trail). */
-#game-hud .pips { display: flex; gap: 4px; align-self: center; margin-left: auto; }
-#game-hud .pips:empty { display: none; }
-#game-hud .pips i { width: 7px; height: 7px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgb(159 220 255 / 0.5); }
-#game-hud .pips i.moon { background: #9fdcff; box-shadow: 0 0 5px #9fdcff; }
+/* Head: age chip · tier · mass, centred on one line. Your tier is never cut (a second line past ~130 px), so your card's head
+   aligns to the first line: the trimmed boxes start at cap top, the taller chip moves up by half the difference. */
+#game-hud .head { display: flex; align-items: center; gap: var(--ui-s3); min-width: 0; }
+#game-hud .me .head { align-items: flex-start; }
+#game-hud .head .name { flex: 1 1 auto; min-width: 0; font-size: var(--ui-title); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; line-height: 1.2; }
+#game-hud .me .age { flex: none; font-style: normal; font-size: var(--ui-caption); font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; padding: var(--ui-s1) calc(var(--ui-s2) - 0.16em) var(--ui-s1) var(--ui-s2); margin-top: calc(0.345 * (var(--ui-title) - var(--ui-caption)) - var(--ui-s1)); color: var(--accent); box-shadow: inset 0 0 0 1px rgb(127 227 255 / 0.4); }
+#game-hud .head .mass { flex: none; font-size: var(--ui-title); font-weight: 600; color: var(--accent); text-shadow: 0 0 10px rgb(127 227 255 / 0.45); }
 
 /* The goal: the stage's one bar, its label under it. */
-#game-hud .goal { display: grid; gap: 3px; }
+#game-hud .goal { display: grid; gap: var(--ui-s2); }
 #game-hud .goal .bar > i { box-shadow: 0 0 8px var(--accent); }
 #game-hud .goal.stalled .bar > i { background: repeating-linear-gradient(135deg, rgb(127 227 255 / 0.55) 0 3px, transparent 3px 6px); box-shadow: none; } /* life isn't moving */
 #game-hud .goal.lost .bar > i { background: var(--bad); box-shadow: 0 0 8px var(--bad); } /* life lost under a civilization */
 #game-hud .goal.lost.stalled .bar > i { background: repeating-linear-gradient(135deg, rgb(255 138 107 / 0.6) 0 3px, transparent 3px 6px); box-shadow: none; }
-#game-hud .label { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--ui-muted); }
+#game-hud .label { display: flex; align-items: flex-start; gap: var(--ui-s3); font-size: var(--ui-value); line-height: 1.2; color: var(--ui-muted); } /* a long goal wraps: the value stays on its first line */
+#game-hud .label > :first-child { flex: 1 1 auto; min-width: 0; }
 #game-hud .label > :last-child { color: var(--ui-text); white-space: nowrap; }
+#game-hud .label > :empty { display: none; }
+/* Pips (moon rings: planet/hud.ts): hollow = free, filled in the moons' blue. */
+#game-hud .pips { display: flex; align-items: center; gap: var(--ui-s2); }
+#game-hud .pips i { width: var(--ui-s3); height: var(--ui-s3); border-radius: 50%; box-shadow: inset 0 0 0 1px rgb(159 220 255 / 0.5); }
+#game-hud .pips i.moon { background: #9fdcff; box-shadow: 0 0 5px #9fdcff; }
 
-/* Speed on one line: icon · caption · log gauge (eat · rough · bounce) · value. Needles: you (white), the predicted hit (verdict colour). */
-#game-hud .speed { display: grid; grid-template-columns: 12px auto minmax(0, 1fr) auto; align-items: center; gap: 5px; min-width: 0; color: #9fd0ff; }
-#game-hud .gauge { position: relative; display: flex; height: 4px; }
+/* Speed on one row (ui/hud.css .row): icon · caption · log gauge (eat · rough · bounce) · value. Needles: you (white), the predicted hit (verdict colour, under the gauge). */
+#game-hud .speed { color: #9fd0ff; }
+#game-hud .gauge { position: relative; display: flex; height: var(--ui-track); }
 #game-hud .zone { height: 100%; opacity: 0.5; }
 #game-hud .zone.stick { background: var(--ok); }
 #game-hud .zone.messy { background: var(--warn); }
 #game-hud .zone.bounce { flex: 1; background: linear-gradient(90deg, #ff9f43, #ff4a5a); }
 #game-hud .speed.heavy :is(.stick, .messy) { background: #ff4a5a; } /* slow into a heavier body: swallowed */
-#game-hud .gauge .needle { position: absolute; top: -4px; width: 2px; height: 12px; margin-left: -1px; background: #fff; box-shadow: 0 0 6px #fff; transition: left 0.15s; }
-#game-hud .gauge .needle.hit { top: 5px; height: 4px; box-shadow: none; }
+#game-hud .gauge .needle { transition: left 0.15s; }
+#game-hud .gauge .needle.hit { top: calc(var(--ui-track) + var(--ui-s1)); height: var(--ui-s2); box-shadow: none; }
 /* A fast bounce (hud.ts noteHit): your needle flashes red, so the bounce reads as your speed. */
 #game-hud .speed.flash .needle.you { animation: needle-flash 0.3s steps(2) infinite; }
 @keyframes needle-flash { 50% { background: #ff4a5a; box-shadow: 0 0 10px #ff4a5a; } }
 
-/* Composition and power bars (civilization/hud.ts): stacked segments, each labelled inside as far as it fits (ui/panel.ts fit), dark on the light colours. */
-#game-hud .mix { display: flex; gap: 1px; height: 12px; overflow: hidden; background: rgb(255 255 255 / 0.06); }
-#game-hud :is(.mix, .track) > i { display: flex; align-items: center; justify-content: center; gap: 2px; overflow: hidden; white-space: nowrap; font-size: 9px; font-style: normal; font-weight: 700; line-height: 12px; color: rgb(5 9 22 / 0.85); }
-#game-hud :is(.mix, .track) > i .icon { width: 9px; height: 9px; stroke-width: 1.6; }
+/* Composition and power bars (civilization/hud.ts): stacked segments, each labelled inside as far as it fits (ui/panel.ts fit; composition segments sized by ui/panel.ts widths), dark on the light colours. */
+#game-hud .mix { display: flex; gap: 1px; height: var(--ui-bar); overflow: hidden; background: rgb(255 255 255 / 0.06); }
+#game-hud :is(.mix, .track) > i { display: flex; align-items: center; justify-content: center; gap: var(--ui-s1); overflow: hidden; white-space: nowrap; font-size: var(--ui-caption); font-style: normal; font-weight: 700; color: rgb(5 9 22 / 0.85); }
+#game-hud :is(.mix, .track) > i .icon { width: 12px; height: 12px; stroke-width: 1.5; } /* 12 px at every size: ui/panel.ts fit measures it */
+#game-hud .mix > i > span:empty { display: none; }
 
-/* Readout cells, two columns: icon · caption · value on one line, the track full width under them. */
-#game-hud .cells { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 8px; }
-#game-hud .cell { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; align-items: center; gap: 4px; min-width: 0; color: #9fd0ff; }
-#game-hud .cell > :is(.bar, .scale) { grid-column: 1 / -1; }
-#game-hud .cap { font-style: normal; font-size: 9px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap; }
-#game-hud :is(.cell, .speed) .v { text-align: right; font-size: 12px; font-weight: 600; white-space: nowrap; color: var(--ui-text); } /* 12 px: "SHIELD · L1 · 100%" fits the 256 px card */
+/* Readout cells, two columns: icon · label · value on one row, the track full width under them. */
+#game-hud .cells { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ui-s2) var(--ui-s4); }
+#game-hud .cell > .icon { justify-self: center; }
+#game-hud .cell { display: grid; grid-template-columns: var(--ui-icon-lg) minmax(0, 1fr) auto; grid-template-rows: var(--ui-row); align-items: center; column-gap: var(--ui-s2); row-gap: var(--ui-s1); min-width: 0; color: #9fd0ff; }
+#game-hud .cell > :is(.bar, .scale) { grid-column: 1 / -1; margin-top: var(--ui-s1); }
+#game-hud .cell .needle { top: calc(-1 * var(--ui-s1)); height: calc(var(--ui-track) + 2 * var(--ui-s1)); } /* short: it stays clear of the line above */
 #game-hud .cell .v:is(.ok, .warn, .bad) { color: inherit; }
 #game-hud .cell:has(.v.ok) { color: var(--ok); }
 #game-hud .cell:has(.v.warn) { color: var(--warn); }
 #game-hud .cell:has(.v.bad) { color: var(--bad); }
 #game-hud .cell .bar > i { background: currentColor; }
-/* With a living civilization the climate is one compact line: icon + value, coloured by its grade. */
-#game-hud .me:has(.civ):not(.nolife) .world .cells { grid-template-columns: repeat(4, auto); justify-content: space-between; }
-#game-hud .me:has(.civ):not(.nolife) .world .cell { display: flex; gap: 4px; }
-#game-hud .me:has(.civ):not(.nolife) .world .cell > :is(.cap, .scale, .bar) { display: none; }
-#game-hud .me:has(.civ) .world .next { display: none; }
+/* Age I: your rock has no World header yet (planet/hud.ts fills the section from Age II). */
+#game-hud[data-stage='asteroid'] .me .world > .hd, #game-hud[data-stage='asteroid'] .me .world::before { display: none; }
+#game-hud[data-stage='asteroid'] .me .world > .body { display: grid; } /* never folded in Age I */
 
-/* Section heading line between stage sections. */
-#game-hud .sec { display: grid; gap: 6px; padding-top: 6px; border-top: 1px solid rgb(255 255 255 / 0.07); }
-
-/* The one tip: what to do next. */
-#game-hud .tip { position: relative; padding-left: 10px; font-size: 12px; line-height: 1.35; color: var(--ui-muted); }
-#game-hud .tip::before { content: '›'; position: absolute; left: 0; color: var(--accent); font-weight: 700; }
+/* The one tip: what to do next; its text starts where the rows' captions do. */
+#game-hud .tip { position: relative; padding-left: calc(var(--ui-icon) + var(--ui-s2)); font-size: var(--ui-value); line-height: 1.35; color: var(--ui-muted); }
+#game-hud .tip::before { content: '›'; position: absolute; left: 0; top: 0; width: var(--ui-icon); text-align: center; line-height: 1.35; text-box: trim-both cap alphabetic; color: var(--accent); font-weight: 700; }
 #game-hud .tip b { font-weight: 600; color: var(--ui-text); }
 #game-hud .tip:empty { display: none; }
 
@@ -127,42 +109,46 @@
   --accent: var(--verdict);
   top: calc(56px + var(--safe-t)); /* under the settings gear */
   right: calc(10px + var(--safe-r));
-  width: 200px;
-  gap: 5px;
+  width: 224px; /* composition bar 200 px (hud.ts MIX_TARGET) */
 }
-#game-hud .target .head { justify-content: space-between; }
-#game-hud .target .name { font-size: 13px; }
-#game-hud .target .name::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 6px; vertical-align: 1px; background: var(--verdict); box-shadow: 0 0 6px var(--verdict); }
+#game-hud .target .head::before { content: ''; flex: none; width: var(--ui-s3); height: var(--ui-s3); background: var(--verdict); box-shadow: 0 0 6px var(--verdict); }
+#game-hud .target .name { white-space: nowrap; overflow-x: clip; text-overflow: ellipsis; } /* clip, not hidden: the trimmed text's ink stays */
 #game-hud .target.rival .name { color: #c9a8ff; } /* rivals are violet */
-#game-hud .target .ratio { flex: none; font-size: 14px; font-weight: 600; color: var(--accent); }
+#game-hud .target .ratio { flex: none; font-size: var(--ui-title); font-weight: 600; color: var(--accent); }
 /* A rival world's life conditions: dim until met, amber weak, green good; its life stage. */
-#game-hud .chips { display: flex; align-items: center; gap: 4px; }
-#game-hud .chips span { display: flex; padding: 2px 5px; color: var(--ui-muted); opacity: 0.45; box-shadow: inset 0 0 0 1px rgb(127 144 187 / 0.35); }
+#game-hud .chips { display: flex; align-items: center; gap: var(--ui-s2); }
+#game-hud .chips span { display: flex; padding: var(--ui-s1); color: var(--ui-muted); opacity: 0.45; box-shadow: inset 0 0 0 1px rgb(127 144 187 / 0.35); }
 #game-hud .chips span.on { opacity: 1; color: var(--warn); box-shadow: inset 0 0 0 1px rgb(255 210 122 / 0.5); }
 #game-hud .chips span.good { color: var(--ok); box-shadow: inset 0 0 0 1px rgb(108 240 160 / 0.55); }
 /* Moon-size: lit (orbit-moon blue) when this body could be your moon; dim otherwise. */
-#game-hud .target .moonsize { justify-self: start; padding: 1px 6px; font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ui-muted); opacity: 0.45; box-shadow: inset 0 0 0 1px rgb(127 144 187 / 0.35); }
+#game-hud .target .moonsize { justify-self: start; padding: var(--ui-s1) calc(var(--ui-s2) - 0.08em) var(--ui-s1) var(--ui-s2); font-size: var(--ui-caption); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ui-muted); opacity: 0.45; box-shadow: inset 0 0 0 1px rgb(127 144 187 / 0.35); }
 #game-hud .target .moonsize.on { opacity: 1; color: #9fdcff; box-shadow: inset 0 0 0 1px rgb(159 220 255 / 0.6), inset 0 0 8px rgb(159 220 255 / 0.2); }
-#game-hud .chips .life { margin-left: auto; font-style: normal; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: #9dffb0; white-space: nowrap; }
+#game-hud .chips .life { margin-left: auto; font-style: normal; font-size: var(--ui-caption); letter-spacing: 0.06em; text-transform: uppercase; color: #9dffb0; white-space: nowrap; }
 
 /* The marker: the cards' two corner brackets around the target body; a named rival's name over it. */
 #game-hud .mark { position: absolute; left: 0; top: 0; --verdict: var(--ui-accent); will-change: transform; }
-#game-hud .mark::before, #game-hud .mark::after { content: ''; position: absolute; width: 8px; height: 8px; border: 0 solid var(--verdict); opacity: 0.85; filter: drop-shadow(0 0 3px var(--verdict)); }
+#game-hud .mark::before, #game-hud .mark::after { content: ''; position: absolute; width: var(--ui-s3); height: var(--ui-s3); border: 0 solid var(--verdict); opacity: 0.85; filter: drop-shadow(0 0 3px var(--verdict)); }
 #game-hud .mark::before { top: 0; right: 0; border-top-width: 2px; border-right-width: 2px; }
 #game-hud .mark::after { bottom: 0; left: 0; border-bottom-width: 2px; border-left-width: 2px; }
-#game-hud .mark b { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 3px; font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; color: #c9a8ff; text-shadow: 0 0 4px #000; }
+#game-hud .mark b { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: var(--ui-s1); font-size: var(--ui-caption); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; color: #c9a8ff; text-shadow: 0 0 4px #000; }
 
-/* Phones: the same cards, always open, scaled down from their corner (user: "in phone dpi, need resizing"). */
-@media (max-width: 640px) { #game-hud { --z: 0.85; } } /* phones: big enough to read (bar labels ≈ 7.7 px) */
-@media (max-height: 500px) { #game-hud { --z: 0.8; } } /* landscape: the two-column card is short, so it can be larger */
-@media (max-width: 640px), (max-height: 500px) {
-  #game-hud .me { left: calc(6px + var(--safe-l)); bottom: calc(6px + var(--safe-b)); transform: scale(var(--z)); transform-origin: 0 100%; }
-  #game-hud .target { top: calc(52px + var(--safe-t)); right: calc(6px + var(--safe-r)); transform: scale(var(--z)); transform-origin: 100% 0; }
+/* Phones (hud.ts PHONE: a narrow touch screen, or any screen under 500 px tall, where the full card would not fit): real sizes,
+   no transform; compact: every section folds to its header and summary, a tap opens one at a time (hud.ts). The folded World
+   keeps your speed. No hover tips on touch, so rows spell out their labels (civilization/hud.css). */
+@media (pointer: coarse) and (max-width: 640px), (max-height: 500px) {
+  #game-hud .me { left: calc(6px + var(--safe-l)); bottom: calc(6px + var(--safe-b)); width: min(var(--ui-card), calc(100vw - 12px - var(--safe-l) - var(--safe-r))); }
+  #game-hud .target { top: calc(52px + var(--safe-t)); right: calc(6px + var(--safe-r)); }
+  #game-hud:not([data-stage='asteroid']) .me .world:not(.open) > .body { display: grid; }
+  #game-hud:not([data-stage='asteroid']) .me .world:not(.open) > .body > :not(.speed) { display: none; }
 }
-/* Landscape phones: under a civilization your card takes two columns, the civilization in the second (≈300 px wide at 0.6,
-   bottom left: clear of the target card, the toast band and the minimap). Row gap 0 so the empty rows it spans add nothing. */
+/* Landscape phones: one open section fits the height only alone, so the other folded ones step aside (the World header and
+   speed stay); tap the open header to fold it and see them all again. */
 @media (max-height: 500px) {
-  #game-hud .me:has(.civ) { width: 500px; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 14px; row-gap: 0; align-items: start; }
-  #game-hud .me:has(.civ) > * { grid-column: 1; margin-bottom: 5px; }
-  #game-hud .me:has(.civ) > .civ { grid-column: 2; grid-row: 1 / span 12; border-top: 0; padding-top: 0; }
+  #game-hud:not([data-stage='asteroid']) .me:has(.sec.open) .sec:not(.open, .world) { display: none; }
+  #game-hud:not([data-stage='asteroid']) .me:has(.sec.open) .civ:not(:has(.sec.open)) { display: none; }
+}
+/* Without text-box trim (ui/hud.css) the first-line offsets above don't hold: centre the head and the goal label instead. */
+@supports not (text-box: trim-both cap alphabetic) {
+  #game-hud :is(.me .head, .label) { align-items: center; }
+  #game-hud .me .age { margin-top: 0; }
 }

@@ -6,7 +6,7 @@ import { slotRadius } from '../../core/orbits.ts';
 import { clamp } from '../../core/rng.ts';
 import { mineable, UNIT, type Lack, type Ore } from './rules.ts';
 import type { Body } from '../asteroid/body.ts';
-import { MOON_SHARE } from '../planet/rules.ts';
+import { MOON_SHARE, moonSlots } from '../planet/rules.ts';
 
 export type SiteKind = 'moon' | 'free' | 'debris' | 'defeated';
 /** d: distance to the site (R); share: its mass / yours; danger 0–1 (pirates within 4 R, a star's harmful zone); linked: a link already holds it. */
@@ -27,6 +27,11 @@ export const RESCORE = 2; // s between re-scores
 
 /** The reach ("outermost ring") with `slots` moon slots: the outer slot + RING. */
 export const reach = (slots: number) => slotRadius(1, Math.max(0, slots - 1)) + RING;
+/** A world's Fire range in its R, off its surface: FIRE_REACH × the reach (rockets, yours and rival worlds'; a rival frigate's lance). */
+export const FIRE_REACH = 2;
+export const fireRange = (slots: number) => FIRE_REACH * reach(slots);
+/** `b`'s fire range in world units, off its surface: a rocket's fuel (guns.ts createRockets). */
+export const fireReach = (b: Pick<Body, 'm' | 'r'>) => fireRange(moonSlots(b.m)) * b.r;
 /** Inside the reach; a linked big body holds until LINK_HOLD × reach. */
 export const inReach = (s: Site, slots: number) => s.d <= reach(slots) * (s.linked && s.share >= BIG ? LINK_HOLD : 1);
 

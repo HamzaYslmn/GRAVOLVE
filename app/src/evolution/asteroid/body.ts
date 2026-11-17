@@ -5,7 +5,7 @@ import { K_PER_HEAT } from '../../core/water';
 import { rockView, type Rock } from './atlas';
 import { tintBy } from './web';
 import type { Rival } from './rival';
-import { blend, capR, uncapR, mergeHeat, mergeJag, relaxJag, ROUND_M, BURST_KEEP, BURST_PIECES, burstRing, COMP, pieceShares, SPREAD, roundR, collide, contactTime, shellContact, shellPass, shellSees, DEATH_D, GRAZE, massOf, MAX_HEAT, MOLTEN, START_R, COOL, impactHeat, V_STICK, type CollideOpts, type Comp, type Element, type Phys, type Regime, type Side } from './rules';
+import { blend, capR, uncapR, mergeHeat, mergeJag, relaxJag, ROUND_M, BURST_KEEP, BURST_PIECES, burstRing, COMP, pieceShares, SPREAD, roundR, collide, contactTime, shellContact, shellPass, shellSees, DEATH_D, GRAZE, massOf, MAX_HEAT, MOLTEN, START_R, COOL, impactHeat, rub, workHeat, workShare, V_STICK, type CollideOpts, type Comp, type Element, type Phys, type Regime, type Side } from './rules';
 
 // A body is an entity built from rock sprites ("parts"). Eating glues the meal's parts on where they touched,
 // so every grown asteroid is a unique pile of what it ate. To read as one body, a pile settles (parts sink
@@ -88,7 +88,7 @@ export const unmoon = (b: Body) => void ([b.moon, b.motion.drag] = [false, 1e-3]
 /** Kelvin a hit delivered to `w` (a rival world in it): the actor's own heat, else impactHeat from the actor's share at w's size. */
 export function hitKelvin(h: Hit, w: Body) {
   const ma = h.a.m - h.gain;
-  return K_PER_HEAT * (w === h.a ? h.heat : impactHeat(ma / (ma + h.mb), (h.speed * h.a.r) / w.r, V_STICK, w.r));
+  return K_PER_HEAT * (w === h.a ? h.heat : h.heatB ?? impactHeat(ma / (ma + h.mb), (h.speed * h.a.r) / w.r, V_STICK, w.r));
 }
 /** What a collision did, for effects. Speed is in the actor's diameters/s. */
 export type Hit = {
@@ -107,6 +107,8 @@ export type Hit = {
   destroyed: boolean; // the actor was blown apart completely (d ≥ DEATH_D)
   heat: number; // heat the hit delivered to the actor (doc units; × 430 = kelvin): life setbacks read it
   broke: boolean; // the other body broke apart (d ≥ 1; it may be gone: m = 0)
+  heatB?: number; // rock pairs (rub): the heat the hit gave b; unset elsewhere (hitKelvin works it out)
+  lost?: number; // rock pairs (rub): energy the contact took out of the pair's motion, in touches at the stick speed (½·v_m²)
 };
 
 export type Events = {
@@ -227,11 +229,12 @@ export function cluster(core: Body, others: Body[], rnd: () => number) {
 /** Handles touching bodies `a` (the actor) and `b` by the rules' regimes (rules.ts collide, options as CollideOpts). */
 export function resolve(a: Body, b: Body, ev: Events, o: CollideOpts = {}) {
   if (a === b) return; // safety: a body must never eat itself (its parts loop would never end)
-  const am = a.motion, bm = b.motion;
+  const am = a.motion, bm = b.motion, rdt = o.rub, rr = a.r + b.r; // rdt: never by truthiness, hit-stop frames pass 0
+  const bound = rdt !== undefined && Math.hypot(bm.vx - am.vx, bm.vy - am.vy) < 4 * (o.stick ?? V_STICK) * a.r; // a rock pair under its escape speed (2·v_m)
   const d = Math.hypot(bm.x - am.x, bm.y - am.y) || 1e-6;
   const nx = (bm.x - am.x) / d, ny = (bm.y - am.y) / d;
-  const rvx = bm.vx - am.vx, rvy = bm.vy - am.vy;
-  const closing = Math.max(0, -(rvx * nx + rvy * ny)), sliding = Math.abs(rvx * ny - rvy * nx);
+  const rvx = bm.vx - am.vx, rvy = bm.vy - am.vy, vn = rvx * nx + rvy * ny, vt = rvx * ny - rvy * nx;
+  const closing = Math.max(0, -vn), sliding = Math.abs(vt);
   // Hit speed for effects and the game-over card: the head-on part in full, sliding only partly, in a's diameters.
   const fly = Math.hypot(closing, (o.graze ?? GRAZE) * sliding), speed = fly / (2 * a.r);
   const out = collide(phys(a), phys(b), closing, sliding, o);
@@ -248,7 +251,8 @@ export function resolve(a: Body, b: Body, ev: Events, o: CollideOpts = {}) {
 
   if (out.kind === 'eat' || out.kind === 'eaten') {
     // Slower than the stick speed: the heavier keeps everything; the meal's fall turns to heat (deeper wells, hotter).
-    const [T, P, s, q] = out.kind === 'eat' ? ([a, b, 1, out.a.heat] as const) : ([b, a, -1, out.b.heat] as const);
+    const [T, P, s, q, qP] = out.kind === 'eat' ? ([a, b, 1, out.a.heat, out.b.heat] as const) : ([b, a, -1, out.b.heat, out.a.heat] as const);
+    if (rdt !== undefined) P.heat = Math.min(MAX_HEAT, P.heat + qP); // rock pairs: the meal's own impact heat mixes in too
     eat(T, P, s * rvx, s * rvy, q); // the meal's parts stay on, shapes and all; its cold or heat mixes in (mergeHeat)
     return done();
   }
@@ -256,22 +260,32 @@ export function resolve(a: Body, b: Body, ev: Events, o: CollideOpts = {}) {
     // The heavier keeps part of the lighter: a crater on it, the rest of the meal sprays off as pieces.
     const [T, P, sT, sP, s] = out.t === 'a' ? ([a, b, out.a, out.b, 1] as const) : ([b, a, out.b, out.a, -1] as const);
     hit.dust = lose(T, sT, s * nx, s * ny, P, ev, fly, minPiece) + lose(P, sP, -s * nx, -s * ny, T, ev, fly, minPiece);
+    if (rdt !== undefined) P.heat = Math.min(MAX_HEAT, P.heat + sP.heat); // rock pairs: the meal's own impact heat mixes in too
     eat(T, P, s * rvx, s * rvy, sT.heat);
     return done();
   }
-  // Graze (hit-and-run) and bounce (erosion / fracture): both chip, either side may break or be destroyed.
+  // Graze and bounce: both chip, either may break. Rock pairs: restitution and friction (rules.ts rub); what they take out of the motion is the heat.
+  const r = rdt === undefined ? undefined : rub(vn, vt, Math.min(bounceOf(a), bounceOf(b)), bound ? (sliding * rdt) / rr : 0);
+  if (r) {
+    const pa = phys(a), pb = phys(b), E = (r.lost * a.m * b.m) / (a.m + b.m);
+    [hit.heat, hit.heatB, hit.lost] = [workHeat(pa, E * workShare(pa, pb)), workHeat(pb, E * workShare(pb, pa)), r.lost / (2 * ((o.stick ?? V_STICK) * a.r) ** 2)];
+  }
   hit.dust = lose(a, out.a, nx, ny, b, ev, fly, minPiece) + lose(b, out.b, -nx, -ny, a, ev, fly, minPiece);
-  a.heat += out.a.heat;
-  b.heat += out.b.heat;
+  a.heat += hit.heat;
+  b.heat += hit.heatB ?? out.b.heat;
   if (out.a.d >= DEATH_D) hit.dust += burst(a, fly, ev, minPiece);
   if (out.b.d >= DEATH_D) hit.dust += burst(b, fly, ev, minPiece);
   if (a.m && b.m) {
-    // Push apart and reflect the closing speed along the normal (a graze keeps its sliding speed).
-    const ia = 1 / a.m, ib = 1 / b.m, push = Math.max(0, a.r + b.r - d) / (ia + ib);
+    // Push apart and reflect the closing speed along the normal (a graze keeps its sliding speed; rock pairs rub).
+    const ia = 1 / a.m, ib = 1 / b.m, push = Math.max(0, rr - d) / (ia + ib);
     am.x -= nx * push * ia; am.y -= ny * push * ia;
     bm.x += nx * push * ib; bm.y += ny * push * ib;
-    const vn = rvx * nx + rvy * ny;
-    if (vn < 0) {
+    if (r) {
+      const mu = 1 / (ia + ib), jx = (r.dn * nx + r.dt * ny) * mu, jy = (r.dn * ny - r.dt * nx) * mu; // tangent (ny, −nx)
+      am.vx -= jx * ia; am.vy -= jy * ia;
+      bm.vx += jx * ib; bm.vy += jy * ib;
+      for (const p of [a, b]) p.spin = clamp(p.spin + (r.dt * mu) / (0.4 * p.m * p.r), -MAX_SPIN, MAX_SPIN); // friction rolls both: angular momentum kept
+    } else if (vn < 0) {
       const j = (-(1 + Math.min(bounceOf(a), bounceOf(b))) * vn) / (ia + ib);
       am.vx -= j * ia * nx; am.vy -= j * ia * ny;
       bm.vx += j * ib * nx; bm.vy += j * ib * ny;
@@ -280,7 +294,7 @@ export function resolve(a: Body, b: Body, ev: Events, o: CollideOpts = {}) {
   done();
 }
 
-/** Breaks `b` into a few fragments and dust (the beam's last bite, combat.ts; a small body bounced off a solid world, field.ts). */
+/** Breaks `b` into a few fragments and dust (a small body bounced off a solid world, field.ts). */
 export const shatter = (b: Body, ev: Events) => burst(b, Math.hypot(b.motion.vx, b.motion.vy), ev, Math.max(MIN_PIECE, 0.05 * b.m));
 
 /** Destroyed (d ≥ DEATH_D): what survived still flies apart, a burst of unequal fragments faster the harder the hit; the rest is dust. */

@@ -79,7 +79,7 @@ The concept frames the run as a climb up the Kardashev scale; `gamedesign.html` 
 | Before a civilization | 1 Asteroid, 2 Forging, 3 Living world | you are a body, then a world; life fills | Built |
 | Type 0 → I: one planet | 4 Civilization at LIFE (concept 1) | people, a shield, two fighters; inner heat, reactors on rad fuel, solar farms | Built |
 | Type I: the planet's space | 4 Civilization with moons (concept 2, 9) | miners on moons and free bodies, per-class fleet, rockets, mining AI | Built [E], [F], [G] |
-| Type I → II: a star | 5 Star takeover (concept 3, 4) | star contact, link, you steer the star, Dyson, energy beam | Built [C], [D], [K] |
+| Type I → II: a star | 5 Star takeover (concept 3, 4) | star contact, link, you steer the star, Dyson | Built [C], [D], [K] |
 | Type II: a planetary system | 5 (concept 3, 5) | system planets, colonies, terraforming | Built [I], [L]; carry-on as a colony is the smallest version (Q3) |
 | Toward Type III | 6 Expansion | several stars; three suns, then Ascension | Planned |
 
@@ -94,11 +94,11 @@ Read from code, 2026-11-16. Numbers live in the topic docs.
 | 1 | Planet formation and life | Built | asteroid → planet; life from water, metal, field, temperature; at LIFE a shield and two fighters; fighters break bodies ≤ 2% | [F] |
 | 2 | Space mining and defence | Built | miners on moons and free bodies; frigates (1 from tier 3, 2 from tier 5) and surface rockets break 2–25% bodies; each ship class has its own cap; sites weighted by need | [E], [F], [G], Q5 |
 | 3 | Star connection and control | Built | contact at ≥ 80% energy need or 300 s; link after 60 s; you steer the star; star classes; +3% a planet, capacity 2–6; new star look | [C], [D], [I] |
-| 4 | Dyson and energy | Built | Dyson from ore, faster with colonies; star energy, a stronger engine, the beam from 20% (costs star mass) | [K], [L] |
+| 4 | Dyson and energy | Built | Dyson from ore, faster with colonies; star energy, a stronger engine (the beam was removed 2026-11-17) | [K], [L] |
 | 5 | Colonization and terraforming | Built | colony fleets, terraforming, unstable colonies turn to gas worlds and leave their ring; no brown dwarf | [L] |
 | 6 | Planetary survival | Built | shields break under hits and cost 0.1 E/s a level; lost habitability hurts the people | [F], Q7 |
 | 7 | Space pirates | Built | roam every age in groups of 1–14 ships, no escalation; attack you only after LIFE, rarely; give up past a leash; moons can hit them; harm capped | [B], [M] |
-| 8 | Alien civilizations | Partial | named rivals, stances, war waves, defeat opens their worlds; missiles guided only briefly (distance or an early sidestep beats them); no army strength, no rival-vs-rival war, defeated worlds not colonized | [J], [M] |
+| 8 | Alien civilizations | Partial | named rivals, stances, war waves, defeat opens their worlds; rockets turn at most 1.4 rad/s (distance or an early sidestep beats them); no army strength, no rival-vs-rival war, defeated worlds not colonized | [J], [M] |
 | 9 | Mining AI | Built | roaming miners with a reach gauge; sites by distance, need, density, efficiency, danger (enemy ships only, not stars); defeated worlds mined at efficiency 2.5 | [E], [G], [J], [M] |
 
 ## Audience
@@ -107,7 +107,7 @@ Read from code, 2026-11-16. Numbers live in the topic docs.
 |---|---|---|---|
 | **Grower** (eat-and-grow players; fans of the old game) | a fast, physical power curve | Age I: a new tier every few meals | 2–5 min, many runs |
 | **Gardener** (space sandbox players) | shaping a planet and watching it live | seas, moons, life, city lights on the body itself | 20–60 min, one run |
-| **Builder-fighter** | a civilization that reaches its sun | miners, shield, fleet, the priority target, mass driver, rival war waves, Dyson, the beam, a star that gathers planets | the last 20–30 min |
+| **Builder-fighter** | a civilization that reaches its sun | miners, shield, fleet, the priority target, rockets on Fire, rival war waves, Dyson, a star that gathers planets | the last 20–30 min |
 | **Collector** | things to find and tick off | discoveries, giants, comets, 39 achievements, a best score | across runs |
 
 - **Why this game:** one body, one unbroken run from pebble to a star with a Dyson sphere, every step visible on the body and decided by real collisions. The old game swapped your body and threw away mass at each tier, and its life only grew by fighting (`analysis/SOLAR/00-overview.md`); GRAVOLVE keeps the body and lets life grow by care.
@@ -126,7 +126,7 @@ Read from code, 2026-11-16. Numbers live in the topic docs.
 | Forging a world | "I am a place now": first moon, first air, first rain | moons, climate, overlays |
 | Living world | care: a blue world that stays alive | habitability, life, calm |
 | Civilization | they act on their own and you feed them | tiers, roaming miners, shield, fleet |
-| Combat | physics as a weapon | mass driver, beam, priority target, rockets and missiles, rivals, pirates, sieges |
+| Combat | physics as a weapon | rockets on Fire, priority target, rivals, pirates, sieges |
 | Star takeover | scale: bind a sun, enclose it, fly it | link, star control, orbit, system planets, colonies, Dyson |
 
 ## Goals
@@ -171,7 +171,7 @@ no package H.
 | 2 | **I** | System planets on rings, the star grows with each; star swallows star; re-link after a lost star | 3 | Done | [stargameplay.md](stargameplay.md) |
 | 2 | **J** | Rivals as strategic opponents: stances, war waves, harassment, defeat opens their worlds | 8 | Done, partial: no army strength, no rival-vs-rival war | [aliencivilizations.md](aliencivilizations.md) |
 | 3 | **G** | Roaming miners and the reach gauge; wires in [E] | 2, 9 | Done, partial: site danger ignores stars | [civilizationgameplay.md](civilizationgameplay.md), [worldgen.md](worldgen.md) |
-| 3 | **K** | Energy beam on Fire from Dyson 20%, costing star mass | 4 | Done | [stargameplay.md](stargameplay.md), [hudandcontrols.md](hudandcontrols.md) |
+| 3 | **K** | Energy beam on Fire from Dyson 20% (removed 2026-11-17: Fire is always a rocket) | 4 | Removed | [stargameplay.md](stargameplay.md), [hudandcontrols.md](hudandcontrols.md) |
 | 4 | **L** | Colonies and terraforming; unstable colonies become gas worlds; carry on as a colony (Q3) | 4, 5 | Done, partial: the carry-on loses star, Dyson, moons, stock and people | [stargameplay.md](stargameplay.md), [planetgameplay.md](planetgameplay.md) |
 | 4 | **M** | Mining defeated worlds; pirates raid miners and rivals | 7, 8, 9 | Done, partial: no Marauder capital | [aliencivilizations.md](aliencivilizations.md), [gameevents.md](gameevents.md) |
 | later | — | The events director and its catalogue | — | Planned | [gameevents.md](gameevents.md) |
@@ -187,7 +187,7 @@ Where the concept met a standing decision, and how it was settled. All rows are 
 | "Number of pirates completely random" | escalating fleet sizes | [B]: random size, no escalation, no "next one will be bigger" toast. |
 | Shields consume energy | no shield upkeep (fun first) | [F]: 0.1 E/s a level, paid before the people are fed (Q7). |
 | Control transfers to the star at the link | engine only at Dyson 50% | [D]: control at the link with a base engine; the Dyson makes it stronger (Q1). |
-| Click-to-fire weapons, auto colony ships, auto miner priority | watch and feed, no build menu | No conflict: the beam is Fire; colony fleets and miner sites are automatic; the only order is the priority target ([K], [L], [E], [G]). |
+| Click-to-fire weapons, auto colony ships, auto miner priority | watch and feed, no build menu | No conflict: Fire launches your rockets; colony fleets and miner sites are automatic; the only order is the priority target ([K], [L], [E], [G]). |
 | Star grows when it gains planets | realism | [I]: fun first, +3% a planet; stated in stargameplay.md. |
 | "Improve brightness, halo" | background stays dim; hot planets must not look like stars | [C]: only stars get boiling layers and bloom; far light dimmed (stargameplay.md → How a star looks). |
 | Planets turn into gas giants, control lost | growth never stops play; one body, one run | [L]: colonies and system planets past the gas line become gas worlds and leave their ring; your home world keeps today's rule (Q3). |

@@ -4,10 +4,10 @@ import assert from 'node:assert/strict';
 import { blend, COMP, density, G_WORLD, R_CAP, radiusOf, START_R, youPull } from '../../src/evolution/asteroid/rules.ts';
 import { climateK, envelope, habitability, moonSlots } from '../../src/evolution/planet/rules.ts';
 import { kelvin, pressure } from '../../src/core/water.ts';
-import { BEAM_BITE, beamLeft, dose } from '../../src/evolution/civilization/rules.ts';
+import { dose } from '../../src/evolution/civilization/rules.ts';
 import {
   COLONY, COLONY_HAB, COLONY_LOST, colonyScore, dysonSpeed, heatAt, TERRA_ATM, TERRA_VOL, TERRA_WATER, terraMass, terraNeed, zoneSlot,
-  BAND, BEAM_COST, BEAM_COVER, BEAM_MIN, beamFed, beamK, beamPower, capacity, DONE, GROW, layout, PLANET_R, dysonEnergy, engineAccel, flareK, flux, glare, LINK_S, linkStep, liquidBand, luminosity, orbitGoal, lapMu, LAP_MIN, PULL_X, starMu, starPull,
+  BAND, capacity, DONE, GROW, layout, PLANET_R, dysonEnergy, engineAccel, flareK, flux, glare, LINK_S, linkStep, liquidBand, luminosity, orbitGoal, lapMu, LAP_MIN, PULL_X, starMu, starPull,
   roche, SEG_ORE, SEG_S, SEGMENTS, starColor, starKelvin, starMass, starName, starRadius, SUN, sunlight, tearRate, warmth,
 } from '../../src/evolution/star/rules.ts';
 
@@ -64,11 +64,11 @@ assert.ok((cool >> 16) === 255 && (cool & 255) < 160, `red dwarf ${cool.toString
 assert.ok((sun >> 16) === 255 && (sun & 255) > 200, `sun ${sun.toString(16)}`);
 assert.ok((hot & 255) === 255 && (hot >> 16) < 180, `blue ${hot.toString(16)}`);
 assert.ok(starName(starKelvin(0.4)) === 'Red dwarf' && starName(5800) === 'Yellow star' && starName(starKelvin(8)) === 'Blue giant');
-// Sizes in world units, the same at any mass of yours: red dwarf 800, sun 918, blue giant 1254; the smallest star a beam leaves
-// (BEAM_MIN) is 1.5× the biggest planet (R_CAP) and heavier than any spawn (0.9e7) or brown dwarf (1e7).
+// Sizes in world units, the same at any mass of yours: red dwarf 800, sun 918, blue giant 1254; the smallest star (starMass(0))
+// is 1.5× the biggest planet (R_CAP) and heavier than any spawn (0.9e7) or brown dwarf (1e7).
 assert.ok(near(starRadius(0.4), 800) && Math.abs(starRadius(1) - 918) < 1 && Math.abs(starRadius(8) - 1254) < 1);
 for (let M = 0.3; M < 20; M *= 1.05) assert.ok(starRadius(M * 1.05) > starRadius(M), `radius rises at ${M}`);
-assert.ok(starRadius(BEAM_MIN) >= 1.5 * R_CAP && BEAM_MIN * SUN > 1e7, `smallest star ${starRadius(BEAM_MIN)}`);
+assert.ok(starRadius(starMass(0)) >= 1.5 * R_CAP && starMass(0) * SUN > 1e7, `smallest star ${starRadius(starMass(0))}`);
 
 // Radiation and warmth (no Dyson), compressed with the system: a blue giant burns a civilization (field 0.6, 1 atm) at the
 // link band's inner edge, a sun or a red dwarf nowhere in it.
@@ -168,29 +168,6 @@ for (const M0 of [0.4, 0.7, 1, 2, 4, 8]) {
     assert.ok(capacity(M1) >= capacity(M) && starRadius(M1) > starRadius(M) && glare(M1) > glare(M));
     [M, n] = [M1, n + 1];
   }
-}
-// Energy beam: 100 shots take 18% of a sun; heat per shot by class; no shot takes a star under BEAM_MIN suns.
-{
-  let M = 1, n = 0;
-  for (let i = 0; i < 100; i++) M *= 1 - BEAM_COST;
-  assert.ok(near(1 - M, 0.18, 0.002), `100 shots: −${f((1 - M) * 100, 1)}%`);
-  for (M = 0.4; beamFed(M); n++) M *= 1 - BEAM_COST;
-  assert.ok(M >= BEAM_MIN && M * (1 - BEAM_COST) < BEAM_MIN && !beamFed(0.3) && beamFed(1), `refuses at ${M}`);
-  assert.ok(n >= 135 && n <= 150, `a red dwarf runs dry after ${n} shots`);
-  // Power: 1 for a sun at 20% cover, rising with cover and mass; heat 20 K × P.
-  assert.ok(near(beamPower(1, BEAM_COVER), 1) && near(beamK(1), 20) && near(beamPower(1, 1), Math.sqrt(5)));
-  for (const M of [0.4, 1, 8]) assert.ok(beamPower(M, 0.5) > beamPower(M, 0.2) && beamPower(M, 1) > beamPower(M, 0.5) && (M === 8 || beamPower(M * 2, 0.5) > beamPower(M, 0.5)));
-  // Shots to destroy a body (share of you), bite BEAM_BITE × P: within BEAM_SHATTER bites it shatters.
-  const shots = (share: number, P: number) => {
-    let m = share, k = 0;
-    while (m > 0) [m, k] = [beamLeft(m, BEAM_BITE * P), k + 1];
-    return k;
-  };
-  const row = (share: number) => [[0.4, 0.2], [1, 0.2], [1, 1], [8, 1]].map(([M, c]) => shots(share, beamPower(M, c)));
-  assert.deepEqual(row(0.01), [1, 1, 1, 1]);
-  assert.deepEqual(row(0.1), [13, 9, 4, 2]);
-  assert.deepEqual(row(0.5), [65, 49, 22, 11]);
-  console.log(`beam P: red dwarf ${f(beamPower(0.4, 0.2))}–${f(beamPower(0.4, 1))}, sun 1–${f(beamPower(1, 1))}, blue giant ${f(beamPower(8, 0.2))}–${f(beamPower(8, 1))} · shots (red dwarf 20%, sun 20%, sun full, blue giant full): 10% body ${row(0.1).join('/')}, 50% world ${row(0.5).join('/')} · a red dwarf runs dry after ${n} shots (${f(M, 3)} suns)`);
 }
 console.log(`star ok: link ${LINK_S} s (decay ×2), Roche rock ${f(rRock)} / metal ${f(rMetal)} / ice ${f(rIce)} R★`);
 // Colonies: the fleet's cost; a delivery adds 0.1 atm or 2% water; the gas line at Super-Earth mass makes a gas world;

@@ -1,0 +1,57 @@
+/* HUD primitives shared by every stage's rows (imported by evolution/asteroid/hud.ts; markup from ui/rows.ts; tokens in
+   styles/base.css). One alignment rule: every line is a fixed-height box with its items centred on it; text is trimmed to its
+   cap height and baseline, so a label's ink centre is its box centre and it lines up with an icon by the box alone. */
+
+/* 12×12 stroke icons (ui/rows.ts icon): block, so no baseline gap moves them; 16 px in section headers. */
+#game-hud .icon { display: block; flex: none; width: var(--ui-icon); height: var(--ui-icon); fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linejoin: round; stroke-linecap: round; }
+#game-hud .icon.lg { width: var(--ui-icon-lg); height: var(--ui-icon-lg); stroke-width: 1.1; }
+#game-hud .icon .fill { fill: currentColor; stroke: none; }
+
+/* One readout line on the card's shared columns: icon (centred in the header icon's width) · label · track · value. Every
+   row's track starts and ends at the same x, every value is right-aligned on the same edge. */
+#game-hud .row { display: grid; grid-template-columns: var(--ui-icon-lg) var(--ui-label) minmax(0, 1fr) var(--ui-val); align-items: center; justify-items: start; column-gap: var(--ui-s2); min-width: 0; height: var(--ui-row); }
+#game-hud .row > .icon { justify-self: center; }
+#game-hud .row > :is(.bar, .scale, .gauge, .t) { justify-self: stretch; }
+#game-hud .row > .v { justify-self: stretch; }
+#game-hud .row > .t { font-size: var(--ui-value); font-weight: 600; white-space: nowrap; text-align: right; color: var(--ui-text); }
+
+/* Type: label (muted), value (bright), caption (small caps: section headers, list heads). The caption's tracking would leave a
+   gap after its last letter: taken back. */
+#game-hud .lb { font-style: normal; font-size: var(--ui-value); font-weight: 500; white-space: nowrap; color: var(--ui-muted); }
+#game-hud .cap { font-style: normal; font-size: var(--ui-caption); font-weight: 600; letter-spacing: 0.1em; margin-right: -0.1em; text-transform: uppercase; white-space: nowrap; }
+#game-hud .v { font-size: var(--ui-value); font-weight: 600; white-space: nowrap; text-align: right; color: var(--ui-text); }
+
+/* Sections: a header (16 px icon · caption · chevron when it opens a breakdown · headline value at the right), its rows; a
+   hairline centred in the gap above (no height of its own). */
+#game-hud .sec { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--ui-gap); }
+#game-hud .sec::before { content: ''; position: absolute; left: 0; right: 0; top: calc(var(--ui-s3) / -2 - 0.5px); height: 1px; background: rgb(255 255 255 / 0.08); }
+#game-hud .hd { display: flex; align-items: center; gap: var(--ui-s2); height: var(--ui-icon-lg); min-width: 0; color: var(--accent); }
+@media (pointer: coarse) { #game-hud .hd { height: var(--ui-tap); } } /* a finger's target */
+#game-hud .hd > .cap { color: var(--accent); }
+#game-hud .hd > .v { margin-left: auto; min-width: 0; overflow-x: clip; text-overflow: ellipsis; font-weight: 500; color: var(--ui-text); } /* the live summary; clip, not hidden: the trimmed ink stays */
+#game-hud .hd > .v b { font-weight: 600; }
+#game-hud .chev { flex: none; width: var(--ui-s2); height: var(--ui-s2); margin: 0 var(--ui-s1); border: solid var(--ui-muted); border-width: 0 1.5px 1.5px 0; rotate: -45deg; transition: rotate 0.15s; }
+/* A section's body: shown while the section is open (asteroid/hud.ts .open), the chevron turned down. */
+#game-hud .sec > .body { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--ui-gap); }
+#game-hud .sec:not(.open) > .body { display: none; }
+#game-hud .sec.open > .hd .chev { rotate: 45deg; }
+
+/* Trimmed text: the HUD's leaf text elements (a flex or grid container cannot trim its items: trim the item). Never on
+   an element with overflow hidden (descenders would be cut); wrapping prose keeps its own line height. */
+#game-hud :is(.cap, .lb, .v, .row > .t, .age, .head .name, .head .mass, .ratio, .label > span, .mix > i > span, .track em, .sub, .tip,
+  .moonsize, .chips .life, .star-link) { text-box: trim-both cap alphabetic; }
+#game-hud :is(.cap, .lb, .v, .row > .t, .age, .head .mass, .ratio, .mix > i > span, .track em, .moonsize, .chips .life) { line-height: 1; }
+/* Without text-box trim the text keeps its line box, whose centre sits under Oxanium's cap centre: icons follow. */
+@supports not (text-box: trim-both cap alphabetic) {
+  #game-hud .icon { translate: 0 var(--ui-optical); }
+  #game-hud .chips .icon { translate: none; } /* icon-only chips */
+}
+
+/* Tracks: a segmented bar (fill shows through 1 px gaps every 6 px) and a scale (dim track, bright band where life wants
+   it, marks at limits, the white needle is you). One track height, one needle (an icon tall) for every gauge. */
+#game-hud .bar { position: relative; height: var(--ui-track); background: rgb(255 255 255 / 0.07); overflow: hidden; }
+#game-hud .bar > i { position: absolute; inset: 0 auto 0 0; background: var(--accent); transition: width 0.25s ease-out; }
+#game-hud .bar::after { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(90deg, transparent 0 5px, rgb(5 9 22 / 0.85) 5px 6px); }
+#game-hud .scale { position: relative; height: var(--ui-track); background: rgb(255 255 255 / 0.08); }
+#game-hud .scale .band { position: absolute; top: 0; bottom: 0; background: var(--ok); opacity: 0.7; text-decoration: none; }
+#game-hud .needle { position: absolute; top: calc((var(--ui-track) - var(--ui-icon)) / 2); height: var(--ui-icon); width: 2px; margin-left: -1px; background: #fff; box-shadow: 0 0 6px #fff; transition: left 0.25s; }
