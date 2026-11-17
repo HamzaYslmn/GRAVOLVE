@@ -1,5 +1,5 @@
 import { clamp } from '../../core/rng.ts';
-import { bearing, MAX_DT, SPECK, steps, thrust, want, wrap, type Craft } from './flight.ts';
+import { bearing, MAX_DT, SPECK, steps, wrap, type Craft } from './flight.ts';
 import { swept, touch } from './crash.ts';
 import type { Disc } from './nav.ts';
 import { ROCKET } from './rules.ts';
@@ -46,7 +46,7 @@ export const JET = 0xfff0c0; // a rocket flame's white-yellow core, both sides
 /** A flash at each round's launch point for `s` s: least(k, px) across (lances and shells least(heavyK, heavyPx)). */
 export const MUZZLE = { s: 0.07, k: 26, px: 18, heavyK: 44, heavyPx: 30 };
 export const DOT_LIT = 0.2, DOT_GLOW = 0.42;
-export const MAX_GLOW = 400; // additive quads a frame at most (the worst case ≈ 280: guns.test.ts)
+export const MAX_GLOW = 400; // additive quads a frame at most (the worst case 327: guns.test.ts)
 /** `k` ship units (`unit` world units each), but at least `px` screen pixels at `zoom`. */
 export const least = (k: number, px: number, unit: number, zoom: number) => Math.max(k * unit, px / zoom);
 const JITTER = 0.2; // × the spread: each round's own scatter round the burst's aim
@@ -193,9 +193,9 @@ export function menace(c: Craft, ships: readonly { x: number; y: number; vx?: nu
 export type Seek = () => { x: number; y: number; vx: number; vy: number; r?: number } | undefined;
 
 // Rockets (rules.ts ROCKET; one pool for every side): off a pad on the shooter's surface ROCKET.pad rad off the aim (padShip
-// at a ship; less from near; sides alternating), ROCKET.boost s straight up, then flown by flight.ts `thrust` in its launch frame (the
-// shooter's velocity at launch): the nose eases toward its velocity + nav × the lead error, ≤ turn rad/s, so it pitches
-// over and arcs in, never snaps round. Its fuel is its range: the distance flown in that frame, so turning costs range.
+// at a ship; less from near; sides alternating), then real thrust in its launch frame (the shooter's velocity at launch):
+// the nose turns ≤ turn rad/s toward the push it wants, the motor pushes only along the nose (≤ acc), so the velocity lags
+// the nose and it slips through turns. Its fuel is its range: the distance flown in that frame, so turning costs range.
 // The lock is lost for good once the lead point is more than `cone` off its velocity or the target is gone: it flies
 // straight to the end of its fuel. Any body (bar `own`) stops it; an enemy hull it touches, or one near its locked ship
 // when the fuze fires, takes the direct hit (`kill(true)`: through shields), others within `blast` the blast.
@@ -212,21 +212,29 @@ export type RocketLaunch = {
   team: Team; x: number; y: number; vx: number; vy: number; r: number; tx: number; ty: number; R: number; range: number;
   k?: number; seek?: Seek; fuze?: boolean; target?: unknown; from?: unknown; own?: (b: Disc) => boolean; hit?: Rocket['hit'];
 };
-/** One sub-step of `h` s of a rocket's motor and guidance (rules.ts ROCKET). */
+const TAU = 0.2; // s: a velocity error is thrust away over this long
+const TRIM = 0.2; // x acc: the pull of the nose back onto its velocity (cruise: nose along the path)
+/** One sub-step of `h` s of a rocket's motor and guidance (rules.ts ROCKET): real thrust, along the nose only. */
 export function guide(m: Rocket, h: number, q = ROCKET) {
   m.age += h;
-  const V = q.speed * m.R, wx = m.vx - m.v0x, wy = m.vy - m.v0y;
-  let dir = m.heading;
-  if (m.lock && m.age > q.boost) {
-    const t = m.seek?.(), vb = wx * wx + wy * wy > 1e-12 ? Math.atan2(wy, wx) : m.heading;
-    const off = t ? wrap(bearing(t.x - m.x, t.y - m.y, t.vx - m.v0x, t.vy - m.v0y, V) - vb) : Infinity;
-    if (Math.abs(off) > q.cone) m.lock = false;
-    else dir = vb + clamp(q.nav * off, -q.aim, q.aim);
+  const V = q.speed * m.R, A = q.acc * m.R, wx = m.vx - m.v0x, wy = m.vy - m.v0y; // in the launch frame
+  const vb = wx * wx + wy * wy > 1e-12 ? Math.atan2(wy, wx) : m.heading;
+  let dir = vb; // no lock: straight on
+  if (m.lock) {
+    const t = m.seek?.(), lead = t ? bearing(t.x - m.x, t.y - m.y, t.vx - m.v0x, t.vy - m.v0y, V) : NaN;
+    if (!t || Math.abs(wrap(lead - vb)) > q.cone) m.lock = false;
+    else dir = lead;
   }
-  [want.x, want.y, m.vx, m.vy] = [Math.cos(dir) * V, Math.sin(dir) * V, wx, wy];
-  thrust(m, q.acc * m.R, q.turn, h, 0, 0, V); // in the launch frame
-  m.fuel -= Math.hypot(m.vx, m.vy) * h;
-  [m.vx, m.vy, m.x, m.y] = [m.vx + m.v0x, m.vy + m.v0y, m.x + m.v0x * h, m.y + m.v0y * h];
+  let ax = (Math.cos(dir) * V - wx) / TAU, ay = (Math.sin(dir) * V - wy) / TAU; // the push it wants
+  const a = Math.hypot(ax, ay);
+  if (a > A) [ax, ay] = [(ax * A) / a, (ay * A) / a];
+  const err = wrap(Math.atan2(ay + TRIM * A * Math.sin(vb), ax + TRIM * A * Math.cos(vb)) - m.heading);
+  m.heading += clamp(err, -q.turn * h, q.turn * h);
+  const nx = Math.cos(m.heading), ny = Math.sin(m.heading), thr = clamp(ax * nx + ay * ny, 0, A); // the motor gives its share along the nose
+  const ux = wx + nx * thr * h, uy = wy + ny * thr * h;
+  m.fuel -= Math.hypot(ux, uy) * h;
+  [m.vx, m.vy, m.x, m.y] = [ux + m.v0x, uy + m.v0y, m.x + (ux + m.v0x) * h, m.y + (uy + m.v0y) * h];
+  m.burn += (thr / A - m.burn) * (1 - Math.exp(-h / 0.1));
 }
 export function createRockets(cap = ROCKET.max, rnd: () => number = Math.random) {
   const live: Rocket[] = [], q = ROCKET;

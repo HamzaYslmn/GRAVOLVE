@@ -56,7 +56,7 @@ export const REACTOR = 1; // E/s the reactors add at Planet mass with fuel in st
 export const FUEL_E = 40; // E·s a unit of fuel gives at Planet mass: a full reactor burns 1.5 u/min
 export const FUEL_LOW = 10; // u: under this the reactors throttle down (no cliff)
 export const FUEL_RESERVE = 30; // u: under this miners weigh radioactive ore double
-export const WORK_E = 0.2; // E/s each working industry draws: a build, the rockets on a priority, the shield mending
+export const WORK_E = 0.2; // E/s each working industry draws: a build, the rocket magazine refilling, the shield mending
 const REFINE_S = 180; // s (e-folding): your people dig the radioactive rock in your world into fuel
 export const reactor = (fuel: number, m: number) => REACTOR * size(m) * clamp(fuel / FUEL_LOW, 0, 1);
 /** Fuel (u/s) burnt for what `need` exceeds the free energy `free` (inner heat + solar + Dyson), at most the reactors' power. */
@@ -126,12 +126,12 @@ export type Wreck = keyof typeof SALVAGE;
 // ---- Rockets (guns.ts createRockets; one rocket for you and rival worlds): yours on Fire (combat.ts), `ore` each from a
 // magazine of salvo(T), one refilled every `reload` s × the energy fed (stage.ts). In its unit R: off a pad ±`pad` rad off
 // the aim (`padShip` at a ship; sides alternate so a world can sidestep one; × distance / `near` R inside that) at `lift`
-// R/s, `boost` s straight, then `acc` R/s² to `speed` R/s (slower than a round: seen coming), the nose at its velocity +
-// `nav` × the lead error (±`aim`), ≤ `turn` rad/s (a 90° turn ≥ 1.1 s); lock lost for good past `cone`; fuel = the fire
+// R/s, then real thrust (guns.ts guide): `acc` R/s² along the nose only, to `speed` R/s (slower than a round: seen
+// coming); the nose turns ≤ `turn` rad/s, the path lags it (a 90° swing ≥ 1.1 s); lock lost for good past `cone`; fuel = the fire
 // range (mining.ts fireReach); bursts within `fuze` R of a locked ship, `blast` R; `k` K on a world; `size` × a ship's
-// radius to rounds; `len` R long, ≥ `px` screen px. A free body ≤ `share` of you breaks into `pieces`; a bigger one or a
-// rival's rock loses `chip.bite` of your mass and warms `chip.k` K (ships.ts chip).
-export const ROCKET = { speed: 12, acc: 10, lift: 2, boost: 0.3, turn: 1.4, nav: 3, aim: 1.5, cone: 1.6, pad: 0.5, padShip: 0.3, near: 10, fuze: 0.6, blast: 0.6, k: 20, ore: 5, reload: 6, size: 0.12, max: 12, len: 0.3, px: 14, share: 0.25, pieces: 8, chip: { bite: 0.0025, k: 40 } };
+// radius to rounds; `len` R long, drawn in the ships' unit (bolts.ts), smaller than any ship. A free body ≤ `share` of you
+// breaks into `pieces`; a bigger one or a rival's rock loses `chip.bite` of your mass and warms `chip.k` K (ships.ts chip).
+export const ROCKET = { speed: 12, acc: 16, lift: 2, turn: 2.6, cone: 1.6, pad: 0.7, padShip: 0.3, near: 10, fuze: 0.6, blast: 0.6, k: 20, ore: 5, reload: 6, size: 0.12, max: 12, len: 0.07, share: 0.25, pieces: 8, chip: { bite: 0.0025, k: 40 } };
 
 // ---- Breaking (ships.ts, stage.ts): your guns break only your priority target, into pieces you can take: under `edible`
 // a body burns up whole in your air or lands under HIT_MIN, so it feeds you. Pieces a piece cap left unsafe are kicked
@@ -188,8 +188,8 @@ export function deflect(px: number, py: number, wx: number, wy: number, contact:
 // ground. Its charge (SHIELD_K a level) pays shieldPunch for the share of the body it stops: SHIELD_STOP of your mass per
 // level at up to the stick speed. A punch it can pay in full bounces the body off (asteroid/rules.ts shellPass); a bigger
 // one takes it to its floor (SHIELD_FLOOR below 0: the shatter) and stops that share, vaporised on the shell; the rest goes
-// on, lighter and slower, and lands by the usual rules. A body that would deliver under HIT_MIN after your air (food,
-// burn-up) or is as heavy as you is not its business. It regenerates SHIELD_REGEN of its maximum per second. Weapon fire
+// on, lighter and slower, and lands by the usual rules; a world pays the same but comes on whole (asteroid/rules.ts shellWorld).
+// A body that would deliver under HIT_MIN after your air (food, burn-up) is not its business. It regenerates SHIELD_REGEN of its maximum per second. Weapon fire
 // is different (shieldShot): every hit counts, and it stops the mending for SHIELD_STUN s.
 export const SHIELD_K = 30; // K per level
 export const SHIELD_REGEN = 0.01;
@@ -206,16 +206,16 @@ export const shellR = (R: number, level: number) => R * (1.18 + 0.05 * Math.max(
 /** Charge (K) it costs to stop `share` of your mass closing at `v` stick speeds (normal to the shell; max(1, v) as worldHeat). */
 export const shieldPunch = (share: number, v: number) => SHIELD_K * (share / SHIELD_STOP) * Math.max(1, v);
 const room = (sh: Shield) => sh.s - SHIELD_FLOOR * shieldMax(sh);
-const engages = (sh: Shield, kelvin: number, share: number) => sh.level > 0 && sh.s > 0 && kelvin >= HIT_MIN && share < 1;
+const engages = (sh: Shield, kelvin: number) => sh.level > 0 && sh.s > 0 && kelvin >= HIT_MIN;
 /** A body of `share` closing at `v` stick speeds that would deliver `kelvin` at your ground meets the shell: pays for and returns the share stopped (1: held, it bounces; 0: it passes untouched). */
 export function shieldMeet(sh: Shield, kelvin: number, share: number, v: number) {
-  if (!engages(sh, kelvin, share)) return 0;
+  if (!engages(sh, kelvin)) return 0;
   const P = shieldPunch(share, v), take = Math.min(P, room(sh));
   sh.s -= take;
   return take >= P ? 1 : take / P;
 }
 /** Would the shell hold this body whole (shieldMeet 1)? The caller checks HIT_MIN (ships.ts defend). */
-export const shieldHolds = (sh: Shield, share: number, v: number) => engages(sh, HIT_MIN, share) && shieldPunch(share, v) <= room(sh);
+export const shieldHolds = (sh: Shield, share: number, v: number) => engages(sh, HIT_MIN) && shieldPunch(share, v) <= room(sh);
 /** Weapon fire of `k` K: no minimum, no size or range gate. While up the shield takes it down to its floor; every hit, up or down, stops the mending for SHIELD_STUN s. Returns the K that gets through (all of it while down). */
 export function shieldShot(sh: Shield, k: number) {
   if (sh.level <= 0) return k;
@@ -225,6 +225,19 @@ export function shieldShot(sh: Shield, k: number) {
   sh.s -= take;
   return k - take;
 }
+// Strain (user, 2026-11-17): a body of GIANT_HIT or more on course for your ground strains the shell before it touches it:
+// the charge is capped from STRAIN.from s before ground contact down to its floor at STRAIN.to s, so it breaks with time to
+// flee. Leaving, or an orbit that misses the ground, strains nothing; backing off stops the drain and regen refills it.
+export const STRAIN = { from: 1.5, to: 0.6 };
+/** Seconds until a body at offset p (relative velocity w, pull mu = relative acceleration × d²) reaches contact distance c: 0 touching, Infinity leaving or missing. */
+export function landIn(px: number, py: number, wx: number, wy: number, c: number, mu: number) {
+  const d = Math.hypot(px, py), g = d - c, vr = -(px * wx + py * wy) / d, L = px * wy - py * wx;
+  if (g <= 0) return 0;
+  if (vr < 0 || L * L > c * c * (wx * wx + wy * wy + 2 * mu * (1 / c - 1 / d))) return Infinity; // leaving, or its periapsis is above c
+  return (2 * g) / (vr + Math.sqrt(vr * vr + (2 * mu * g) / (d * d))); // the pull at d, held: reads a little long
+}
+/** The share of its maximum the shield may hold with a world `tau` s (landIn) from your ground. */
+export const shieldStrain = (tau: number) => clamp((tau - STRAIN.to) / (STRAIN.from - STRAIN.to), 0, 1);
 /** Regenerates `fed` (shieldFed) × `rate` (the energy fed) × the normal rate up to `fed` × its maximum; nothing while stunned. */
 export function shieldRegen(sh: Shield, dt: number, fed = 1, rate = 1) {
   if (sh.stun) [dt, sh.stun] = [Math.max(0, dt - sh.stun), Math.max(0, sh.stun - dt)];
@@ -331,8 +344,8 @@ export const FRIGATE_STOCK = 4;
 export const FRIGATE_S = 60;
 /** Fighters in a rival war wave (its frigates go too). */
 export const waveFighters = (L: number) => clamp(Math.round(L), 1, 3);
-/** Rockets: your magazine by tier (1/2/3 from tiers 1/3/5), a rival's salvo by level + its temper's SALVO_LEAD. */
-export const salvo = (T: number) => (T >= 5 ? 3 : T >= 3 ? 2 : 1);
+/** Rockets: your magazine by tier (2/3/4 from tiers 1/3/5), a rival's salvo by level + its temper's SALVO_LEAD. */
+export const salvo = (T: number) => (T >= 5 ? 4 : T >= 3 ? 3 : 2);
 export const rivalSalvo = (L: number, lead = 0) => clamp(Math.round(L) + lead, 1, 4);
 
 // ---- Planetary combat (docs/civilizationgameplay.md "Battles"), the same rules both sides. Every weapon hit lands on the

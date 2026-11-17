@@ -5,7 +5,7 @@ import { K_PER_HEAT } from '../../core/water';
 import type { Container, Renderer } from 'pixi.js';
 import type { Fx } from '../../render/fx';
 import { absorb, compTint, drop, shed, type Body, type Hit } from '../asteroid/body';
-import { burnShare, pieceShares } from '../asteroid/rules';
+import { burnShare, G_WORLD, GIANT_HIT, gravitates, pairPull, pieceShares, pullMass, shellWorld, youPull } from '../asteroid/rules';
 import { EXTINCT, GAS_WARN, MOON_SHARE } from '../planet/rules';
 import type { Moons } from '../planet/moons';
 import { createCivHud } from './hud';
@@ -13,7 +13,7 @@ import { assign, BIG, EFFICIENCY, inReach, minerCap, PER_SITE, reach, RESCORE, s
 import { clamp } from '../../core/rng';
 import {
   AIR_HIGH, AIR_LOW, ASLEEP_FALL, buildOrder, buildSpeed, capacity, cityLevel, cutSpread, deflect, dose, DOSE_SAFE, energy, fedCapacity, FLEET, pieceSize, split, fleetCap, mineMix, MINE_RATE, NEED, P0, popHit, popStep,
-  FUEL_LOW, FUEL_RESERVE, fuelBurn, geo, homeDig, HOME_VOL, mineable, reactor, radioDose, radioLimit, refine, ROCKET, solar, solarWings, WORK_E, shellR, SHIELD_K, SHIELD_LEVELS, shieldCost, shieldFed, shieldHolds, shieldMax, shieldMeet, shieldRegen, shieldShot, START_ORE, START_SHIPS, tier, UNIT, units, upkeep,
+  FUEL_LOW, FUEL_RESERVE, fuelBurn, geo, homeDig, HOME_VOL, mineable, reactor, radioDose, radioLimit, refine, ROCKET, solar, solarWings, WORK_E, shellR, SHIELD_FLOOR, SHIELD_K, SHIELD_LEVELS, landIn, shieldStrain, shieldCost, shieldFed, shieldHolds, shieldMax, shieldMeet, shieldRegen, shieldShot, START_ORE, START_SHIPS, tier, UNIT, units, upkeep,
   ARMS, salvo, SIEGE, siegeWing, sortieStep, weaponHit, type Arm, type Raid,
   type Lack, type Ore, type Shield, type ShipClass, type Sortie, type Stocks,
 } from './rules';
@@ -77,6 +77,22 @@ const LAND_NEWS: Record<Ore, [string, string]> = {
   gas: ['Miners bring air', 'Gas from your moons thickens the sky'],
   metal: ['Miners bring iron', 'Metal from your moons strengthens the field'],
 };
+
+/** Shield strain (rules.ts landIn, shieldStrain): the body of GIANT_HIT or more soonest on your ground caps the charge; each quarter lost ripples the shell on its side, the last breaks it. */
+function strain(me: Body, near: Body[], sh: Shield, view: Pick<ReturnType<typeof createCivView>, 'ripple' | 'breakShield'>) {
+  let tau = Infinity, by: Body | undefined;
+  for (const b of near) {
+    if (b.m < GIANT_HIT * me.m || me.guard?.own?.(b)) continue;
+    const mu = gravitates(b) ? G_WORLD * pairPull(youPull(me.m, me.r), me.m, pullMass(b.m, me.m), b.m) * (me.m + b.m) : 0; // as field.ts gravity
+    const t = landIn(b.motion.x - me.motion.x, b.motion.y - me.motion.y, b.motion.vx - me.motion.vx, b.motion.vy - me.motion.vy, me.r + b.r, mu);
+    if (t < tau) [tau, by] = [t, b];
+  }
+  const max = shieldMax(sh), cap = shieldStrain(tau) * max, s0 = sh.s;
+  if (!by || s0 <= cap) return;
+  sh.s = cap > 0 ? cap : SHIELD_FLOOR * max;
+  if (Math.ceil((4 * s0) / max) !== Math.ceil((4 * sh.s) / max)) view.ripple(by.motion.x, by.motion.y);
+  if (sh.s <= 0) [view.breakShield(), sfx()?.play('shield', 1, 0.5)];
+}
 
 export function createCivilization(layer: Container, me: Body, renderer: Renderer, fx: Fx, moons: Moons, panel: HTMLElement, news: News, field: () => Field) {
   const view = createCivView(layer, me, renderer, fx);
@@ -164,10 +180,10 @@ export function createCivilization(layer: Container, me: Body, renderer: Rendere
   me.guard = { r: 0, meet(b, v, x, y) {
     const s0 = shield.s, st = strike(me, b, burnShare(pressure)), k = active ? shieldMeet(shield, st.kelvin, st.share, v / st.vs) : 0, held = k >= 1;
     if (!k) return 0;
-    [view.ripple(x, y), fx.flash(x, y, b.r * 2, 8, b.r * 3), sfx()?.play('shield', held ? 0.8 : 1, held ? 1 : 0.5)];
-    if (!held) fx.burst(x, y, 14, b.r * 0.3, b.r * 3, 0xffd9a8); // the stopped share vaporises on the shell
-    if (held) news('absorbed', 'Shield holds', 'The veil threw it back');
-    else news('overwhelmed', 'Shield broken', `The veil stopped ${Math.round(k * 100)}% of it · the rest lands lighter and slower`);
+    const world = shellWorld(b, me.m), fr = Math.min(b.r, 0.2 * me.r); // a world drains the shell and comes on whole (body.ts shell)
+    [view.ripple(x, y), fx.flash(x, y, fr * 2, 8, fr * 3), sfx()?.play('shield', held ? 0.8 : 1, held ? 1 : 0.5)];
+    if (!held && !world) fx.burst(x, y, 14, fr * 0.3, fr * 3, 0xffd9a8); // the stopped share vaporises on the shell
+    if (!world) void (held ? news('absorbed', 'Shield holds', 'The veil threw it back') : news('overwhelmed', 'Shield broken', `The veil stopped ${Math.round(k * 100)}% of it · the rest lands lighter and slower`));
     if (s0 > 0 && shield.s <= 0) view.breakShield();
     return k;
   } };
@@ -309,6 +325,7 @@ export function createCivilization(layer: Container, me: Body, renderer: Rendere
 
       // The shield runs on what the people leave; asleep, it goes out.
       shieldRegen(shield, dt, active ? shieldFed(E, shield.level) : 0, fed);
+      if (active && shield.s > 0) strain(me, near, shield, view);
       me.guard!.r = active && shield.s > 0 ? shellR(me.r, shield.level) : 0;
       // Builds, the first one wanted (each class to its cap; a shield level once its volatiles are in), waiting for its ore:
       // a frigate, a fighter, a shield level, a probe.

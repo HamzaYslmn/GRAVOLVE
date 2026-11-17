@@ -10,7 +10,7 @@ import { drop, shed, type Body } from '../asteroid/body';
 import type { Moons } from '../planet/moons';
 import { bumps } from './crash';
 import { SPECK } from './flight';
-import { createRockets, createShots, MAX_GLOW, type Hull, type Rockets, type Seek, type Shots, type Team } from './guns';
+import { createRockets, createShots, MAX_GLOW, type Hull, type Rocket, type Rockets, type Seek, type Shots, type Team } from './guns';
 import { drawBolts, heavy } from './bolts';
 import { fireReach } from './mining';
 import { createPirates } from './pirates';
@@ -124,10 +124,13 @@ export function createCombat(layer: Container, me: Body, renderer: Renderer, kit
   function launch(civ: Civilization, at: Vec, target?: Body) {
     const z = ctx.cam.zoom, foe = target ? undefined : civ.foeAt(at, PICK_PX / z), b = target ?? (foe ? undefined : bodyAt(at)), why = civ.fire();
     if (why !== 'ok') return void (why && kit.fx.note(at.x, at.y, why === 'ore' ? 'No ore' : 'Reloading', 1 / z));
-    const seek: Seek | undefined = foe ? () => (alive.has(foe) ? { x: foe.x, y: foe.y, vx: foe.vx ?? 0, vy: foe.vy ?? 0 } : undefined) : b ? () => (b.m ? { ...b.motion, r: b.r } : undefined) : undefined;
+    const pm = me.motion, { vx, vy } = pm, { x: px, y: py } = at;
+    let m: Rocket | undefined;
+    // A point shot steers to the point, still in its launch frame (where you clicked, while you coast); past it the lead leaves `cone` and it flies on.
+    const seek: Seek = foe ? () => (alive.has(foe) ? { x: foe.x, y: foe.y, vx: foe.vx ?? 0, vy: foe.vy ?? 0 } : undefined) : b ? () => (b.m ? { ...b.motion, r: b.r } : undefined) : () => ({ x: px + vx * (m?.age ?? 0), y: py + vy * (m?.age ?? 0), vx, vy });
     if (foe) alive.add(foe);
-    const pm = me.motion, t = seek?.() ?? at;
-    rockets.launch({ team: 'you', x: pm.x, y: pm.y, vx: pm.vx, vy: pm.vy, r: me.r, tx: t.x, ty: t.y, R: me.r, range: fireReach(me), seek, fuze: !!foe, target: foe ?? b, from: me, own: (q) => q === me || moons.owns(q as Body) });
+    const t = seek() ?? at;
+    m = rockets.launch({ team: 'you', x: pm.x, y: pm.y, vx, vy, r: me.r, tx: t.x, ty: t.y, R: me.r, range: fireReach(me), seek, fuze: !!foe, target: foe ?? b, from: me, own: (q) => q === me || moons.owns(q as Body) });
     kit.sfx.play('rocket', 0.45, 1);
     news('rocket1', 'Rockets', `Click or tap launches a rocket at what you aim at · ${ROCKET.ore} ore · it turns, but never sharply`);
   }

@@ -260,8 +260,8 @@ console.log(`rival worlds ok: ${[...marks].map(([e, k]) => `${e.name} melts at $
   // player.ts thrustOf): your rockets (rules.ts ROCKET, guns.ts createRockets: a salvo of 1–3 off your surface, pads
   // alternating) at it on its circular station `keep` R off you; it sees the launch, reacts after 0–0.4 s, builds its thrust
   // over DODGE.ramp (its last thrust fed back) across the rocket's line of sight, the way it already crosses it, until they
-  // are gone, then brakes back onto its station (A_ENG engines alone cannot get it out of the way). The rockets turn at most
-  // ROCKET.turn and fly 16.8 R (one moon slot): whichever way it steps about half land, and a salvo of 2–3 always lands one.
+  // are gone, then brakes back onto its station (A_ENG engines alone cannot get it out of the way). The rockets fly by real
+  // thrust (nose ≤ ROCKET.turn, push ≤ ROCKET.acc), 16.8 R (one moon slot): whichever way it steps about half land, and a salvo of 2–3 always lands one.
   const s0 = sidestep(5, 0.1, 9, 0);
   assert.ok(s0.y > 0 && Math.abs(s0.x) < 0.03 * DODGE.v, 'it steps across a rocket\'s line of sight, on its miss\'s side');
   assert.ok(sidestep(5, 0.1, 9, 0, -1).y < 0, 'or the way it already crosses that line');

@@ -5,8 +5,8 @@ import type { Vec } from '../core/entity';
 import { clamp } from '../core/rng';
 import { overCard } from './tip';
 
-// The soft reticle: replaces the OS cursor over the game while you have a weapon (the mass driver
-// or the beam). The cooldown is a ring that fills around it; full = ready. No aim line, numbers or mode switch. Two weapons may
+// The soft reticle: replaces the OS cursor over the game while you have a weapon (rockets on
+// Fire). The cooldown is a ring that fills around it; full = ready. No aim line, numbers or mode switch. Two weapons may
 // each own one (only one shows at a time); the OS cursor stays hidden while any is shown.
 let showing = 0;
 
@@ -42,7 +42,7 @@ function createReticle(canvas: HTMLElement) {
   };
 }
 
-/** A weapon's readout (combat.ts driver/beam): the reticle under the mouse (the OS cursor over a HUD card), on touch the cooldown as an arc of radius r round x, y. */
+/** A weapon's readout (combat.ts rockets: the magazine): the reticle under the mouse (the OS cursor over a HUD card), on touch the cooldown as an arc of radius r round x, y. */
 export function createReadout(canvas: HTMLElement, input: Controls) {
   const reticle = createReticle(canvas);
   return {

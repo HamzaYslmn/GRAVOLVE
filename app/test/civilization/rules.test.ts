@@ -3,7 +3,7 @@
 // (ARMS: weapon fire on shields, the stun, landings, time-to-break table, a rival's rock), the shield as a shell (a damage
 // table), its burn-up rule, shield layers, the siege switch, rival level and mass by temper.
 import assert from 'node:assert/strict';
-import { burnShare, collide, COMP, pieceShares, radiusOf, shellPass, SPECK, V_STICK, type Phys } from '../../src/evolution/asteroid/rules.ts';
+import { airR, burnShare, collide, COMP, pieceShares, radiusOf, shellPass, SPECK, V_STICK, type Phys } from '../../src/evolution/asteroid/rules.ts';
 import { GAP, RATE } from '../../src/evolution/civilization/flight.ts';
 import { pull, trigger } from '../../src/evolution/civilization/guns.ts';
 import { EXTINCT, magnet, PLANET_M, SUPER_M } from '../../src/evolution/planet/rules.ts';
@@ -15,7 +15,7 @@ import {
   BEATEN, pace, RIVAL_PACE, RIVAL_SALVO, SALVAGE, fleetSize, HIT_MIN, intercept, RIVAL_LEAD, RIVAL_MASS, RIVAL_HIT_MAX, rivalLevel,
   CUT, CUT_SPREAD, cutSpread, edible, KEEP, pieceSize, split, strikeK, type Shield,
   ARMS, buildOrder, BURN_WAVE, LANDING, raid, rivalFrigates, SHIELD_REGEN, SHIELD_STUN, shieldShot, weaponHit, shieldLayers, siegeWing, SIEGE, sortieStep, CALM_S,
-  homeDig, HOME_RICH, HOME_VOL,
+  homeDig, HOME_RICH, HOME_VOL, salvo,
 } from '../../src/evolution/civilization/rules.ts';
 
 const near = (a: number, b: number, eps = 1e-6) => Math.abs(a - b) <= eps;
@@ -153,10 +153,10 @@ assert.equal(lack({ water: 0.7, air: 0.8, magnet: 0.6 }), undefined);
 }
 
 // Shield (rules.ts shieldMeet): a shell at shellR that pays shieldPunch for the share of a body it stops: held whole (k = 1)
-// while it can pay, else down to its −15% floor, stopping k of it; regen 1%/s. Food, burn-up, a downed shield and bodies as
-// heavy as you pass untouched.
+// while it can pay, else down to its −15% floor, stopping k of it; regen 1%/s. Food, burn-up and a downed shield pass
+// untouched; a world as heavy as you takes it to the floor at the shell (and comes on whole: body.ts shell).
 {
-  assert.ok(near(shellR(10, 1), 11.8) && near(shellR(10, 3), 12.8), 'the shell: 1.18 R at level 1, 1.28 R at level 3');
+  assert.ok(near(shellR(10, 1), 11.8) && near(shellR(10, 3), 12.8) && airR(10) > shellR(10, 3), 'the shell: 1.18 R at level 1, 1.28 R at level 3, inside the air');
   assert.ok(near(shieldPunch(SHIELD_STOP, 0.5), SHIELD_K) && near(shieldPunch(SHIELD_STOP, 2), 2 * SHIELD_K), 'a level stops SHIELD_STOP at up to the stick speed');
   const sh: Shield = { level: 1, s: SHIELD_K };
   assert.ok(shieldMeet(sh, 3, 0.01, 1) === 0 && sh.s === SHIELD_K); // a gentle meal is not its business
@@ -168,7 +168,9 @@ assert.equal(lack({ water: 0.7, air: 0.8, magnet: 0.6 }), undefined);
   assert.ok(sh.s < 0 && (shieldRegen(sh, 1.5), sh.s > 0)); // 15 s back above 0
   const full: Shield = { level: 1, s: SHIELD_K };
   assert.ok(near(shieldMeet(full, 1000, 0.05, 1), 34.5 / 60) && near(full.s, SHIELD_FLOOR * SHIELD_K), 'a full L1 stops 57.5% of a slow 5% body');
-  assert.ok(shieldMeet({ level: 3, s: 90 }, 1e5, 1, 1) === 0 && shieldMeet({ level: 0, s: 0 }, 1000, 0.01, 1) === 0, 'as heavy as you, or no shield: it passes');
+  const big: Shield = { level: 3, s: 90 };
+  assert.ok(!shieldHolds({ level: 3, s: 90 }, 1, 1) && near(shieldMeet(big, 1e5, 1, 1), 103.5 / 1200) && near(big.s, SHIELD_FLOOR * 90), 'as heavy as you: it breaks the shield at the shell');
+  assert.ok(shieldMeet({ level: 0, s: 0 }, 1000, 0.01, 1) === 0, 'no shield: it passes');
   for (const [q, L] of [[0.02, 1], [0.05, 3]]) { // a stopped body never lands: it leaves the shell
     const s: Shield = { level: L, s: SHIELD_K * L }, kk = shieldMeet(s, 1000, q, 1);
     assert.ok(kk === 1 && shellPass(kk, 5)[1] < 0 && shellPass(kk, 5)[0] === 1, `${q * 100}% slow on L${L} bounces off`);
@@ -550,9 +552,11 @@ console.log('civilization shield layers and siege: ok');
   assert.ok(SALVAGE.marauder.ore > SALVAGE.raider.ore && SALVAGE.frigate.ore > SALVAGE.fighter.ore);
   console.log('salvage: ' + Object.entries(SALVAGE).map(([k, v]) => `${k} ${v.ore} ore/${v.fuel} fuel${v.vol ? '/' + v.vol + ' Water' : ''}`).join(', '));
 }
-// The rocket (ROCKET, guns.ts createRockets): slower than a round (seen coming), a 90° turn takes over a second,
-// one hit through an open shield lands as one hit on people, a ship target gets the smaller pad.
+// The rocket (ROCKET, guns.ts createRockets): slower than a round (seen coming), its path needs over a second for a 90°
+// swing at full speed (all its thrust sideways: a lower bound), one hit through an open shield lands as one hit on people,
+// a ship target gets the smaller pad, the lock outlasts the pad.
 {
-  assert.ok(ROCKET.speed <= 0.6 * ARMS.round.u && Math.PI / 2 / ROCKET.turn >= 1.1, 'a rocket is slower than a round and cannot snap round');
-  assert.ok(ROCKET.k >= LANDING && ROCKET.padShip < ROCKET.pad && ROCKET.cone > ROCKET.aim);
+  assert.ok(ROCKET.speed <= 0.6 * ARMS.round.u && Math.PI / 2 / (ROCKET.acc / ROCKET.speed) >= 1.1, 'a rocket is slower than a round and cannot snap round');
+  assert.ok(ROCKET.k >= LANDING && ROCKET.padShip < ROCKET.pad && ROCKET.cone > ROCKET.pad);
+  assert.ok(salvo(1) === 2 && salvo(3) === 3 && salvo(5) === 4, 'your magazine 2/3/4 by tier: at least a rival pair');
 }

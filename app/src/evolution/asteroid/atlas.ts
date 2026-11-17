@@ -17,6 +17,13 @@ const ROWS = 8; // per page
 const PAGES = 2; // 128 rocks
 const FIT = 0.86; // the rock's farthest point sits at this fraction of the cell half-width
 const SPRITE_R = (CELL / 2) * FIT; // a rock sprite's radius at scale 1
+// Heat halos (body.ts heatGlow): each rock's outline grown outward, 64 px cells on one page, the rock smaller in its cell
+// to leave room; the last cell is a tight round one (baked spheres, not jagged debris). A halo sprite's scale = its rock sprite's × GLOW_K.
+const GCELL = 64, GFIT = 0.55;
+export const GLOW_K = (CELL / GCELL) * (FIT / GFIT);
+export const GLOW_R = (GCELL / 2) * GFIT; // the round halo's body radius at scale 1
+export const rockGlow = new Map<Texture, Texture>();
+export let roundGlow: Texture = Texture.WHITE;
 
 const fragment = /* glsl */ `${BAKE_FRAGMENT_HEAD}
 uniform vec4 uLobes[6];  // x, y, r, on
@@ -30,6 +37,7 @@ uniform vec4 uSurf;      // roughness, crater count, crater size, young-crater c
 uniform vec4 uLook;      // strata, unused, mottle scale, edge wobble
 uniform vec3 uKind;      // how metallic, icy and gassy the material is (0..1 each)
 uniform float uCell;
+uniform float uGlow;
 
 vec2 toShape(vec2 uv) {
   vec2 w = uv * uXform.z + uXform.xy;
@@ -67,6 +75,7 @@ void main() {
   float rough = uSurf.x * (1.0 - 0.55 * metal - 0.45 * ice); // metal and ice are smoother than rock
 
   float s = inside(p) + (fbm(p * 2.6, 3, 5.0) - 0.5) * uLook.w;
+  if (uGlow > 0.5) { finalColor = vec4(exp((6.0 + uLook.y) * min(s, 0.0)) * smoothstep(1.0, 0.8, length(uv))); return; } // halo: 1 inside, fading out
   float alpha = smoothstep(-pix * (1.0 + 5.0 * gas), pix, s); // gassy bodies have a soft, fuzzy edge
 
   // Height field.
@@ -253,11 +262,21 @@ export function rockAtlas(renderer: Renderer, seed: number): Rock[] {
     uKind: { value: new Float32Array(3), type: 'vec3<f32>' },
     uCell: { value: CELL, type: 'f32' },
     uSeed: { value: 1, type: 'f32' },
+    uGlow: { value: 0, type: 'f32' },
   });
   const u = uniforms.uniforms as Record<string, Float32Array | number>;
   const mesh = bakeMesh(CELL, fragment, uniforms);
   const pages = Array.from({ length: PAGES }, () => RenderTexture.create({ width: COLS * CELL, height: ROWS * CELL, autoGenerateMipmaps: true }));
   const per = COLS * ROWS;
+  const halos = RenderTexture.create({ width: 16 * GCELL, height: 9 * GCELL, autoGenerateMipmaps: true }); // 128 rocks + the round one
+  const gframe = (i: number) => new Rectangle((i % 16) * GCELL, Math.floor(i / 16) * GCELL, GCELL, GCELL);
+  const halo = (i: number) => {
+    (u.uXform as Float32Array)[2] *= FIT / GFIT;
+    u.uGlow = 1;
+    uniforms.update();
+    renderer.render({ container: mesh, target: halos, clear: i === 0, transform: new Matrix().scale(GCELL / CELL, GCELL / CELL).translate(gframe(i).x, gframe(i).y) });
+    u.uGlow = 0;
+  };
   const frame = (i: number) => new Rectangle(((i % per) % COLS) * CELL, Math.floor((i % per) / COLS) * CELL, CELL, CELL);
   const put = (arr: Float32Array, rows: number[][], stride = 4) => {
     arr.fill(0);
@@ -292,14 +311,22 @@ export function rockAtlas(renderer: Renderer, seed: number): Rock[] {
       clear: i % per === 0,
       transform: new Matrix().translate(frame(i).x, frame(i).y),
     });
+    halo(i);
   }
-  for (const p of pages) p.source.updateMipmaps(); // small rocks are drawn far below cell size and would shimmer
+  put(u.uLobes as Float32Array, [[0, 0, 1]]); // the round halo: one plain lobe
+  for (const k of ['uBites', 'uCuts'] as const) (u[k] as Float32Array).fill(0);
+  (u.uXform as Float32Array).set([0, 0, 1 / FIT, 0]);
+  (u.uStretch as Float32Array).set([1, 1]);
+  (u.uLook as Float32Array).set([0, 14, 0, 0]); // a tighter rim: a sphere is big, its halo would be a corona
+  halo(PAGES * per);
+  roundGlow = new Texture({ source: halos.source, frame: gframe(PAGES * per) });
+  for (const p of [...pages, halos]) p.source.updateMipmaps(); // small rocks are drawn far below cell size and would shimmer
   mesh.destroy();
-  return looks.map(({ comp, kind }, i) => ({
-    texture: new Texture({ source: pages[Math.floor(i / per)].source, frame: frame(i) }),
-    comp,
-    kind,
-  }));
+  return looks.map(({ comp, kind }, i) => {
+    const texture = new Texture({ source: pages[Math.floor(i / per)].source, frame: frame(i) });
+    rockGlow.set(texture, new Texture({ source: halos.source, frame: gframe(i) }));
+    return { texture, comp, kind };
+  });
 }
 
 /** A rock sprite whose farthest point is `radius` world units from its centre. */

@@ -8,7 +8,7 @@ import { dashRing, type Fx } from '../../render/fx';
 import { YOU } from '../../render/tech';
 import { absorb, drop, keepShape, mixRgb, shed, unmoon, type Body } from '../asteroid/body';
 import { G_WORLD, youPull } from '../asteroid/rules';
-import { APPROACH, catchStep, FEED, LANE, matchWindow, moonCap, MOON, MOON_SHARE, moonSlots, pickSlot, STOLEN_S } from './rules';
+import { APPROACH, catchStep, FEED, handsOff, LANE, matchWindow, moonCap, MOON, MOON_SHARE, moonSlots, pickSlot, STOLEN_S } from './rules';
 import { clamp } from '../../core/rng';
 import type { Foe } from '../civilization/ships';
 
@@ -56,7 +56,7 @@ let now = 0; // game seconds, module-wide so rivals.ts can mark bodies
 export const markFreed = (b: Body) => void freed.set(b, now);
 const recentlyFreed = (b: Body) => now - (freed.get(b) ?? -Infinity) < STOLEN_S;
 
-/** The heavier body `b` orbits, not `me`: bound to it within HOST_D of its radii (a held moon, a rival's rock, needs no bound test). */
+/** The heavier body `b` orbits, not `me`: bound to it within HOST_D of its radii (a rival's rock or guard moon, re-placed each frame, needs no bound test). */
 function hostOf(b: Body, near: Body[], me: Body): Body | undefined {
   let best: Body | undefined, bp = 0;
   for (const h of near) {
@@ -65,7 +65,7 @@ function hostOf(b: Body, near: Body[], me: Body): Body | undefined {
     if (d > HOST_D * h.r) continue;
     const mu = G_WORLD * h.m, vx = b.motion.vx - h.motion.vx, vy = b.motion.vy - h.motion.vy;
     // Orbiting: bound and moving round at ORBIT_V of circular at least (belt rocks drifting together are not moons).
-    if (!b.moon && (!bound(mu, rx, ry, vx, vy) || Math.abs(rx * vy - ry * vx) / (d || 1) < ORBIT_V * circular(mu, d))) continue;
+    if (!b.moon && !b.held && (!bound(mu, rx, ry, vx, vy) || Math.abs(rx * vy - ry * vx) / (d || 1) < ORBIT_V * circular(mu, d))) continue;
     if (mu / (d * d) > bp) [best, bp] = [h, mu / (d * d)];
   }
   return best;
@@ -107,8 +107,8 @@ export function createMoons(layer: Container, me: Body, input: Controls, glow: T
   }
 
   const mine = (b: Body) => moons.some((m) => m.b === b);
-  /** Could `b` be caught at all (size and the lane are checked after)? Not you, a moon (yours, or your star's planet; a rival's rock on its circle can be stolen), a rival world or core, a great comet, nor a body just let go. */
-  const catchable = (b: Body) => b !== me && b.m > 0 && (!b.moon || me.guard?.own?.(b) === false) && !b.rival && !b.held && now - (released.get(b) ?? -Infinity) >= RECAPTURE_S;
+  /** Could `b` be caught at all (size and the lane are checked after)? Not you, a moon (yours, or your star's planet; a rival's rock on its circle can be stolen), a rival world or core, a great comet, nor a body just let go. A living rival world's guard moon can (stolen). */
+  const catchable = (b: Body) => b !== me && b.m > 0 && (!b.moon || me.guard?.own?.(b) === false) && !b.rival && !handsOff(b) && now - (released.get(b) ?? -Infinity) >= RECAPTURE_S;
   const sizeOk = (b: Body) => { const cap = moonCap(b.m, b.r, me.m, me.r); return b.m >= Math.min(MOON_SHARE[0] * me.m, 0.25 * cap) && b.m <= 1.01 * cap; };
   /** The free body under a world point (within max(1.4 r, PICK_PX)), anywhere on its last LAG_S of path (a fast one has moved since the click): not you or your moons. Several: the heaviest that fits a slot, else the heaviest. */
   function under(p: Vec, near: Body[]): Body | undefined {
@@ -126,7 +126,7 @@ export function createMoons(layer: Container, me: Body, input: Controls, glow: T
 
   /** A new moon on slot `k`: pip, a ring of sparks, green ones and a popup if stolen. */
   function addMoon(b: Body, o: Orbit, k: number, theft: boolean) {
-    [b.moon, b.motion.drag, b.meteor] = [true, 0, false]; // no free gravity, never touches you, never stored
+    [b.moon, b.motion.drag, b.meteor, b.held] = [true, 0, false, false]; // no free gravity, never touches you, never stored; a guard moon no longer held
     keepShape(b); // it keeps its look: never baked round
     const pip = new Sprite({ texture: glow, anchor: 0.5, tint: MOON, alpha: 0, blendMode: 'add' });
     view.addChild(pip);

@@ -187,8 +187,9 @@ export function createCivView(layer: Container, me: Body, renderer: Renderer, fx
   return {
     /** The shield took a hit at (x, y): its lattice ripples there. */
     ripple(x: number, y: number) {
-      shield.ripple(Math.atan2(y - me.motion.y, x - me.motion.x));
-      fx.flash(x, y, me.r * 0.25, 4, me.r * 0.3);
+      const a = Math.atan2(y - me.motion.y, x - me.motion.x), rs = me.guard?.r || me.r; // flashes on the shell, never the ground
+      shield.ripple(a);
+      fx.flash(me.motion.x + Math.cos(a) * rs, me.motion.y + Math.sin(a) * rs, me.r * 0.25, 4, me.r * 0.3);
     },
     /** The shield went below 0 (its lattice shatters by itself): a burst of dust. */
     breakShield() {

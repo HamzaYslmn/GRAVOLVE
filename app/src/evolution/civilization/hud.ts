@@ -1,5 +1,5 @@
 import './hud.css';
-import { DOSE_SAFE, FLEET, FUEL_LOW, FUEL_RESERVE, NEED, P0, ROCKET, SHIELD_E, SHIELD_LEVELS, shieldCost, TIER_MAX, WORK_E } from './rules';
+import { DOSE_SAFE, FLEET, FUEL_LOW, FUEL_RESERVE, NEED, P0, ROCKET, salvo, SHIELD_E, SHIELD_LEVELS, shieldCost, TIER_MAX, WORK_E } from './rules';
 import { energyTint } from './lattice';
 import { YOU } from '../../render/tech';
 import type { CivState } from './stage';
@@ -10,9 +10,9 @@ import { addTips, cell, head, icon, num, row, signed, type IconKey } from '../..
 import { innerPx, PHONE } from '../asteroid/hud';
 
 // The civilization's sections in your card (asteroid/hud.ts), docs/hudandcontrols.md, each a header with a live summary and a
-// body its header opens: People (population, rad, shield in three cells), Energy (used / capacity and one bar of the sources
+// body its header opens: People (population, rad), Energy (used / capacity and one bar of the sources
 // always; opened: Sources and Uses), Stocks (ore, volatiles, fuel with net rates always; opened: home mines, income by source
-// and spending), Fleet (one row per class slots.ts returns, the yard). Data-driven: a source, use or fleet class slots.ts drops
+// and spending), Defence (the shield always; opened: one row per class slots.ts returns, the yard). Data-driven: a source, use or fleet class slots.ts drops
 // simply has no row.
 
 // Energy sources and uses: name, short name in the bar, icon. Keys slots.ts does not return are skipped; unknown ones never show.
@@ -43,7 +43,7 @@ const SHIP: Record<string, { name: string; art: string; count?: (q: Slot) => str
   fighter: { name: 'Fighters', art: svg('20 18 130 64', SHIP_ART.you.fighter), tip: (q) => `Fighters ${q.n}/${q.cap}: fast, light guns; 2, plus one per 20 metal your miners bring in, up to 6. ${FLEET.fighter.ore} ore.` },
   frigate: { name: 'Frigates', art: svg('20 18 130 64', SHIP_ART.you.frigate), tip: (q) => `Frigates ${q.n}/${q.cap}: slow heavy lasers that break big rocks (to ${FLEET.frigate.breaks * 100}% of you); one from tier 3, two from tier 5. ${FLEET.frigate.ore} ore.` },
   rocket: { name: 'Rockets', art: svg('0 0 12 12', `<path d="M1.5 6h5.5l3-2v4l-3-2M3 4.2 1.5 6 3 7.8" ${LINE}/>`),
-    tip: (q) => `Rockets ${q.n}/${q.cap}: left-click (or tap) launches one at what you aim at, ${ROCKET.ore} ore each. Your magazine holds 1, 2, 3 from tiers 1, 3, 5; one refills every ${ROCKET.reload} s (slower when energy is short).` },
+    tip: (q) => `Rockets ${q.n}/${q.cap}: left-click (or tap) launches one at what you aim at, ${ROCKET.ore} ore each. Your magazine holds ${salvo(1)}, ${salvo(3)}, ${salvo(5)} from tiers 1, 3, 5 (double-click ripples a pair); one refills every ${ROCKET.reload} s (slower when energy is short).` },
 };
 const span = (s: number) => (s < 90 ? `${Math.round(s)}s` : s < 5400 ? `${Math.round(s / 60)}m` : `${(s / 3600).toFixed(1)}h`);
 const cap1 = (s: string) => s[0].toUpperCase() + s.slice(1);
@@ -58,13 +58,13 @@ export function createCivHud(panel: HTMLElement) {
   el.className = 'civ';
   const li = (cls: string, k: string, name: string) => `<div class="li ${cls}-${k}" data-tip="${cls}-${k}"><i class="sw s-${k}"></i><em class="lb">${name}</em><span class="v"></span></div>`;
   const src = MAKE.filter((k) => SRC[k]), use = USE.filter((k) => USES[k]);
-  el.innerHTML = `<div class="sec people" data-s="people">${head('people', 'people', 'People')}<div class="body"><div class="cells c3">${cell('pop', 'people', 'People', 'bar')}${cell('dose', 'rad', 'Rad dose', 'scale')}${cell('shield', 'shield', 'Shield', 'bar')}</div></div></div>
+  el.innerHTML = `<div class="sec people" data-s="people">${head('people', 'people', 'People')}<div class="body"><div class="cells">${cell('pop', 'people', 'People', 'bar')}${cell('dose', 'rad', 'Rad dose', 'scale')}</div></div></div>
     <div class="sec energy" data-s="energy">${head('energy', 'bolt', 'Energy')}
       <div class="track">${src.map((k) => `<i class="s-${k}" data-tip="src-${k}">${icon(SRC[k][2])}<em></em></i>`).join('')}<i class="s-idle" data-tip="src-idle"></i><u data-tip="short"></u><s class="need"></s></div>
       <div class="body lists"><div class="list"><em class="cap">Sources</em>${src.map((k) => li('src', k, SRC[k][0])).join('')}${li('src', 'idle', 'Idle reactor')}</div><div class="list"><em class="cap">Uses</em>${use.map((k) => li('use', k, USES[k])).join('')}</div></div></div>
     <div class="sec stocks" data-s="stocks">${head('stocks', 'crate', 'Stocks')}<div class="cells c3 amt">${STOCK.map((k) => `<div class="cell st ${k}" data-tip="${k}">${icon(STOCK_ICON[k])}<em class="lb">${STOCK_NAME[k]}</em><span class="v n"></span><span class="v r"></span></div>`).join('')}</div>
       <div class="body">${row('home', 'mine', 'Home mines')}<div class="tab"><em class="cap per">Per min</em><em class="cap">Ore</em><em class="cap">Vol</em><em class="cap">Fuel</em>${(['in-home', 'in-other', 'out'] as const).map((k) => `<div class="tr ${k}" data-tip="${k}"><em class="lb">${k === 'in-home' ? 'Home' : k === 'in-other' ? 'Mining & other' : 'Spent'}</em>${STOCK.map((s) => `<span class="v ${s}"></span>`).join('')}</div>`).join('')}</div></div></div>
-    <div class="sec fleet" data-s="fleet">${head('fleet', 'ship', 'Fleet')}<div class="body"><div class="ships"></div>
+    <div class="sec fleet" data-s="fleet">${head('fleet', 'ship', 'Defence')}${row('shield', 'shield', 'Shield', 'bar')}<div class="body"><div class="ships"></div>
       <div class="row yard" data-tip="yard">${icon('yard')}<em class="lb">Yard</em><span class="job"><em class="lb"></em><div class="bar"><i></i></div></span><span class="v"></span></div></div></div>`;
   panel.querySelector(':scope > .tip')?.before(el);
   const $ = finder(el), due = throttle();
@@ -78,9 +78,9 @@ export function createCivHud(panel: HTMLElement) {
     if (cls !== undefined && node.className !== cls) node.className = cls;
   };
   const cellState = (cls: string, v: string, state: string, fill?: number) => {
-    const r = $(`.cell.${cls}`);
+    const r = $(`:is(.cell, .row).${cls}`), want = `${r.classList[0]} ${cls} ${state}`;
     text(r.querySelector('.v')!, v);
-    if (r.className !== `cell ${cls} ${state}`) r.className = `cell ${cls} ${state}`;
+    if (r.className !== want) r.className = want;
     if (fill !== undefined) r.querySelector<HTMLElement>('.bar > i')!.style.width = pct(fill);
   };
   /** u/s in, spent, from home, net, of a stock (smoothed over slots.ts FLOW_S). */
@@ -105,7 +105,7 @@ export function createCivHud(panel: HTMLElement) {
     }
     const o = rate('ore'), v = rate('vol'), f = rate('fuel'), T = s.tier;
     switch (key) {
-      case 'people': return 'Your people: how many live, the rad they take and the shield over them.';
+      case 'people': return 'Your people: how many live and the rad they take.';
       case 'pop': return `${s.pop.toFixed(1)} bn people; your world and energy can feed ${s.cap.toFixed(1)} bn.${s.trend > 0 ? ' Growing.' : s.trend < 0 ? ' Shrinking.' : ''}\nMore people: a higher tier, more ships.${T < TIER_MAX ? ` Tier ${T + 1} at ${(P0 * 2 ** T).toFixed(1)} bn.` : ''}`;
       case 'dose': return `Rad dose ${s.dose.toFixed(2)}: safe up to ${DOSE_SAFE}; past it people die.\n${tr('From your rad rock', s.rad)}\n${tr('From space', s.dose - s.rad)}\nAir and the magnetic field cut the space part; your people dig rad rock out into fuel.`;
       case 'shield': return `Shield level ${s.level} of ${SHIELD_LEVELS}, ${Math.round((100 * Math.max(0, s.shield)) / Math.max(1e-6, s.shieldMax))}% charged. A shell just outside your world: it stops hits it can pay for and burns up its share of bigger ones.\nUpkeep ${SHIELD_E} E/s per level; mending draws ${WORK_E} E/s.${s.level < SHIELD_LEVELS ? `\nNext level: ${shieldCost(s.level + 1).ore} ore and ${shieldCost(s.level + 1).vol} volatiles.` : ''}`;
@@ -122,7 +122,7 @@ export function createCivHud(panel: HTMLElement) {
       case 'in-home': return 'Home: your home mines (ore, volatiles) and the rad your people refine out of your own rock (fuel).';
       case 'in-other': return 'Mining & other: miners\' hauls from moons, rocks and beaten worlds, the Dyson lift, salvage and loot.';
       case 'out': return 'Spent: builds, rockets and raid losses (ore); shield levels (volatiles); the reactors\' burn (fuel).';
-      case 'fleet': return 'Your fleet: built automatically, one ship at a time, each class up to its own cap. Right-click a target (or E) to set the fleet\'s priority.';
+      case 'fleet': return 'Your defence: the shield over your world, and your fleet, built automatically, one ship at a time, each class up to its own cap. Right-click a target (or E) to set the fleet\'s priority.';
       case 'yard': {
         const y = s.yard, cost = y ? `${Math.ceil(y.ore)} ore${y.vol > 0 ? ` and ${Math.ceil(y.vol)} volatiles` : ''}` : '';
         return `${!y ? 'Yard idle: every class at its cap.' : y.wait ? `Next: ${y.kind}, waits for ${cost} (you have ${Math.floor(s.ore)} ore).` : y.prog > 0 ? `Building a ${y.kind}: ${Math.round(y.prog * 100)}% (paid ${cost}).` : `Next: ${y.kind}, ${cost}.`}\nCosts: probe ${FLEET.probe.ore}, fighter ${FLEET.fighter.ore}, frigate ${FLEET.frigate.ore} ore; a shield level 10 × level ore and 10 volatiles. More people build faster; short energy slows it.`;
@@ -138,15 +138,15 @@ export function createCivHud(panel: HTMLElement) {
       if (!due(dt)) return;
       const wall = acc;
       acc = 0;
-      // People: population (bar to what the world and energy can feed, trend), rad dose (safe band), shield (level, charge).
+      // People: population (bar to what the world and energy can feed, trend), rad dose (safe band); Defence's shield row (level, charge).
       const down = !s.active || s.trend < 0;
       cellState('pop', `${people(s.pop)}${down ? ' ▼' : s.trend > 0 ? ' ▲' : ''}`, down ? 'bad' : s.trend > 0 ? 'ok' : '', s.pop / Math.max(1e-6, s.cap));
-      cellState('dose', `${PHONE.matches ? '' : 'Rad '}${s.dose.toFixed(1)}`, s.harm > 0 ? 'bad' : 'ok'); // phones: the label says Rad dose
+      cellState('dose', s.dose.toFixed(1), s.harm > 0 ? 'bad' : 'ok');
       $('.dose .needle').style.left = pct(s.dose / DOSE_MAX);
       const charge = Math.max(0, s.shield) / Math.max(1e-6, s.shieldMax);
       cellState('shield', s.shield > 0 ? `Lv${s.level} ${Math.round(charge * 100)}%` : 'down', s.shield > 0 ? '' : 'bad', charge);
-      text($('.people .hd .v'), `${people(s.pop)} · Rad ${s.dose.toFixed(1)} · Shield ${s.shield > 0 ? `Lv${s.level}` : 'down'}`);
-      $('.shield').style.color = s.shield > 0 ? hex(energyTint(YOU, charge)) : ''; // down: the .bad red
+      text($('.people .hd .v'), `${people(s.pop)} · Rad ${s.dose.toFixed(1)}`);
+      $('.row.shield').style.color = s.shield > 0 ? hex(energyTint(YOU, charge)) : ''; // down: the .bad red
 
       // Energy: used / capacity (and the work rate when short); the sources labelled in one bar in MAKE order, the idle reactor
       // hollow, red past supply, a white notch at what is used.
@@ -220,7 +220,7 @@ export function createCivHud(panel: HTMLElement) {
       }
       // Yard: what it builds and its progress; the cost while it waits for ore (amber); idle. The header: ready ships, the yard.
       const y = s.yard, ready = keys.reduce((a, k) => a + s.slots[k].pips.filter((v) => v >= 1).length, 0);
-      text($('.fleet .hd .v'), `${ready} ready · ${!y ? 'Yard idle' : y.wait ? `${cap1(y.kind)} needs ${Math.ceil(y.ore)} ore` : `${cap1(y.kind)} ${Math.round(y.prog * 100)}%`}`);
+      text($('.fleet .hd .v'), `${PHONE.matches ? `Shield ${s.shield > 0 ? `${Math.round(charge * 100)}%` : 'down'} · ` : ''}${ready} ready ·${!y ? 'Yard idle' : y.wait ? `${cap1(y.kind)} needs ${Math.ceil(y.ore)} ore` : `${cap1(y.kind)} ${Math.round(y.prog * 100)}%`}`);
       text($('.job .lb'), y ? cap1(y.kind) : '');
       $('.job i').style.width = pct(y?.prog ?? 0);
       text($('.yard .v'), !y ? 'idle' : y.wait ? `${Math.ceil(y.ore)} ore` : `${Math.round(y.prog * 100)}%`, `v ${y?.wait ? 'warn' : ''}`);

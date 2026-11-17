@@ -1,7 +1,7 @@
 import { Container, Rectangle, RenderTexture, Sprite, Texture, UniformGroup, type Renderer } from 'pixi.js';
 import { clamp, smoothstep } from '../core/rng';
 import { mixRgb, type Body } from '../evolution/asteroid/body';
-import { MOLTEN } from '../evolution/asteroid/rules';
+import { airR, burnShare, MOLTEN, SPECK } from '../evolution/asteroid/rules';
 import { setSurface } from '../evolution/asteroid/sphere';
 import { LIFE_S } from '../evolution/planet/rules';
 import type { WorldState } from '../evolution/planet/stage';
@@ -13,6 +13,7 @@ import { BAKE_FRAGMENT_HEAD, bakeMesh } from './bake';
 
 const CELL = 256;
 const R0 = 0.78; // disc radius as a share of a cell's half size (room for the limb's outer glow)
+const EDGE = airR(1) / (1 + (1.3 * 0.11) / R0); // the edge layer's scale: its glow is still ~18% at airR, gone by ~1.46 R
 const EASE = 0.5; // 1/s: how fast the live layers follow the climate
 const CLOUD_S = 24; // s: one form-and-dissolve cycle of the two cloud fields
 const BOOST_S = 3; // s: a milestone brightens its layer this long, fading (alpha only: no pulse)
@@ -81,9 +82,10 @@ export function createOverlays(layer: Container, renderer: Renderer) {
   const deck = new Sprite({ texture: t.deck, anchor: 0.5, alpha: 0, tint: 0xbdb4a6 }); // murky cream-grey, not star-white
   const veil = new Sprite({ texture: t.limb, anchor: 0.5, alpha: 0, tint: 0x8f877c }); // steam haze past the rim, dim and murky (a bright halo would read as a star)
   const limb = new Sprite({ texture: t.limb, anchor: 0.5, alpha: 0, blendMode: 'add' });
-  root.addChild(cloudA, cloudB, deck, veil, limb); // one atlas: the four normal layers batch together, the limb adds one
+  const edge = new Sprite({ texture: t.limb, anchor: 0.5, alpha: 0, blendMode: 'add' }); // the air's faint outer reach, out past airR (burn-ups happen in it)
+  root.addChild(cloudA, cloudB, deck, veil, limb, edge); // one atlas: the four normal layers batch together, the two additive ones too
   layer.addChild(root);
-  const shown = { clouds: 0, deck: 0, veil: 0, air: 0, lava: 0 };
+  const shown = { clouds: 0, deck: 0, veil: 0, air: 0, edge: 0, lava: 0 };
   let phase = 0, boost = 0;
 
   return {
@@ -116,6 +118,7 @@ export function createOverlays(layer: Container, renderer: Renderer) {
       ease('clouds', liquid && p > 0.1 ? (habitable ? 0.7 : 0.45) * Math.min(1, w.waterShare / 0.1) : w.water === 'ice' && p > 0.2 ? 0.2 : 0);
       // Limb: alpha 0.7·t, t = smoothstep(−2, 0.48, log10 p).
       ease('air', 0.7 * smoothstep(-2, 0.48, Math.log10(Math.max(p, 1e-3))));
+      ease('edge', 4 * burnShare(p) > SPECK ? 0.12 + 0.3 * shown.air : 0); // any air that can burn a rock shows out to its edge
       boost = Math.max(0, boost - dt);
 
       root.position.copyFrom(b.view.position);
@@ -143,6 +146,8 @@ export function createOverlays(layer: Container, renderer: Renderer) {
       limb.tint = col;
       limb.alpha = Math.min(1, shown.air * (steam ? 0.6 : 1) + 0.35 * (boost / BOOST_S) * (shown.air > 0.01 ? 1 : 0));
       limb.scale.set(s * (1 + 0.05 * Math.min(1, p / 3))); // thicker air reaches further out
+      [edge.tint, edge.alpha] = [col, shown.edge];
+      edge.scale.set(s * EDGE);
     },
     destroy() {
       root.destroy({ children: true }); // the atlas is shared and kept

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { shapeThrust } from '../../src/core/entity.ts';
 import { K_PER_HEAT, kelvin } from '../../src/core/water.ts';
 import { HIT_MIN, SHIELD_K, shieldMeet, type Shield } from '../../src/evolution/civilization/rules.ts';
-import { bakes, MU, rank, rub, workHeat, workShare, BURN_MAX, burnShare, COMP, collide, pieceShares, SPREAD, GIANT_HIT, gravitates, pairPull, MAX_HEAT, MOLTEN, worldHeat, worldOpts, contactTime, shellContact, shellPass, shellSees, V_STICK, critSpeed, damage, DEATH_D, durability, heatCap, impactHeat as hitHeat, mergeHeat, TOP, hardness, impactHeat, massOf, need, reachGround, radiusOf, R_CAP, density, roundR, roundShape, START_R, type CollideOpts, type Comp, type Phys } from '../../src/evolution/asteroid/rules.ts';
+import { bakes, MU, rank, rub, workHeat, workShare, BURN_MAX, burnShare, COMP, collide, pieceShares, SPREAD, GIANT_HIT, gravitates, pairPull, MAX_HEAT, MOLTEN, worldHeat, worldOpts, contactTime, shellContact, shellPass, shellSees, shellWorld, V_STICK, critSpeed, damage, DEATH_D, durability, heatCap, impactHeat as hitHeat, mergeHeat, TOP, hardness, impactHeat, massOf, need, reachGround, radiusOf, R_CAP, density, roundR, roundShape, START_R, type CollideOpts, type Comp, type Phys } from '../../src/evolution/asteroid/rules.ts';
 
 const near = (a: number, b: number, tol: number) => assert.ok(Math.abs(a - b) <= tol, `${a} vs ${b}`);
 // Collision numbers below use the loose radius (the size cap, checked further down, only touches planets).
@@ -229,7 +229,8 @@ console.log(`burn-up ok: shares ${[0.24, 1, 4, 10].map((p) => (100 * burnShare(p
   const own = (b: unknown) => b === rock;
   const rock = { moon: true };
   assert.ok(!shellSees({ moon: true }) && shellSees({ moon: true }, () => false) && !shellSees(rock, own) && shellSees({}), 'your moons pass your shell; with `own`, only its own rock does');
-  assert.ok(!shellSees({ pulls: true }, own) && !shellSees({ rival: {} }, own), 'worlds and rival bodies always pass');
+  assert.ok(shellSees({ pulls: true }, own) && shellSees({ rival: {} }, own), 'worlds and rival bodies meet the shell too');
+  assert.ok([{ pulls: true, m: 1 }, { rival: {}, m: 1 }, { guard: {}, m: 1 }, { m: 10 }].every((b) => shellWorld(b, 10)) && !shellWorld({ m: 0.5 }, 10), 'worlds and bodies as heavy as the world come on whole; a 5% rock does not');
   // Your guard (planet/stage.ts) names you and your moons: a rival's rock on its circle meets your shell, yours pass.
   const me = {}, myMoon = { moon: true }, mine = (b: unknown) => b === me || b === myMoon;
   assert.ok(!shellSees(myMoon, mine) && shellSees({ moon: true }, mine), 'your moons pass your shell, a rival rock meets it');

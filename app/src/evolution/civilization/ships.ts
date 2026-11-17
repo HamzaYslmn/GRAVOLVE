@@ -260,7 +260,7 @@ export function closing(me: Body, b: Body, look: number) {
 export function strike(me: Body, b: Body, sb: number) {
   const pm = me.motion, R = me.r, mu = G_WORLD * youPull(me.m, R), wx = b.motion.vx - pm.vx, wy = b.motion.vy - pm.vy, d = Math.hypot(b.motion.x - pm.x, b.motion.y - pm.y);
   const v = Math.sqrt(wx * wx + wy * wy + 2 * mu * Math.max(0, 1 / (R + b.r) - 1 / d)) / (2 * R), vs = stickSpeed(phys(me), phys(b)), share = b.m / me.m;
-  return { share, v, vs, kelvin: strikeK(share, v, vs, R, sb, me.m >= AGE_GOAL, b.heat) };
+  return { share, v, vs, kelvin: strikeK(share, v, vs, R, b.burnt ? 0 : sb, me.m >= AGE_GOAL, b.heat) }; // burnt: the air took its share already
 }
 /** Your guns break rocks, never a world (held: a rival's) or a rival body: those are only pushed. */
 const breakable = (b: Body) => !b.held && !b.rival;

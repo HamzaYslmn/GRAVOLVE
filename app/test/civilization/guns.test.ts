@@ -1,6 +1,7 @@
 // node test/civilization/guns.test.ts: rounds are pooled, never tunnel, keep to the arc; `pick` and `nearest` choose targets;
-// a fighter stops some rockets; lances hit drifting rocks; bolts stay visible at every zoom; rockets turn at most
-// ROCKET.turn, fly exactly their range, alternate pads, hit ships often and fast ones rarely.
+// a fighter stops some rockets; lances hit drifting rocks; bolts stay visible at every zoom; rockets fly by real thrust
+// (nose ≤ ROCKET.turn, push ≤ ROCKET.acc), fly exactly their range, alternate pads, pass over a clicked point, hit ships
+// often and fast or late-breaking ones rarely.
 import assert from 'node:assert/strict';
 import { craft, disc, fighterGun, q, R, rocketAt, seeded, SR } from './fakes.ts';
 import { BURST, F_PATROL_V, F_TURN, GAP, GUN, GUN_ARC, leadAt, RATE, SHOT_S, SHOT_V, SPREAD, wrap } from '../../src/evolution/civilization/flight.ts';
@@ -134,47 +135,75 @@ import { fireRange } from '../../src/evolution/civilization/mining.ts';
   console.log(`bolts: bright middle ≥ ${f(low.round)} px round, ${f(low.probe)} probe, ${f(low.pirate)} pirate, ${f(low.shell)} shell, ${f(low.lance)} lance; glow ≥ ${f(low.glow)} px round, ${f(low.lanceGlow)} lance`);
   assert.ok(low.round >= 2.8 - e && low.pirate >= 2.8 - e && low.probe >= 2.2 - e && low.lance >= 4.8 - e, 'bright middles stay a few px wide at every zoom');
   assert.ok(low.glow >= 5.8 && low.lanceGlow >= 10 - e, 'glows stay ~6 px (rounds) and 10 px (lances) wide');
-  // A rocket hull (bolts.ts): ROCKET.len of its unit, at least ROCKET.px on screen, never over 0.6 of its shooter's radius (zoomed far out).
-  for (const z of [3, 1, 0.098, 0.024]) for (const Rw of [16, 40, 500]) {
-    const len = Math.min(Math.max(ROCKET.len * Rw, ROCKET.px / z), 0.6 * Rw) * z;
-    assert.ok(len <= 0.6 * Rw * z + e && len >= Math.min(ROCKET.px, 0.6 * Rw * z) - e, `a rocket is ${f(len)} px at zoom ${z}, R ${Rw} (its world ${f(Rw * z)} px)`);
-  }
+  // A rocket hull (bolts.ts) is drawn in the ships' unit: ≤ 0.7 × the rival probe, the smallest ship (0.4 = tech.ts
+  // SHIP_SCALE, a Pixi module; 40 / 160 the probe's share of a cell).
+  assert.ok(ROCKET.len / 0.4 <= 0.7 * 40 / 160 + e, `a rocket is ${f((ROCKET.len / 0.4) * 100)}% of a ship cell`);
   const lances = 12, worst = SHOTS * 2 + lances + 14 + ROCKET.max * 3 + 14 * 5 + 3; // rounds (+ lance halos), muzzles, rockets (flame, jet, nozzle), pirate shields or jumps, charging glows
   console.log(`glow layer worst frame: ${worst} of ${MAX_GLOW} quads`);
   assert.ok(worst <= MAX_GLOW, `the worst frame fits the glow layer: ${worst} of ${MAX_GLOW} quads`);
   assert.ok(SHOT_V === ARMS.round.u && SHOT_S === ARMS.round.life && SHOT_V * SHOT_S >= GUN + 5, `a round reaches ${f(SHOT_V * SHOT_S)} R, past the gun range + 5 R`);
   assert.ok(ARMS.lance.u * ARMS.lance.life >= 59, `a lance bolt reaches ${f(ARMS.lance.u * ARMS.lance.life)} R`);
 }
-// Rockets (guns.ts createRockets, rules.ts ROCKET), flown by flight.ts `thrust` in their launch frame: the nose never turns
-// faster than ROCKET.turn at 30, 60 or 240 fps and the velocity follows it; the fuel is the range (a straight shot ends at
-// the fire range, mining.ts fireRange, for 1 and 5 moon slots); pads alternate sides, less off the aim from near; a direct
-// hit is heavy (through shields), the blast is not; a round kills it; a body stops it; seeded hit rates on ships.
+// Rockets (guns.ts createRockets, rules.ts ROCKET), real thrust in their launch frame: at 30, 60 or 240 fps the nose never
+// turns faster than ROCKET.turn, the push never tops ROCKET.acc, the path lags the nose through a turn (slip) and a straight
+// shot does not slip; the fuel is the range (a straight shot ends at the fire range, mining.ts fireRange, for 1 and 5 moon
+// slots); pads alternate sides, less off the aim from near; a point shot (combat.ts: a point still in the launch frame)
+// passes over it from either pad and flies on; a direct hit is heavy (through shields), the blast is not; a round kills
+// it; a body stops it; seeded hit rates on ships.
 {
   const W = R, sr = SR;
   for (const dt of [1 / 30, 1 / 60, 1 / 240]) {
     const pool = createRockets(12, seeded(3)), t = { x: 6 * W, y: 3 * W, vx: 0, vy: 4 * W };
     const m = pool.launch({ team: 'you', x: 0, y: 0, vx: 3 * W, vy: -2 * W, r: W, tx: t.x, ty: t.y, R: W, range: fireRange(1) * W, seek: () => t })!;
-    let rate = 0, slip = 0, h0 = m.heading;
+    let rate = 0, slip = 0, push = 0, top = 0, h0 = m.heading, [vx, vy] = [m.vx, m.vy];
     while (pool.live.length) {
       pool.step(dt, [], [], 0, () => {}, () => {});
       t.y += t.vy * dt;
       [rate, h0] = [Math.max(rate, Math.abs(wrap(m.heading - h0)) / dt), m.heading];
+      [push, top, vx, vy] = [Math.max(push, Math.hypot(m.vx - vx, m.vy - vy) / dt / W), Math.max(top, Math.hypot(m.vx - m.v0x, m.vy - m.v0y) / W), m.vx, m.vy];
       slip = Math.max(slip, Math.abs(wrap(Math.atan2(m.vy - m.v0y, m.vx - m.v0x) - m.heading)));
     }
-    assert.ok(rate <= ROCKET.turn + 1e-9 && slip <= 0.15, `at 1/${Math.round(1 / dt)} s the nose turns ≤ ${ROCKET.turn} rad/s (${rate.toFixed(3)}), slip ≤ 0.15 rad (${slip.toFixed(3)})`);
+    const at = `at 1/${Math.round(1 / dt)} s`;
+    if (dt === 1 / 60) console.log(`rocket turn ${at}: nose ≤ ${rate.toFixed(2)} rad/s, push ≤ ${push.toFixed(1)} R/s², slip up to ${slip.toFixed(2)} rad, top ${top.toFixed(1)} R/s`);
+    assert.ok(rate <= ROCKET.turn + 1e-9, `${at} the nose turns ≤ ${ROCKET.turn} rad/s (${rate.toFixed(3)})`);
+    assert.ok(push <= ROCKET.acc + 1e-9, `${at} the push is ≤ ${ROCKET.acc} R/s² (${push.toFixed(2)})`);
+    assert.ok(slip >= 0.5 && slip <= Math.PI / 2, `${at} the path lags the nose in the turn: slip 0.5–π/2 rad (${slip.toFixed(3)})`);
+    assert.ok(top <= 0.6 * ARMS.round.u, `${at} top speed ${top.toFixed(2)} R/s ≤ 0.6 × a round's (${0.6 * ARMS.round.u})`);
   }
   for (const slots of [1, 5]) {
     const pool = createRockets(12, seeded(5)), range = fireRange(slots);
-    let end = 0;
-    pool.launch({ team: 'you', x: 0, y: 0, vx: 0, vy: 0, r: W, tx: 100 * W, ty: 0, R: W, range: range * W });
-    for (let i = 0; i < 900 && pool.live.length; i++) pool.step(1 / 60, [], [], 0, () => {}, (m) => void (end = Math.hypot(m.x, m.y) / W - 1));
+    let end = 0, slip = 0;
+    const m = pool.launch({ team: 'you', x: 0, y: 0, vx: 0, vy: 0, r: W, tx: 100 * W, ty: 0, R: W, range: range * W })!;
+    for (let i = 0; i < 900 && pool.live.length; i++) {
+      pool.step(1 / 60, [], [], 0, () => {}, (m) => void (end = Math.hypot(m.x, m.y) / W - 1));
+      slip = Math.max(slip, Math.abs(wrap(Math.atan2(m.vy - m.v0y, m.vx - m.v0x) - m.heading)));
+    }
     assert.ok(Math.abs(end - range) <= 0.3, `a straight shot ends ${end.toFixed(2)} R off the surface, its fire range ${range.toFixed(1)} R (${slots} slots)`);
+    assert.ok(slip < 0.01, `a straight shot does not slip (${slip.toFixed(4)} rad)`);
   }
   { // pads: alternating sides, the full ROCKET.pad from afar, less from near
     const pool = createRockets(12, seeded(7)), at = (tx: number) => wrap(pool.launch({ team: 'you', x: 0, y: 0, vx: 0, vy: 0, r: W, tx, ty: 0, R: W, range: 10 * W })!.heading);
     const a = at(30 * W), b = at(30 * W), c = at(3 * W);
     assert.ok(Math.abs(Math.abs(a) - ROCKET.pad) < 1e-9 && Math.sign(a) === -Math.sign(b), `sides alternate, ±${ROCKET.pad} rad from afar (${a.toFixed(2)}, ${b.toFixed(2)})`);
     assert.ok(Math.abs(c) < ROCKET.pad * 0.25, `less from near (${c.toFixed(2)})`);
+  }
+  { // point shots (combat.ts launch): the point still in the launch frame, from either pad, a still and a moving shooter
+    let worst = 0, bend = 0, ends = '';
+    for (const [svx, svy] of [[0, 0], [0, 4], [-4, 0]]) for (const D of [2, 5, 10, 15]) for (const side of [0.1, 0.9]) {
+      const pool = createRockets(12, () => side), px = (D + 1) * W, py = 0.5 * W;
+      let m: ReturnType<typeof pool.launch>, best = Infinity, path = 0, end = '';
+      const point = () => ({ x: px + svx * W * (m?.age ?? 0), y: py + svy * W * (m?.age ?? 0), vx: svx * W, vy: svy * W });
+      m = pool.launch({ team: 'you', x: 0, y: 0, vx: svx * W, vy: svy * W, r: W, tx: px, ty: py, R: W, range: fireRange(1) * W, seek: point })!;
+      for (let i = 0; i < 300 && pool.live.length; i++) {
+        pool.step(1 / 60, [], [], 0, () => {}, (_m, _x, _y, e) => void (end = e));
+        const p = point(), d = Math.hypot(m.x - p.x, m.y - p.y) / W, dir = Math.atan2(m.vy - m.v0y, m.vx - m.v0x);
+        if (d < best) [best, path] = [d, dir];
+        else if (!m.lock) bend = Math.max(bend, Math.abs(wrap(dir - path)));
+      }
+      [worst, ends] = [Math.max(worst, best), ends + (end === 'out' ? '' : end)];
+    }
+    console.log(`point shots from either pad (2–15 R, still or moving shooter): pass within ${worst.toFixed(2)} R of the point, then the path bends ${bend.toFixed(2)} rad`);
+    assert.ok(worst <= 0.3 && bend <= 0.1 && ends === '', `a point shot passes over the point, then flies on straight until its fuel is spent (${worst.toFixed(2)} R, ${bend.toFixed(2)} rad, ${ends || 'out'})`);
   }
   { // a direct hit is heavy, a ship in the blast takes a plain hit; a round kills a rocket; a body stops one
     const pool = createRockets(12, seeded(9)), kills: string[] = [];
@@ -210,16 +239,35 @@ import { fireRange } from '../../src/evolution/civilization/mining.ts';
     }
     return hit / 300;
   };
-  const line = (v: number, d: number, across: boolean) => (rnd: () => number) => {
+  /** A ship `d` R out at `v` R/s, across the line of sight or closing; `tb`: it breaks 90° (either way) that many s after the launch. */
+  const line = (v: number, d: number, across: boolean, tb = Infinity) => (rnd: () => number) => {
     const a = rnd() * 2 * Math.PI, sg = rnd() < 0.5 ? 1 : -1, s = { x: Math.cos(a) * d * W, y: Math.sin(a) * d * W, vx: (across ? -Math.sin(a) * sg : -Math.cos(a)) * v * W, vy: (across ? Math.cos(a) * sg : -Math.sin(a)) * v * W };
-    return { s, move: (t: number, dt: number) => void ([s.x, s.y] = [s.x + s.vx * dt, s.y + s.vy * dt]) };
+    let at = tb;
+    return {
+      s,
+      move: (t: number, dt: number) => {
+        if (t >= at) [at, s.vx, s.vy] = [Infinity, ...((k) => [-s.vy * k, s.vx * k])(rnd() < 0.5 ? 1 : -1)];
+        [s.x, s.y] = [s.x + s.vx * dt, s.y + s.vy * dt];
+      },
+    };
   };
   const orbit = rate((rnd) => {
     const a = rnd() * 2 * Math.PI, p = rnd() * 2 * Math.PI, cx = Math.cos(a) * 8 * W, cy = Math.sin(a) * 8 * W, s = { x: cx + 2 * W * Math.cos(p), y: cy + 2 * W * Math.sin(p), vx: 0, vy: 0 };
     return { s, move: (t: number) => void ([s.x, s.y, s.vx, s.vy] = [cx + 2 * W * Math.cos(p + 1.5 * t), cy + 2 * W * Math.sin(p + 1.5 * t), -3 * W * Math.sin(p + 1.5 * t), 3 * W * Math.cos(p + 1.5 * t)]) };
   });
-  const cross = rate(line(6, 8, true)), close = rate(line(6, 14, false)), fast = rate(line(10, 8, true));
-  console.log(`rockets (${ROCKET.speed} R/s, ≤ ${ROCKET.turn} rad/s) on a ship: orbiting at 3 R/s ${(100 * orbit).toFixed(0)}%, crossing at 6 R/s ${(100 * cross).toFixed(0)}%, closing at 6 R/s ${(100 * close).toFixed(0)}%, crossing at 10 R/s ${(100 * fast).toFixed(0)}%`);
-  assert.ok(orbit >= 0.6 && cross >= 0.3 && close >= 0.3, 'a rocket hits a patrolling, crossing or closing ship often');
+  const cross = rate(line(7, 8, true)), close = rate(line(6, 14, false)), fast = rate(line(10, 8, true)), brk = rate(line(6, 8, true, 0.6));
+  // The path's swing at speed: cruising 1.5 s at a far point, which then jumps 1.5 rad off its path; s until it has swung 45°.
+  const pool = createRockets(12, () => 0.1), far = { x: 1e4 * W, y: 0, vx: 0, vy: 0 }, m = pool.launch({ team: 'you', x: 0, y: 0, vx: 0, vy: 0, r: W, tx: far.x, ty: 0, R: W, range: 60 * W, seek: () => far })!;
+  let t = 0, p0 = NaN, swing = 0;
+  for (const dt = 1 / 240; pool.live.length && !swing; t += dt) {
+    pool.step(dt, [], [], 0, () => {}, () => {});
+    const p = Math.atan2(m.vy, m.vx);
+    if (t >= 1.5 && isNaN(p0)) [p0, far.x, far.y] = [p, m.x + Math.cos(p + 1.5) * 1e4 * W, m.y + Math.sin(p + 1.5) * 1e4 * W];
+    else if (Math.abs(wrap(p - p0)) >= Math.PI / 4) swing = t - 1.5;
+  }
+  console.log(`rockets (${ROCKET.speed} R/s, ≤ ${ROCKET.turn} rad/s, ≤ ${ROCKET.acc} R/s²) on a ship: orbiting at 3 R/s ${(100 * orbit).toFixed(0)}%, crossing at 7 R/s ${(100 * cross).toFixed(0)}%, closing at 6 R/s ${(100 * close).toFixed(0)}%, crossing at 10 R/s ${(100 * fast).toFixed(0)}%, crossing at 6 R/s and breaking 90° at 0.6 s ${(100 * brk).toFixed(0)}%; its path swings 45° at speed in ${swing.toFixed(2)} s`);
+  assert.ok(orbit >= 0.6 && cross >= 0.9 && close >= 0.3, 'a rocket hits a patrolling, crossing or closing ship');
   assert.ok(fast <= 0.2, 'a ship crossing at 10 R/s mostly slips it (no undefeatable rocket)');
+  assert.ok(brk <= 0.5, 'a ship that breaks hard late slips it more often than not (the path lags the nose)');
+  assert.ok(swing >= 1.1, `a 45° swing of the path at speed takes ≥ 1.1 s (${swing.toFixed(2)} s)`);
 }

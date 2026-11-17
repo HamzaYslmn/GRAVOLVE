@@ -316,8 +316,8 @@ app.ticker.add((ticker) => {
       planet = createPlanetStage(playerLayer, me, app.renderer, kit, combat, runNews); // Age II takes over: climate, life, your HUD card
       me.heat = Math.max(me.heat, MOLTEN + 2);
       const { x, y } = me.motion;
-      fx.flash(x, y, me.r * 6, 24, me.r * 4);
-      fx.burst(x, y, 48, me.r * 0.4, me.r * 4, 0xffc890);
+      fx.flash(x, y, me.r * 1.5, 24, me.r * 4); // brief, inside the disc: a planet never reads as a star
+      fx.burst(x, y, 24, me.r * 0.15, me.r * 4, 0x9a8a78); // grey-brown dust thrown out, not a warm glow on the world
       sfx.play('boom', 1, 0.8);
       camera.shake(0.5);
       slowmo = Math.max(slowmo, 0.8);
@@ -343,7 +343,7 @@ app.ticker.add((ticker) => {
   const view = Math.max(look, Math.min(STAR_VIEW * look, (fit * BASE_ZOOM) / (Math.max(width, height) / 2)));
   camera.follow(orbiting || run.focus, dt, width, height, view, Math.min(ticker.deltaMS / 1000, 1 / 20));
   // The game area is your natural view (wheel zoom-in only changes what you see; zoomed out, it is what you see), so nothing
-  // spawns at your side because you zoomed in. Slugs and ships meet bodies after the field's own collisions.
+  // spawns at your side because you zoomed in. Rockets and ships meet bodies after the field's own collisions.
   const area = Math.min(zoom, BASE_ZOOM / view);
   [gameArea.halfW, gameArea.halfH] = [width / 2 / area, height / 2 / area];
   field.update(camera.state, gameArea.halfW, gameArea.halfH, dt, (d) => combat.contacts(d), Math.max(width, height) / 2 / (BASE_ZOOM / view)); // the margin: your natural view, not the zoomed-out one

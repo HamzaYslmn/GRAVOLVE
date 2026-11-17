@@ -134,6 +134,8 @@ const BURN = 0.004;
 /** Share of a hit's heat that burnt-up mass still gives you: the air spreads it, so it warms you a little. */
 export const BURN_HEAT = 0.25;
 export const BURN_MAX = 0.01;
+/** The air's edge round a world of radius R, where small bodies burn (field.ts burn): outside any shield shell (1.28 R at most), so air, shell, ground meet in that order. */
+export const airR = (R: number) => 1.35 * R;
 export const SPECK = 1e-3; // × your mass: lighter rocks are below a pixel once you are big; none spawn and loaded ones are dropped (field.ts)
 export const burnShare = (p: number) => BURN * Math.sqrt(clamp(p, 0, 10));
 /** Share of a fast arrival with `s` = its mass / yours that reaches the ground through air that burns up `sb`. */
@@ -365,8 +367,10 @@ export function shellContact(qx: number, qy: number, sx: number, sy: number, rr:
 }
 /** After the shell stopped share `k` of a body closing at `vn`: [share of its mass kept, new closing speed]. Held (k ≥ 1): all of it, thrown back; else what is left goes on as slow as it is light. */
 export const shellPass = (k: number, vn: number): [number, number] => (k >= 1 ? [1, -REBOUND * vn] : [1 - k, (1 - k) * vn]);
-/** Does a world's shell meet body `b`? Not rival bodies or worlds; a moon only when the guard names its `own` and this is not one. */
-export const shellSees = (b: { moon?: boolean; rival?: unknown; pulls?: boolean }, own?: (b: unknown) => boolean) => !(own ? own(b) : b.moon) && !b.rival && !b.pulls;
+/** Does a world's shell meet body `b`? Everything but its own (a moon only when the guard names its `own` and this is not one). */
+export const shellSees = (b: { moon?: boolean }, own?: (b: unknown) => boolean) => !(own ? own(b) : b.moon);
+/** A world (rival body, rival or shielded world, or as heavy as the shell's world `m`): the shell pays what it can, then it comes on whole to the ground. */
+export const shellWorld = (b: { rival?: unknown; pulls?: boolean; guard?: unknown; m: number }, m: number) => !!b.rival || !!b.pulls || !!b.guard || b.m >= m;
 
 // Rival recipe hunger (rival.ts, docs/aliencivilizations.md): a rival wants what a habitable world lacks, on the thresholds
 // yours use (planet/rules.ts: water from 10%, a magnetic field from 10% metal, the gas line at 15–20%).

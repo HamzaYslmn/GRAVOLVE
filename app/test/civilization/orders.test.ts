@@ -85,8 +85,9 @@ import { rocketAt } from './fakes.ts';
 }
 
 // Your rocket (guns.ts createRockets, a world of radius 1 at rest): a rock 9 R out crossing at 3 R/s that turns back 0.4 s
-// after the launch is hit from either pad side; the same shot without a seeker is missed. (A rock pushed sideways harder and
-// harder outruns the outside pad's turn: no snap turns, guns.test.ts.) A rocket hears only a hit on its own target.
+// after the launch is hit from the inside pad (the side it turns back to); from the outside pad the seeker still closes in
+// more than the same shot without a seeker, which misses. A late course change beats the wrong-side rocket (its path lags
+// its nose, guns.test.ts): fire a pair. A rocket hears only a hit on its own target.
 {
   const run = (guided: boolean, side = 1) => {
     const pool = createRockets(12, () => (side > 0 ? 0 : 0.9)), target: Disc = { m: 1, r: 0.4, motion: { x: 8, y: -4, vx: 0, vy: 3 } };
@@ -102,7 +103,7 @@ import { rocketAt } from './fakes.ts';
     return { got, best };
   };
   const g = [run(true, 1), run(true, -1)], un = run(false);
-  console.log(`your rocket at a rock 9 R out turning back 0.4 s after launch: guided ${g.map((f) => (f.got ? 'hit' : `missed by ${f.best.toFixed(2)} R`)).join(' / ')} (both pad sides), without a seeker ${un.got ? 'hit' : `missed by ${un.best.toFixed(2)} R`}`);
-  assert.ok(g.every((f) => f.got) && !un.got, 'the seeker follows a target that changes course, from either side');
+  console.log(`your rocket at a rock 9 R out turning back 0.4 s after launch: guided ${g.map((f) => (f.got ? 'hit' : `missed by ${f.best.toFixed(2)} R`)).join(' / ')} (outside / inside pad), without a seeker ${un.got ? 'hit' : `missed by ${un.best.toFixed(2)} R`}`);
+  assert.ok(g[1].got && g.every((f) => f.best < un.best) && !un.got, 'the seeker follows a target that changes course: the inside pad hits, the outside one misses by less than no seeker');
 }
 console.log('priority target ok');

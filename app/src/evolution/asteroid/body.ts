@@ -1,11 +1,11 @@
-import { Container, type Sprite } from 'pixi.js';
+import { Container, Sprite } from 'pixi.js';
 import { motion, updateEntity, type Entity, type Vec } from '../../core/entity';
 import { clamp, smoothstep } from '../../core/rng';
-import { K_PER_HEAT } from '../../core/water';
-import { rockView, type Rock } from './atlas';
+import { heatOfK, K_PER_HEAT } from '../../core/water';
+import { GLOW_K, GLOW_R, rockGlow, rockView, roundGlow, type Rock } from './atlas';
 import { tintBy } from './web';
 import type { Rival } from './rival';
-import { blend, capR, uncapR, mergeHeat, mergeJag, relaxJag, ROUND_M, BURST_KEEP, BURST_PIECES, burstRing, COMP, pieceShares, SPREAD, roundR, collide, contactTime, shellContact, shellPass, shellSees, DEATH_D, GRAZE, massOf, MAX_HEAT, MOLTEN, START_R, COOL, impactHeat, rub, workHeat, workShare, V_STICK, type CollideOpts, type Comp, type Element, type Phys, type Regime, type Side } from './rules';
+import { blend, capR, uncapR, mergeHeat, mergeJag, relaxJag, ROUND_M, BURST_KEEP, BURST_PIECES, burstRing, COMP, pieceShares, SPREAD, roundR, collide, contactTime, shellContact, shellPass, shellSees, shellWorld, DEATH_D, GRAZE, massOf, MAX_HEAT, MOLTEN, START_R, COOL, impactHeat, rub, workHeat, workShare, V_STICK, type CollideOpts, type Comp, type Element, type Phys, type Regime, type Side } from './rules';
 
 // A body is an entity built from rock sprites ("parts"). Eating glues the meal's parts on where they touched,
 // so every grown asteroid is a unique pile of what it ate. To read as one body, a pile settles (parts sink
@@ -39,12 +39,13 @@ export type Body = Entity & {
   binary?: boolean; // a contact binary: two lobes resting on each other, not settled into one blob
   burnt?: boolean; // already went through your air once (field.ts burn-up): what is left lands
   moon?: boolean; // on a kinematic orbit (yours: planet/moons.ts; a rival's rock, your star's planets): never stored, no free gravity; yours never touch you
-  held?: boolean; // hands-off (a rival world, a comet, a guard moon): ships and miners leave it, it is never caught; out of the field's gravity unless it `pulls`
+  held?: boolean; // hands-off (a rival world, a comet, a guard moon): ships and miners leave it, never caught bar a guard moon (planet/rules.ts handsOff); out of the field's gravity unless it `pulls`
   pulls?: boolean; // a held body still in the field's gravity (a rival civilization world: rules.ts gravitates)
   rough?: number; // its first `rough` parts are its shape for good (keepShape): never baked round until molten (rules.ts bakes)
   jag?: number; // debris: 1 a fresh break .. 0 relaxed (rules.ts relaxJag); sphere.ts draws it in steps
   guard?: Guard; // a world's shield shell (civilization stage.ts, rivals.ts): bodies meet it before the ground (sweep)
   metShell?: Body; // the world whose shell met it while it was another world's moon (shell): it lands there by hitWorld (field.ts)
+  hot?: Sprite[]; // its heat halos while hot (heatGlow)
 };
 /** A shell of radius `r` (0 while down); `meet` is told a body closing at `v` (the world's diameters/s) at (x, y) and returns the share it stops (civilization/rules.ts shieldMeet); `own`: its own bodies pass; with it set, other worlds' moons meet the shell. */
 export type Guard = { r: number; own?: (b: unknown) => boolean; meet: (b: Body, v: number, x: number, y: number) => number };
@@ -181,6 +182,31 @@ export function tickBody(b: Body, dt: number, shade = true) {
     const lit = (((c * x - s * y) * LIGHT[0] + (s * x + c * y) * LIGHT[1]) / R) * 0.5 + 0.5; // 0 far side, 1 lit side
     p.s.tint = mixRgb(p.base, 0, 0.22 * (1 - lit), false);
   }
+}
+
+// Heat seen: behind each part its own outline grown outward (atlas.ts rockGlow; a sphere's round), deep red to ember
+// orange, never white. Real: shows from HOT, where rock starts to glow (~800 K, the Draper point), full at MOLTEN.
+const HOT = heatOfK(800), RED = 0xb01c08, EMBER = 0xf05a14, GLOW_A = 0.75;
+/** Keeps b's heat halos in step with its parts (on screen, after the sphere update); none while cold. */
+export function heatGlow(b: Body) {
+  if (b.heat <= HOT) {
+    if (b.hot) for (const g of b.hot.splice(0)) g.destroy();
+    return;
+  }
+  const w = Math.sqrt(clamp((b.heat - HOT) / (MOLTEN - HOT), 0, 1)), tint = mixRgb(RED, EMBER, w, false), pool = (b.hot ??= []);
+  let n = 0;
+  for (const p of b.parts) {
+    const t = p.core ? (b.jag ? undefined : roundGlow) : rockGlow.get(p.s.texture); // a round halo would fill debris break faces
+    if (!t) continue;
+    const g = (pool[n++] ??= b.view.addChildAt(new Sprite({ anchor: 0.5 }), b.view.getChildIndex(b.parts[0].s))); // under the whole pile
+    if (g.texture !== t) g.texture = t;
+    g.position.copyFrom(p.s.position);
+    g.rotation = p.s.rotation;
+    if (p.core) g.scale.set((0.97 * p.r) / GLOW_R);
+    else g.scale.set(p.s.scale.x * GLOW_K, p.s.scale.y * GLOW_K);
+    [g.tint, g.alpha] = [tint, GLOW_A * w * p.s.alpha];
+  }
+  for (const g of pool.splice(n)) g.destroy();
 }
 
 /** How round (settled) a pile of this mass gets: 0 loose .. 1 at ~3000 mass. */
@@ -328,15 +354,15 @@ export function sweep(a: Body, b: Body, dt: number) {
  * `b` crossing world `w`'s shield shell this frame (w.guard) meets it there: the guard stops share k of it (rules.ts
  * shellPass): all of it bounces off; else that share vaporises on the shell and the rest goes on, slower. The impulse is
  * shared by mass and `b` waits just outside the shell (its ground comes a later frame). A world's own bodies (`own`: yours
- * are you, your moons and star planets, planet/stage.ts; all moons where the guard names no `own`), rival bodies and worlds
- * pass; a foreign moon meets it and lands by hitWorld (field.ts). True when it met the shell.
+ * are you, your moons and star planets, planet/stage.ts; all moons where the guard names no `own`) pass; a world (shellWorld)
+ * drains it there and comes on whole; a foreign moon meets it and lands by hitWorld (field.ts). True when it met the shell.
  */
 function shell(w: Body, b: Body, dt: number) {
   const g = w.guard, wm = w.motion, bm = b.motion;
   if (!g?.r || !shellSees(b, g.own)) return false;
   const c = shellContact(bm.x - wm.x, bm.y - wm.y, (bm.vx - wm.vx) * dt, (bm.vy - wm.vy) * dt, g.r + b.r, dt);
   const k = c ? g.meet(b, c.vn / (2 * w.r), wm.x + c.nx * g.r, wm.y + c.ny * g.r) : 0;
-  if (!c || !k) return false;
+  if (!c || !k || shellWorld(b, w.m)) return false;
   const [keep, vn] = shellPass(k, c.vn), dv = c.vn - vn, wb = 1 - b.m * keep / (b.m * keep + w.m); // closing speed lost: outward along the normal
   if (keep < 1) shed(b, b.m * (1 - keep));
   if (b.moon) b.metShell = w; // another world's moon: lands by w's ground rules even once shed loose (field.ts hitWorld)

@@ -1,401 +1,292 @@
 # Ships and flight
 
-How every ship flies (yours, rivals', pirates'), the routes they fly, the guns they fire, rockets, the
-engine plumes, and the ship art. Labels and standing decisions: [README.md](README.md).
+How every ship flies (yours, rivals', pirates'), its routes, guns, rockets, plumes and art. Labels and standing
+decisions: [README.md](README.md).
 
-Code (under `app/src/`), by owner: `evolution/civilization/flight.ts` (flight model, routes), `nav.ts` (steering round
-bodies, home steppers, the siege ring), `crash.ts` (collisions), `guns.ts` (rounds, rockets, targeting), `away.ts`
-(rival ships away from home), `escape.ts` (pirate shields, rout and jump); all pure and checked in `app/test/civilization/`. Then `ships.ts` (your defence, frigate), `bolts.ts` (projectile looks), `view.ts` (miner shuttles, your ships), `pirates.ts`, `rivals.ts`,
-`star/colony.ts` (colony fleets), `render/shipArt.ts` and `render/tech.ts` (art). What ships do for the economy and
-the shield: [civilizationgameplay.md](civilizationgameplay.md); pirate raids as events: [gameevents.md](gameevents.md)
-→ Pirates; rival strategy: [aliencivilizations.md](aliencivilizations.md).
+Code (`app/src/`): `evolution/civilization/flight.ts` (model, routes), `nav.ts` (steering round bodies, home steppers,
+siege ring), `crash.ts` (collisions), `guns.ts` (rounds, rockets, targeting), `away.ts` (rival ships away), `escape.ts`
+(pirate shields, rout, jump) — all pure, tested in `app/test/civilization/`; then `ships.ts`, `bolts.ts` (projectile
+looks), `view.ts`, `pirates.ts`, `rivals.ts`, `star/colony.ts`, `render/shipArt.ts`, `render/tech.ts`. Economy and shield:
+[civilizationgameplay.md](civilizationgameplay.md); pirate raids: [gameevents.md](gameevents.md) → Pirates; rival
+strategy: [aliencivilizations.md](aliencivilizations.md).
 
 ## Built
 
 ### Flight model (every faction)
 
-Every ship flies nose first, like a ship with one main engine (`flight.ts` `thrust`; user, 2026-11-14). Steering sets
-the velocity it wants; the nose eases toward it (4 × its error a second, at most the ship's turn rate, so a turn is an
-arc) and the engine burns along the nose only. It throttles back in a turn (half power at 90° off), brakes with a weak
-retro (0.4 of the main thrust) and never flies backwards; sideways slip bleeds off over 0.08 s. Arcade, not Newtonian.
-Frames are cut into sub-steps ≤ 1/60 s (frames ≤ 0.1 s): the same paths at any frame rate. `burn` (0–1) sets the plume.
+Nose first, one main engine (`flight.ts` `thrust`; user, 2026-11-14). Steering sets the wanted velocity; the nose eases
+toward it (4 × its error a second, ≤ the turn rate, so turns are arcs) and the engine burns along the nose only: half
+power at 90° off, a weak retro (0.4), never backwards; slip bleeds off over 0.08 s. Arcade, not Newtonian. Sub-steps
+≤ 1/60 s (frames ≤ 0.1 s): same paths at any frame rate. `burn` (0–1) sets the plume.
 
 | Faction | Unit | Main thrust | Turn | Speeds |
 |---|---|---|---|---|
-| Your + rival fighters | home R | 12 R/s² | 3 rad/s | patrol 3, home ≤ 6, attack run 5.5 R/s |
+| Your + rival fighters | home R | 12 R/s² | 3 rad/s | patrol 3, home ≤ 6, run 5.5 R/s |
 | Frigate | R | 8 R/s² | 2.2 rad/s | patrol 2.4 R/s |
-| Miner shuttles | R | 8 R/s² | 3 rad/s | 3 R/s; brakes at 0.75 × retro = 2.4 R/s² |
-| Pirate raiders | your R | 4 × cruise | 2.2 rad/s | cruise 4–5.5 R/s; top (space) 2 × cruise |
-| Pirate haulers | your R | 4 × their speed | 1.6 rad/s | 0.8 × cruise; top 1.3 × their speed |
-| Pirate marauder | your R | 4 × its speed | 1.2 rad/s | 0.8 × cruise; top 1.6 × its speed |
-| Rival ships away | your R | 4 × cruise | 2.2 rad/s (frigate 1.8) | 5 R/s; tops below (Rival ships away from home [J]) |
+| Miner shuttles | R | 8 R/s² | 3 rad/s | 3 R/s; brakes 2.4 R/s² |
+| Pirates | your R | 4 × their speed | 1.2–2.2 rad/s | Pirate flight |
+| Rival ships away | your R | 4 × cruise | 2.2 rad/s (frigate 1.8) | 5 R/s; tops: Rival ships away from home [J] |
 | Colony fleets | R★ | 2 R★/s² | 3 rad/s | 2 R★/s |
 
 | File | Pieces |
 |---|---|
-| `flight.ts` | `thrust` (the model; `top` caps a ship's speed in space); `avoid` (round a circle on its tangent); `circuit` (one way round a centre, waypoints alternating inner and outer bands); `follow` (a wingman's slot); `pairUp`; `formation` (a leader's route, the rest on slots); `strafe` (runs at a centre, turn out, back in); `arrive`, `approach` (brake onto a moving point); `keepOut` (never inside the world; its `slam` is a hard landing); `chase`, `leash`, `lowPass` (a fleet centre's pursuit); `bearing`, `leadAt`, `inArc` (the lead point and the gun arc); `startJink`, `jinkStep` (a pirate's jink); `wedge` (a pirate formation's slots); `rivalTop` |
-| `nav.ts` | `scan` + `clear` (steer round bodies in reach), `scanRel` (in the world's frame), `free` (move a goal out of bodies), `reachOf` (one pre-filter a frame); home steppers `guard` (patrol), `homeStep`, `runStep`, `breakOff`, `breakStep`, `ferry` (a shuttle's leg); the siege `siegeRing`, `ringStep`, `siegePost` |
-| `crash.ts` | `swept`, `touch` (contact along this frame's motion, no tunnelling), `bump` (first contact or near miss), `crash` (its grade), `homeContact` |
-| `guns.ts` | `createShots` (the round pool), `pull` (a gun's trigger), `nearest`, `pick` (targets), `menace` (a threat to a pirate), `createRockets`, `guide` (a rocket's motor and guidance) |
-| `away.ts` | `plan`, `step`, `settle` (rival ships away, once a frame / each sub-step / after) |
+| `flight.ts` | `thrust` (`top` caps speed in space), `avoid`, `circuit`, `follow`, `pairUp`, `formation`, `strafe`, `arrive`, `approach`, `keepOut` (`slam`), `chase`, `leash`, `lowPass`, `bearing`, `leadAt`, `inArc`, `startJink`, `jinkStep`, `wedge` (pirate slots), `rivalTop` |
+| `nav.ts` | `scan` + `clear`, `scanRel`, `free`, `reachOf`; home steppers `guard`, `homeStep`, `runStep`, `breakOff`, `breakStep`, `ferry`; siege `siegeRing`, `ringStep`, `siegePost` |
+| `crash.ts` | `swept`, `touch`, `bump`, `crash`, `homeContact` |
+| `guns.ts` | `createShots`, `pull`, `nearest`, `pick`, `menace`, `createRockets`, `guide` |
+| `away.ts` | `plan`, `step`, `settle` |
 
-Measured (flight.test.ts, 2026-11-16): on patrol, slip off the nose median 2.3°, p90 9.1°; burn median 0.16, p90 0.64;
-the nose turns 8.7 full turns a minute. War waves: p90 9.3°, max 16.4°. Pirate fleets: p90 8.5° (pirates.test.ts). Never
-backwards, the turn rate never over its cap; from rest, asked 90° off its nose, a ship slips 0.049 R before the nose is
-within 30°.
+Measured (flight.test.ts, 2026-11-16): patrol slip median 2.3°, p90 9.1°; war waves p90 9.3°; pirates p90 8.5°. Never
+backwards, never over the turn cap.
 
 ### Patrol (defence ships)
 
-- Fighters fly in **pairs**: a leader on its `circuit`, a wingman 0.45 R behind and 0.35 R beside it (`pairUp`, every
-  frame; a wingman whose leader is lost takes its route). The two flights go round the world opposite ways.
-- Waypoints alternate between 2.0–2.6 R and 3.8–4.6 R, each 1.3–1.9 rad on (seeded), so a ship runs one way round its
-  world, swinging in and out, faster far out (up to 6 R/s). It plans round its world at 1.25 R. Ships fly relative to
-  their world, so they keep up at any speed.
-- The circuit crosses your first moon slots (2.4, 3.65, 4.9 R, `core/orbits.ts`; [planetgameplay.md](planetgameplay.md)
-  → Moons); patrols steer round moons and rocks and can still hit them (user, 2026-11-13: no low orbit).
-- Checked (flight.test.ts, 2026-11-16; 4 fighters, 60 s): 1.0–4.8 R from the world, all 8 sides seen, in-out swing
-  ≥ 2.2 R, never under 1.85 R/s; wingmen median 0.62–0.65 R from their leader, within 0.3–1.2 R 100% of the time; ≤ 0.66 R
-  apart between 30 and 120 fps.
+- Fighters fly in **pairs**: a leader on its `circuit`, a wingman 0.45 R behind, 0.35 R beside (`pairUp`); the two
+  flights go round opposite ways. Waypoints alternate 2.0–2.6 R and 3.8–4.6 R, 1.3–1.9 rad on (seeded), faster far out
+  (≤ 6 R/s); planned round the world at 1.25 R; flown relative to their world.
+- The circuit crosses your first moon slots ([planetgameplay.md](planetgameplay.md) → Moons); patrols steer round moons
+  and rocks and can still hit them (user, 2026-11-13: no low orbit).
+- Checked (2026-11-16): 1.0–4.8 R out, all 8 sides seen, wingmen within 0.3–1.2 R 100% of the time at 30–120 fps.
 
 ### Strike
 
-- **Who runs at what:** your ships fly at rocks only as your priority ([civilizationgameplay.md](civilizationgameplay.md)
-  → Priority target). Rival home patrols look 6 s ahead (`LOOK_S`) for bodies that would hurt their world and get past
-  its shield; the nearest idle ship takes each, soonest first. Idle ships of both sides hunt enemy ships within 9 R of
-  their world with the same run; a round that hits breaks the ship. Rival patrols (`rivals.ts` calls the same `defend`,
-  ≤ 4 ships) also hunt pirate raiders.
-- **Patrol → run → break → patrol:** the ship runs at 5.5 R/s toward the predicted meeting point (lead ≤ 3 s), round its
-  own world. Inside gun range (9 R off the target's surface) it points its nose at the lead point and fires while the gun
-  bears. It breaks off once closer than 1 R + 0.4 s × the closing speed off the surface, or once the target is gone, or (yours)
-  off course or the run's rounds are spent: it turns 80° away for 1.2 s, then picks up its circuit. A wingman follows its
-  leader through the run and fires whenever its own gun bears.
-- Your fighters break a body ≤ 2% of you, probes ≤ 0.5%, into pieces your air can take
-  ([civilizationgameplay.md](civilizationgameplay.md) → Breaking into food); rival ships break bodies ≤ 0.5% of their
-  world. Heavier bodies get a sixth of the sideways kick that makes them miss per hit (≤ 1 D/s in all).
-- Checked (flight.test.ts, 2026-11-16; a 0.4 R body falling from 20 R at 4 R/s, 5 sides, 30 and 120 fps): the first round
-  leaves 8.9–9.0 R off its surface 1.82–2.18 s in; 5 of 5 rounds hit, the first at 2.11–2.47 s with the body still
-  10.1–11.6 R out; the ship breaks ~0.16 s after the first hit, passes no closer than 1.05 R off the surface and is back
-  at 2.43–2.63 R after 12 s.
+- Your ships fly at rocks only as your priority ([civilizationgameplay.md](civilizationgameplay.md) → Priority target).
+  Rival patrols look 6 s ahead (`LOOK_S`) for bodies that would get past their shield; the nearest idle ship takes each.
+  Idle ships of both sides hunt enemy ships within 9 R of their world; rival patrols (≤ 4) also hunt pirates.
+- **Run:** 5.5 R/s toward the meeting point (lead ≤ 3 s); inside 9 R of the target's surface it fires while the gun
+  bears; breaks off inside 1 R + 0.4 s × closing speed, when the target is gone, or (yours) off course or out of rounds:
+  80° away for 1.2 s, then back on its circuit. A wingman follows and fires when its gun bears.
+- Yours break ≤ 2% (probes ≤ 0.5%) into food ([civilizationgameplay.md](civilizationgameplay.md) → Breaking into food);
+  rival ships ≤ 0.5% of their world; heavier bodies get 1/6 of the kick a hit (≤ 1 D/s).
+- Checked (2026-11-16, a body falling from 20 R at 4 R/s): 5 of 5 rounds hit, the first with the body 10.1–11.6 R out.
 
 #### The siege
 
-Your fleet engaged on a rival world ([civilizationgameplay.md](civilizationgameplay.md) → Battles; `rules.ts` `SIEGE`,
-`ships.ts` `defend`, `nav.ts` `ringStep`, `siegePost`). User, 2026-11-14: "surround an enemy planet, invade its orbit,
-engage defences, break shields".
+Your fleet engaged on a rival world (`SIEGE`, `ships.ts` `defend`, `nav.ts` `ringStep`, `siegePost`; user, 2026-11-14:
+surround, invade orbit, engage defences, break shields).
 
-- The wing, recounted every frame, is every fighter but one, at most 5 (`siegeWing`), paired among itself. It leaves
-  threats to the home ships.
-- Its leaders fly a ring 3–3.8 of your radii past the enemy world's surface (aimed at 3.4; never nearer than 2.5 R to
-  your centre), counter-clockwise in the enemy's frame, spread evenly round it; wingmen follow. Idle ring ships take
-  enemy ships within 6 R of the enemy world.
-- **The strafing turn:** every 4 s one free leader swings 3 R further out, then makes the usual run in with its wingman,
-  breaks, cools and rejoins the ring. Straight from the ring its nose would not come round before it broke off.
-- **The frigate's post** is on the ring, on the bearing from the enemy to you (two frigates ±0.5 rad). It shifts round
-  the ring while a body blocks the line, charges its nose 1.5 s and lances the world. At its last hull point it falls
-  back to 5 R off you on the far side.
-- Checked (nav.test.ts, 2026-11-16; a 0.89 R world 10 R off drifting 0.5 R/s): the wing is on the ring in 2.4 s, holds it,
-  never comes nearer than 3.27 R to its surface and makes 1.6 turns in 30 s, the same at 30, 60 and 120 fps. Not tried
-  in a test tab.
+- The wing: every fighter but one, ≤ 5 (`siegeWing`), paired; threats are left to the home ships.
+- Leaders fly a ring 3–3.8 R past the enemy surface (aimed 3.4; ≥ 2.5 R from your centre), counter-clockwise, spread
+  evenly; idle ring ships take ships within 6 R of that world.
+- **Strafing turn:** every 4 s one free leader swings 3 R out, runs in with its wingman, breaks and rejoins.
+- **Frigate's post:** on the ring on the enemy-to-you bearing (two frigates ±0.5 rad); shifts while a body blocks the
+  line, glows 1.5 s and lances. At its last hull point it falls back 5 R behind you.
+- Checked (nav.test.ts, 2026-11-16): on the ring in 2.4 s, never nearer than 3.27 R to the surface, at 30–120 fps. Not
+  tried in a test tab.
 
 ### Frigate [F]
 
-- Your frigates fly their own circuits (`frigateStep`, `guard`, 2.4 R/s). Every 10 s (`ARMS.lance.reload`, × the energy
-  fed) one takes its target ([civilizationgameplay.md](civilizationgameplay.md) → Frigate [F]), turns its nose onto the
-  lead point and fires 3 heavy bolts 0.15 s apart while the target stays within ±0.1 rad of the nose. It gives up
-  lining up after 4 s. In a siege it lances the world from its post (The siege).
-- Checked (guns.test.ts, 2026-11-16; 300 salvos at rocks 2–25% of you drifting under gravity): 900 of 900 bolts hit,
-  median flight 0.73 s.
-
-### Rockets
-
-- Fire (left-click or a tap) launches a rocket from your surface at what you aim at; your ships never launch them.
-  Flight: Rockets below; the magazine and what they break: [civilizationgameplay.md](civilizationgameplay.md) → Rockets.
+- Own circuits (`frigateStep`, 2.4 R/s). Every 10 s × energy fed one takes its target
+  ([civilizationgameplay.md](civilizationgameplay.md) → Frigate [F]), turns onto the lead point and fires 3 bolts 0.15 s
+  apart while it stays within ±0.1 rad; gives up after 4 s. In a siege: The siege. Checked: 900 of 900 bolts hit
+  (2026-11-16).
 
 ### Guns (every faction)
 
-One pooled list of rounds for every ship of every side (`guns.ts` `createShots`, 96 rounds, made by `combat.ts` as
-`ctx.shots`; a full pool fires nothing). A gun belongs to its owner (side, round speed, life, arc, aim error, tint, the
-bodies it flies through, its effect). A round fires only while the lead point (`bearing`) is inside the arc ahead of
-the nose, is aimed once, then flies straight: no guided rounds (concept 8). Each frame after the field's collisions,
-rounds are swept along their path: an enemy ship in the way breaks; any body (not the gun's own world and moons) stops a
-round with a flash; only the body it was aimed at gets the effect (and, for pirates, the rocks their fleet works:
-`Gun.takes`). A pirate gun holds fire while another body is on its line.
+One pooled list of rounds for every side (`createShots`, 96, `ctx.shots`; a full pool fires nothing). A round fires only
+while the lead point is inside the arc, is aimed once and flies straight (no guided rounds, concept 8). Swept each frame
+after collisions: an enemy ship in the way breaks; any body (not the gun's own world and moons) stops it; only the aimed
+body takes the effect (pirates: also their fleet's rocks, `Gun.takes`). A pirate gun holds fire with a body on its line.
 
-| Gun | Range | Arc | Round speed, life | Pattern | Aim error a burst | Effect |
+| Gun | Range | Arc | Round speed, life | Pattern | Aim error | Effect |
 |---|---|---|---|---|---|---|
-| Fighter | 9 R off the surface | ±0.2 rad | 22 R/s, 0.68 s | yours: 2 bursts of 8 at 16/s a run, 1.5 s cool; probes 1 burst of 3 at 4/s, 5 s cool; rival patrols bursts of 6 at 10/s, 0.6 s apart | ±0.04 rad | breaks a small body (yours: only what you cannot take safely); a big one gets 1/6 of the kick |
-| Frigate lance | its target; a world from its post | ±0.1 rad | 22 R/s, 2.7 s | 3 bolts 0.15 s apart every 10 s; on a world after a 1.5 s nose glow, only on a clear line | ±0.01 rad | a rock: ≤ 8 pieces; a world: 7.5 K a bolt (`weaponHit`); any ship it meets dies |
-| Rocket (yours, rival worlds') | the fire range (2 × the mining reach) | any | 12 R/s on top of the shooter, ≤ 1.4 rad/s | yours: one a click from a magazine of 1–3; a rival's: a salvo of 1–4, 0.25 s apart, every 8 s after a 1.5 s pad glow | pads ±0.5 rad (±0.3 at a ship), alternating | 20 K on a world; a free body ≤ 25%: ≤ 8 pieces, bigger: a chip; a ship: the direct hit, others within 0.6 R the blast |
-| Pirate raider | 6 R off the surface | ±0.25 rad | 20 R/s, 0.5 s | bursts of 3 at 6/s, 0.9 s apart, while closing | ±0.06 rad | a rock they work; your shield (`PIRATE_K`), then stock, then a chip |
-| Pirate marauder | 9 R off the surface | ±0.2 rad | 20 R/s, 0.62 s | bursts of 5 at 5/s, 1.5 s apart, while closing | ±0.04 rad | as a raider; 3 hits on a rock |
-| Rival wave fighter | 8 R | ±0.25 rad | 22 R/s, 0.68 s | 3 a run at 6/s | ±0.06 rad | your frigate first (`pick`), ships, miners, else your world: 0.2 K on your shield, then 0.2 u of ore |
+| Fighter | 9 R off surface | ±0.2 | 22 R/s, 0.68 s (15 R) | yours 2 × 8 at 16/s, 1.5 s cool; probes 1 × 3 at 4/s, 5 s; rival patrols 6 at 10/s, 0.6 s apart | ±0.04 | breaks a small body; a big one gets 1/6 kick |
+| Frigate lance | target; world from post | ±0.1 | 22 R/s, 2.7 s (~60 R) | 3 bolts 0.15 s apart / 10 s; on a world after 1.5 s glow, clear line only | ±0.01 | rock ≤ 8 pieces; world 7.5 K a bolt; any ship it meets dies |
+| Rocket | 2 × mining reach | guided | 12 R/s, 16 R/s², nose ≤ 2.6 rad/s | Rockets | Rockets | [civilizationgameplay.md](civilizationgameplay.md) → Rockets |
+| Pirate raider | 6 R off surface | ±0.25 | 20 R/s, 0.5 s | 3 at 6/s, 0.9 s apart, closing | ±0.06 | their rock; your shield (`PIRATE_K`), stock, a chip |
+| Pirate marauder | 9 R off surface | ±0.2 | 20 R/s, 0.62 s | 5 at 5/s, 1.5 s apart | ±0.04 | as raider; 3 hits on a rock |
+| Rival wave fighter | 8 R | ±0.25 | 22 R/s, 0.68 s | 3 a run at 6/s | ±0.06 | your frigate first, ships, miners, else 0.2 K on your shield then 0.2 u ore |
 
-- A run's burst reloads after 1.5 s without the gun bearing (`pull`).
-- **Targets:** `pick` (distance × class weight: rocket 0.5, frigate 0.7, fighter 1, probe and miner 1.5) for your home
-  ships and rival wave fighters; `nearest` for pirates.
-- Checked (guns.test.ts, 2026-11-16): a still fighter's burst at a ship crossing its nose 5 R out at 4 R/s kills it 58%
-  of the time; a 22 R/s round at 30 fps does not tunnel through a ship; a lead point outside the arc fires nothing.
-  Pirates (pirates.test.ts, 2026-11-16): one burst from a fighter run 6 R behind kills a straight raider 73%, a jinking
-  one 41% (× 0.56), on a bare hull: a pirate's shield soaks its first 1–3 rounds (gameevents.md → Pirates). Raids land 0.71–0.72 hits a second (175–177 of 175–177 rounds on target); at a 4% rock 60% of
-  rounds hit (worst run 44%); at most 10 rounds in flight of 96.
+- A burst reloads after 1.5 s without the gun bearing (`pull`). **Targets:** `pick` (distance × weight: rocket 0.5,
+  frigate 0.7, fighter 1, probe and miner 1.5) for your home ships and wave fighters; `nearest` for pirates.
+- Checked (guns / pirates tests, 2026-11-16): a fighter burst kills a 4 R/s crosser at 5 R 58%; a burst from 6 R behind
+  kills a straight raider 73%, a jinking one 41%, on a bare hull (shields: [gameevents.md](gameevents.md) → Pirates); no
+  tunnelling at 30 fps; ≤ 10 rounds in flight of 96.
 
 #### Rockets
 
-One rocket for every side (`guns.ts` `createRockets`, `guide`; `rules.ts` `ROCKET`; user, 2026-11-17: "limited
-maneuverability … no sudden 90-degree turn"). Yours fly on Fire (combat.ts), rival worlds' from their pad (rivals.ts).
+One rocket for every side (`createRockets`, `guide`; `rules.ts` `ROCKET`; user, 2026-11-17: limited manoeuvre, no
+sudden 90° turn). Yours on Fire (`combat.ts`), rival worlds' from their pad (`rivals.ts`).
 
-- **Launch:** from the shooter's surface, `pad` ±0.5 rad off the aim (±0.3 at a ship; less from nearer than 10 R), sides
-  alternating in a salvo; 0.3 s straight off the pad at 2 R/s, then the motor runs it up at 10 R/s² to 12 R/s.
-- **Guidance:** flown by `flight.ts` `thrust` in its launch frame: the nose eases toward its velocity + 3 × the lead error
-  (±1.5 rad), at most 1.4 rad/s, so a 90° turn takes over 1.1 s (turning radius 8.6 R at full speed). The lock is lost for
-  good past 1.6 rad off its velocity, or when the target is gone; then it flies straight.
-- **Fuel is the range:** the distance flown in its launch frame equals the fire range (2 × the mining reach,
-  `mining.ts` `fireReach`); turning costs range. Out of fuel it fizzles.
-- **Hits:** any body stops one (not its own world or moons). At a ship it bursts within 0.6 R of it: the ship takes the
-  direct hit (`kill(true)`: through a pirate's shield), others within 0.6 R the blast. To rounds it is a small target
-  (0.12 × a ship's hit radius): one round kills it; a locked rocket can stop an enemy rocket.
-- Checked (guns.test.ts, 2026-11-17): the nose never turns faster than 1.4 rad/s at 30, 60 or 240 fps (slip ≤ 0.15 rad);
-  a straight shot ends within 0.3 R of the fire range (1 and 5 moon slots); on a ship, 300 seeded launches each: orbiting
-  at 3 R/s 94%, crossing at 6 R/s 43%, closing at 6 R/s 100%, crossing at 10 R/s 0% (no undefeatable rocket). Point
-  defence: one fighter's bursts stop 40% of inbound rockets from 7–11 R.
-- Checked (orders.test.ts): a rock 9 R out turning back 0.4 s after launch is hit from either pad side; without a seeker
-  it is missed by 3.45 R.
-- A rival world's dodge and what a rival salvo does to you: [aliencivilizations.md](aliencivilizations.md) → Fighting a
-  rival world.
+- **Launch:** from the shooter's surface, `pad` ±0.7 rad off the aim (±0.3 at a ship; less inside 10 R), sides
+  alternating, off the pad at 2 R/s; it pitches over at once.
+- **Real thrust** (`guide`, 2026-11-17; flight.ts untouched): in its launch frame it wants the lead velocity (12 R/s),
+  the error closed over 0.2 s (`TAU`); the nose turns ≤ 2.6 rad/s toward that push (plus a 0.2 × `acc` pull back onto
+  its path, `TRIM`), and the motor pushes 16 R/s² along the nose only. The path lags the nose: it slips through turns
+  (up to 1.4 rad) and needs > 1.1 s for a 90° swing at speed (turning radius ≥ 9 R). Lock lost for good past 1.6 rad off
+  its velocity or when the target is gone; unlocked it flies straight. A point shot steers to the clicked point (still in
+  the launch frame: where you clicked, while you coast), passes over it and flies on.
+- **Fuel is range:** distance flown = the fire range (2 × mining reach, `fireReach`); turning costs range; then it
+  fizzles.
+- **Hits:** any body stops it (not its own world or moons). Within 0.6 R of a ship: the direct hit (`kill(true)`, through
+  a pirate's shield), others within 0.6 R the blast. To rounds a small target (0.12 × a ship's hit radius); a locked
+  rocket can stop an enemy rocket.
+- Checked (guns.test.ts, 2026-11-17, real thrust): nose ≤ 2.6 rad/s, push ≤ 15.7 R/s², slip up to 1.39 rad, top 12.5
+  R/s at 30–240 fps; straight shot within 0.3 R of range, no slip; point shots pass within 0.21 R of the point from either
+  pad; on a ship orbiting 3 R/s 100%, crossing 7 R/s 100%, closing 6 R/s 100%, crossing 10 R/s 0% (no undefeatable
+  rocket), a 6 R/s crosser breaking 90° at 0.6 s 21%; a 45° path swing at speed 1.32 s; a fighter stops 35% of inbound
+  rockets; lift-off burn ≥ 0.81. Rival dodge and salvos at you: [aliencivilizations.md](aliencivilizations.md) → Fighting
+  a rival world.
 
 #### Look
 
-`bolts.ts` `drawBolts`, on combat's additive layer (user, 2026-11-14: "much more visible, larger"). Shape and motion say
-the weapon, hue the faction.
+`bolts.ts` `drawBolts` on combat's additive layer (user, 2026-11-14: much more visible). Shape and motion say the weapon,
+hue the faction.
 
-- Every bolt is a glow quad in the gun's tint stretched along its path round a white core, never under a few screen
-  pixels, so it stays easy to follow zoomed out. Rounds: fighters cyan, rivals violet, pirates orange; probes pale
-  blue; marauder shells larger; lances long cyan or violet bolts with a halo.
-- Rockets (`render/shipArt.ts` rocket, baked on the tech page; cyan trim yours, violet rivals'): a pale 4:1 tube, a nose cone
-  a quarter of its length, two swept fins and a band, `ROCKET.len` 0.3 of its unit long, never under 14 screen px nor over
-  0.6 of its shooter's radius zoomed far out. Off the pad a flash and a dust puff; behind it a flickering flame in the
-  side's hue round a white-yellow jet (longer while the motor runs up), a nozzle glow and small embers. A hit bursts in
-  the side's hue (`blast` sound), one shot down flares, one out of fuel fizzles grey. Worst glow frame 327 of 400 quads
-  (guns.test.ts, 2026-11-17).
-- A flash at each launch; each hit a hot flash, tinted light and sparks thrown back along the round's path (more for a
-  ship kill or a lance). One quiet `hit` sound per burst on screen, at most every 0.25 s.
+- Bolts: a glow quad in the gun's tint along its path round a white core, never under a few px. Fighters cyan, rivals
+  violet, pirates orange, probes pale blue; marauder shells larger; lances long bolts with a halo.
+- Rockets (`render/shipArt.ts`, baked; cyan trim yours, violet rivals'): pale 4:1 tube, nose a quarter of its length, two
+  swept fins, a band; `ROCKET.len` 0.07 in the ships' unit (0.7× the smallest ship at every zoom). Pad flash and dust; a
+  flame that grows with thrust (long off the pad and in turns), embers streaming back from the nozzle; a hit bursts (`blast`), a shot-down one flares, out of fuel fizzles
+  grey. Worst glow frame 327 of 400 quads (2026-11-17).
+- A flash at launch; hits flash and throw sparks back along the path; one quiet `hit` sound per burst, ≤ every 0.25 s.
 
 ### Rival ships away from home [J]
 
-- War-wave frigates and fighters, probes and miners (`away.ts`: `plan` once a frame, `step` each sub-step, `settle`
-  after) cruise at 5 of your radii/s, `scan` + `clear` round rocks, and die touching any body. Home patrols steer round
-  bodies and graze or wreck as yours do (Navigation and collisions).
-- A massing wave's fighters fly a V round their world (1.5–2.1 rival radii); out, they fly wings of three on strafing
-  runs at you and chase on a leash. Its frigates are batteries: a circuit at 1.9–2.1 rival radii round their own world,
-  slowing with the nose on you to lance. Probes make strafing runs round you between your outer moon slot + 1.5 and
-  + 4 R, for 10 s. A rival frigate takes 2 hits.
-- **Tops in space** (`flight.ts` `rivalTop`, 2026-11-15): wave fighters 2 × cruise (10 R/s), probes 1.5 × (7.5 R/s); a
-  ship working a body (homing, massing, a battery, a miner at its rock) 2 × cruise on top of that body's speed; velocity
-  change ≤ `GEE` × thrust for all. A frame faster than the top (you charging a probe) is not flown in.
-- Checked (flight.test.ts, 2026-11-16, the real `away.ts`, 30/120 fps and dt 0.1): every ship stays within max(top, its
-  last speed) and `GEE`. You still or drifting 3 R/s: wave ships ≤ 9.2 R/s; you charging at 12 R/s: 10.00 R/s, 3 of 6
-  rammed (2 at dt 0.1); you fleeing at 12: the wave turns home after 17 s. A probe ≤ 7.5 R/s, about 9 s within 8 R of
-  you drifting 5 R/s. A miner lands on a 6 R/s rock in 1.8 s. Ships homing from 40 R all dock by 8.4 s.
-- War waves (flight.test.ts, 2026-11-16; 6 ships): a raid round you crosses 3.2 R 14 times a ship in 30 s at 4 R/s and 18
-  at 5.5 R/s, 1.1–7.6 R out, with 7–9 gun windows a ship in 25 s. Leaving at 20 R/s you are dropped after 8.4 s; at
-  5 R/s they keep up (farthest ship 7.0–7.2 R).
-- What they do: [aliencivilizations.md](aliencivilizations.md).
+- War-wave frigates and fighters, probes and miners (`away.ts`) cruise at 5 R/s, `scan` + `clear` round rocks, die
+  touching any body. Home patrols steer and graze as yours do.
+- A massing wave's fighters fly a V round their world (1.5–2.1 rival radii); out, wings of three strafe you and chase on
+  a leash. Frigates are batteries circling 1.9–2.1 rival radii out, slowing with the nose on you. Probes strafe round you
+  between your outer slot + 1.5 and + 4 R for 10 s. A rival frigate takes 2 hits.
+- **Tops in space** (`rivalTop`, 2026-11-15): wave fighters 2 × cruise (10 R/s), probes 1.5 × (7.5 R/s); a ship working a
+  body 2 × cruise on top of its speed; Δv ≤ `GEE` × thrust; a frame faster than the top is not flown in.
+- Checked (2026-11-16): you charging at 12 R/s rams 3 of 6 wave ships; fleeing at 12 R/s the wave turns home after 17 s;
+  at 20 R/s you are dropped after 8.4 s, at 5 R/s they keep up.
 
 ### Miner shuttles
 
-Miner shuttles use the same flight model, relative to your world (`ferry`): they lift off, cruise at 3 R/s and brake onto
-their site's near side (2.4 R/s²): a moon, a free body, a debris cluster or an open rival world [G]. They round your
-world at 1.25 R on the way out, land within 0.25 R of the spot, dig, then fly straight home and land 0.08 R off the
-surface. Both legs steer round bodies with a 2 ship-radii pad and can hit them; a leg over 15 s gives up. Checked
-(nav.test.ts, 2026-11-16; a moon on a 3.2 R circle): out in 2.1–2.2 s, home in 1.5 s at 30 and 120 fps. Trips and what
-they bring: [civilizationgameplay.md](civilizationgameplay.md) → Miners on moons.
+Same model relative to your world (`ferry`): lift off, 3 R/s, brake onto the site's near side (moon, free body, debris,
+open rival world [G]); round your world at 1.25 R; land within 0.25 R; dig; fly home and land 0.08 R off the surface. Both
+legs steer round bodies and can hit them; > 15 s gives up. Out 2.1 s, home 1.5 s to a 3.2 R moon (2026-11-16). Trips:
+[civilizationgameplay.md](civilizationgameplay.md) → Miners on moons.
 
 ### Colony fleets [L]
 
-A carrier and a colonizer (or one miner on a terraforming trip) fly from your world to a system planet with `arrive` and
-`thrust` at 2 R★/s and 2 R★/s² (braking at 0.6 R★/s²), turning 3 rad/s, relative to the star (`star/colony.ts`). They
-steer round the star, the planets and nearby bodies (threaded) and land on contact. A graze hurts a ship; a wreck loses
-it (the star always wrecks); a lost colony ship leaves the planet unclaimed and the next fleet pays again. What they do:
+A carrier and a colonizer (or a miner on a terraforming trip) fly to a system planet (`arrive` + `thrust`, 2 R★/s,
+2 R★/s², braking 0.6, turning 3 rad/s, relative to the star; `star/colony.ts`), steering round star, planets and bodies,
+landing on contact. A graze hurts, a wreck loses the ship (the star always wrecks) and the planet stays unclaimed.
 [stargameplay.md](stargameplay.md) → Colonies and terraforming.
 
 ### Pirate flight
 
-Speeds are in your radii (R), so they scale with you. Behaviour, raids and their checks:
-[gameevents.md](gameevents.md) → Pirates.
+In your radii, so they scale with you. Behaviour: [gameevents.md](gameevents.md) → Pirates.
 
-- **Cruise** 4–5.5 R/s per fleet; main thrust = a ship's speed × 4 /s; raiders turn 2.2 rad/s, haulers 1.6 rad/s and the
-  marauder 1.2 rad/s at 0.8 × cruise.
-- **Top speed in space** (user, 2026-11-15: a pirate "suddenly starts accelerating alongside me … an unrealistically
-  high speed"): raider 2 ×, marauder 1.6 ×, hauler 1.3 × its speed (`P_TOP`, `M_TOP`, `H_TOP`; the flag 1.5 × cruise).
-  Velocity changes by at most `GEE` 2 × the main thrust a second, turns included; above its top a ship only slows. A
-  frame faster than the ship's top (you on the move) is not flown in; slow rocks keep their frame. **Sidestep**
-  (`clear`'s `top`): a ship ahead of a faster body steps across its track at its top. Home ships have no top.
-  Timings (flight.test.ts, 2026-11-16; 5.5 R/s cruise): raider 0 → cruise 0.25 s, 0 → 95% top 0.82 s, an 85° turn at
-  its top 1.12 s; hauler 0.38 / 0.75 / 1.29 s; marauder 0.28 / 0.77 / 1.53 s.
-- **Formation:** a virtual lead (the flag) flies the fleet's course (0.8 rad/s toward the lane's end, or onto the
-  stand-off point at ≤ 1.5 × cruise) and `clear`s every body with the formation's half-width added. Each ship `follow`s
-  its slot on the flag (5 ship radii back and 4 out a row; marauder or a raider at the point, haulers on the centreline
-  with two raiders beside each, the rest in a V), catching up at 1.3 × its speed.
-- **Steering round bodies** (`scan` + `clear`, every ship away from home, rivals' too): each frame a ship lists the ≤ 4
-  bodies in reach (keep-out = radius + 5 ship radii + 0.1 s × relative speed; reach = 1.2 s + two turn radii). Crumbs
-  under 0.25 ship radii and bodies closing faster than 3 × cruise are left out. Each sub-step `clear` bends the course
-  round each keep-out on the side the ship already passes (so it never flips); among two or more it slows to 0.6 ×
-  cruise; still bent by two and heading into one, it brakes away. Inside a keep-out it slides and climbs out. `free`
-  moves every goal out of every keep-out.
-- **Your moon system** is one keep-out disc for the flag, formation ships, guards and haulers: the outer filled slot +
-  1.5 R (2.5 R with no moons). Only gun runs at you go inside.
-- **Gun runs** (`strafe`): in at the target; inside the turn-out (~4.6–5.4 R at you, ~4.3 R at a 4% rock) the run swings
-  out 0.5 rad off straight out on its own side, back in past 3.5 R further out. The 2nd and 3rd ship of a wing come in
-  0.1 rad off the 1st one's line.
-- **Jink** (`menace` + `startJink` + `jinkStep`): 1.2 rad off its velocity, away from the threat's line, at 1.25 ×
-  cruise for 0.6 s, then 0.8 rad back for 0.4 s, 1.5 s cooldown. Threats: an enemy ship within 4 R closing nose-on, or
-  an enemy round passing within 5 ship radii in the next 0.25 s.
-- **Bodies kill:** a ship dies touching any body (the old game's rule), tested with `swept`, so a fast body kills every
-  ship on its line; a hauler's claimed piece is spared.
+- **Cruise** 4–5.5 R/s a fleet; thrust = speed × 4/s; turns: raider 2.2, hauler 1.6, marauder 1.2 rad/s (at 0.8 × cruise).
+- **Top speed** (user, 2026-11-15: no pirate suddenly matching your speed): raider 2 ×, marauder 1.6 ×, hauler 1.3 × its
+  speed (`P_TOP`, `M_TOP`, `H_TOP`; flag 1.5 × cruise), about 4–11 R/s; Δv ≤ `GEE` 2 × thrust a second; above top only
+  slowing; a frame faster than the top is not flown in. **Sidestep** (`clear` `top`): ahead of a faster body it steps
+  across the track. Home ships have no top. Raider 0 → 95% top in 0.82 s (2026-11-16).
+- **Formation:** a virtual flag flies the course (0.8 rad/s to the lane's end, or the stand-off point at ≤ 1.5 × cruise),
+  clearing bodies by the formation's half-width; ships `follow` slots (`wedge`: 5 ship radii back, 4 out a row; marauder
+  or raider at the point, haulers on the centreline flanked by raiders, the rest a V), catching up at 1.3×.
+- **Steering** (`scan` + `clear`, every ship away): ≤ 4 bodies in reach (keep-out = radius + 5 ship radii + 0.1 s ×
+  relative speed); crumbs and bodies closing over 3 × cruise ignored; bends round each keep-out on the side it already
+  passes; slows to 0.6× among two; brakes away when boxed; `free` moves goals out of keep-outs.
+- **Your moon system** is one keep-out for the flag, formation, guards and haulers: outer filled slot + 1.5 R (2.5 R with
+  no moons). Only gun runs go inside.
+- **Gun runs** (`strafe`): in at the target, turn out ~4.6–5.4 R from you (4.3 R at a 4% rock), swing 0.5 rad off, back
+  in past 3.5 R further out; wingmates 0.1 rad off the lead's line.
+- **Jink** (`menace`, `startJink`, `jinkStep`): 1.2 rad off away from the threat at 1.25 × cruise for 0.6 s, 0.8 rad back
+  for 0.4 s, 1.5 s cooldown; threats: a ship within 4 R nose-on, or a round passing within 5 ship radii in 0.25 s.
+- **Bodies kill:** any touch (`swept`; the old game's rule); a hauler's claimed piece is spared.
 
 ### Navigation and collisions
 
-User, 2026-11-14: ships should collide with consequences, yet fly round what is in their way, weave and adapt;
-threats stay dangerous.
+User, 2026-11-14: collisions with consequences, yet ships fly round what is in their way; threats stay dangerous.
 
-- **Collisions** (`bump` + `crash`, after the field moves): a body under 0.25 ship radii does nothing. A pebble (under 2
-  ship radii, never a moon or a held world) only grazes and breaks to dust. A body as big closing at ≥ 1.5 R/s
-  (`WRECK_V`), or the star, wrecks. Slower is a graze: pushed out to its surface + 0.6 ship radii, normal speed
-  reflected × 0.3, tangential × 0.8, the nose kicked 0.9 rad away, hurt 6 s (60% thrust, embers). A graze while hurt
-  wrecks; a frigate (3 hull points) loses one a graze instead. On your own world a landing from 0.9 R/s grazes, from
-  2 R/s wrecks. A wreck flashes and sparks, and heats the body 40 K × (ship radius / its radius)³ (never your world or a
-  held one). Pirates and rival ships away die on any touch. Dev counter: `window.__g().combat.bumps`.
-- **Navigation** (`scan`, `clear`): home ships (yours, rivals' patrols, frigates, shuttles) and colony ships scan once a
-  frame from a list `reachOf` pre-filters per world, passing bodies closing up to 12 × cruise. **Threaded:** a pair's
-  surface gap of 6–10 ship radii squeezes both pads to 0.45 × the gap (flown down the middle, slower while it bends);
-  under 6 the pair is one disc. Your world is `skirt`ed like a body (1.25 R). A patrol waypoint inside a keep-out moves to
-  its edge; a wingman whose slot lies in a keep-out takes the other side of its leader. Pirates and rival ships away are
-  unthreaded (`CROWD`, `STUCK` and the brake-away stay).
-- **Bank** (visual): `thrust` eases `bank` toward turn rate / its cap over 0.15 s; `drawShip` narrows the hull up to 40%
-  across the nose and the engines outside the turn burn up to 50% longer. **Near-miss sparks:** a pass within 2.5 ship
-  radii faster than 2 R/s throws 3 embers, at most every 0.5 s a ship.
-- Checked (nav.test.ts, 2026-11-16, 30 and 120 fps): grades (head-on 3 R/s wreck, skim 0.5 R/s graze then clear, hurt
-  graze wreck, pebble graze, crumb nothing, a 120 R/s body at 30 fps wreck); every stepper flown at a body on its path
-  bumps it before its centre is inside; an 8 ship-radii gap flown through 0.4 ship radii off its middle, a 4 radii gap
-  flown round, a jittering goal never flips side. Steering (raiders and haulers): head-on, turn-in, goal inside a body,
-  a second body and a belt all 0 hits of 84 (closest 1.9–8.6 ship radii).
-- **Crowded field** (crowd.test.ts, 2026-11-16; your world + 3 moons, a belt of one body per 18 R², 4 fighters, a run every
-  8 s, 6 seeds × 120 s): wrecks a fighter-minute 0.04–0.19 at rest, 0.10–0.23 with the world drifting 2 R/s, 0.85–1.17
-  at 8 R/s; 74–78 of 84 runs fired on their body. Shuttles to a moon behind two others through 20 rocks: 39 of 40 trips,
-  1 wreck. A rival patrol round its rock: closest 3.1–4.5 ship radii, no wreck (nav.test.ts).
+- **Collisions** (`bump` + `crash`): under 0.25 ship radii nothing; a pebble (< 2 ship radii, not a moon or held world)
+  grazes and breaks to dust; a body as big closing ≥ 1.5 R/s (`WRECK_V`), or the star, wrecks; slower grazes (pushed out,
+  bounced × 0.3 / 0.8, nose kicked 0.9 rad, hurt 6 s at 60% thrust). A graze while hurt wrecks; a frigate loses a hull
+  point instead. On your own world 0.9 R/s grazes, 2 R/s wrecks. A wreck heats the body 40 K × (ship / body radius)³ (not
+  your or a held world). Pirates and rival ships away die on any touch. Dev: `__g().combat.bumps`.
+- **Navigation:** home and colony ships scan once a frame from a `reachOf` list (bodies closing ≤ 12 × cruise).
+  **Threaded:** a gap of 6–10 ship radii squeezes both pads to 0.45 × the gap; under 6 the pair is one disc. Your world
+  is skirted at 1.25 R. Waypoints in a keep-out move to its edge. Pirates and rival ships away are unthreaded.
+- **Bank** (visual): the hull narrows ≤ 40% across the nose in turns, outer engines ≤ 50% longer. Near misses within
+  2.5 ship radii over 2 R/s throw 3 embers (≤ every 0.5 s).
+- Checked (2026-11-16): every stepper bumps a body on its path before its centre is inside; steering 0 hits of 84;
+  crowded belt: 0.04–0.19 wrecks a fighter-minute at rest, 0.85–1.17 at 8 R/s; shuttles 39 of 40 trips through 20 rocks.
 
 ### Engine plumes and scale
 
-- **Plumes** (user, 2026-11-14): every ship's engines show a plume drawn live behind the hull in the same
-  ParticleContainer (`render/tech.ts` `drawShip`): per engine a tinted glow and a short white core from the engine points
-  in `render/shipArt.ts` `ENGINES`. Length = nozzle × (3 + 9 × burn), width nozzle × 2.2. Yours steady cyan; rivals one
-  long thin violet trail (length × 1.6, width × 0.7, alpha 0.55); pirates unequal orange flares (`RUST`; full flares while a drive spools). Docked and digging ships
-  show none. Pirate shields and jumps are drawn on the additive layer (`bolts.ts`; gameevents.md → Pirates). 2–6 quads a ship: the combat container holds 600 quads, your civilization's 460.
-- Ships are world-sized (`SHIP_SCALE`: a fleet cell = 0.4 of your radius for every faction, and with it plumes, rounds
-  and hit radii; never under `SHIP_MIN_PX` 8 px a cell). A ship's hit radius is ~0.09 R (`shipR`: 6 × 0.4 R ÷ 28).
+- **Plumes** (user, 2026-11-14; `render/tech.ts` `drawShip`, engine points `shipArt.ts` `ENGINES`): per engine a tinted
+  glow and white core, length nozzle × (3 + 9 × burn). Yours steady cyan; rivals one long thin violet trail; pirates
+  uneven orange flares (`RUST`, full while a drive spools). Docked or digging: none. 2–6 quads a ship (combat container
+  600, your civilization's 460). Pirate shields and jumps: [gameevents.md](gameevents.md) → Pirates.
+- Ships are world-sized (`SHIP_SCALE`: a cell = 0.4 of your radius for every faction, plumes, rounds and hit radii
+  alike; ≥ `SHIP_MIN_PX` 8 px). Hit radius ~0.09 R.
 
 ### Ship art
 
-- **Built** (`render/shipArt.ts`): an SVG per faction and class (you and rivals: probe, miner, fighter, frigate,
-  colonizer, carrier; pirates: raider, hauler, marauder), 15 in all, baked once in colour into the 1024² tech page with
-  Pixi `Graphics.svg`, 128 × 80 cells at one scale so classes stay to scale, drawn with tint white (`SHIP_PX` 28 art px a
-  cell: a fighter ≈ 14). All ships stay in one draw call. Stations stay shader art; Dyson haulers are star-page shader
-  art (`star/look.ts`).
-- The spec (user: "design better 2D", one-winged looked weird): bold symmetric silhouettes with wings on both sides, a
-  clear nose → cockpit → hull → engine axis, three hull tones plus a faction accent, glowing nozzles, few thin lines.
-  Each faction is told apart three ways, so it reads at 8–14 px even without colour: silhouette language, a signature
-  detail, and its palette.
+- `render/shipArt.ts`: an SVG per faction and class (you and rivals: probe, miner, fighter, frigate, colonizer, carrier,
+  rocket; pirates: raider, hauler, marauder), baked once in colour into the 1024² tech page (`Graphics.svg`, 128 × 80
+  cells, one scale; `SHIP_PX` 28 art px a cell, a fighter ≈ 14). One draw call for all ships. Stations stay shader art;
+  Dyson haulers are star-page art (`star/look.ts`).
+- Spec (user: "design better 2D"; one-winged looked weird): bold symmetric silhouettes, nose → cockpit → hull → engine
+  axis, three hull tones plus an accent, glowing nozzles. Each faction told apart by silhouette, a signature detail and
+  palette, readable at 8–14 px.
 
 #### Faction identity
 
 | | **You** | **Rivals** | **Pirates** |
 |---|---|---|---|
-| Shape language | smooth engineered capsules and crosses, rounded corners, symmetric; each class its own outline (T probe, cargo hexagon, cruciform fighter, banded shield frigate, greenhouse ark, bracket carrier) | sharp faceted blades and petals, wide rather than long, symmetric: lacewing, claw, moth wings, six-point shield, flower halo, blade crown | boxy welded scrap, symmetric outline with **mismatched details**: patch plates, gun mounts, castellated turret blocks, uneven flares |
-| Signature detail | red / green nav lights; long white canopy or sensor pill; glowing cyan inset strips | one bright diamond core at the centre of mass (never at the nose); a short tapered ion trail | amber hazard chevrons; rust patch plates; rivets |
+| Shape | smooth capsules and crosses, rounded, symmetric; each class its own outline | sharp faceted blades and petals, wide | boxy welded scrap, mismatched details |
+| Signature | red / green nav lights; white canopy; cyan inset strips | one bright diamond core at the centre of mass; short ion trail | amber hazard chevrons, rust patches, rivets |
 | Hull dark / mid / light | `#1f4a5a` / `#2f7088` / `#5fb4cc` | `#3b2763` / `#55398a` / `#8a63d6` | `#3a3229` / `#5a4c3a` / `#8a7a60` |
 | Outline | cyan `#7fe8ff` | violet `#b48cff` | bone `#d9cfbf` |
-| Highlight | canopy `#e8fbff` | core `#f1e6ff` | cockpit window `#ffd9a0` |
-| Accent | cyan stripes `#7fe8ff`; wingtips `#ff6b6b` / `#6cf0a0` | — (the core is the accent) | rust `#c4683c` and amber `#e8b04a` warning stripes |
-| Engines | twin round thrusters, steady cyan `#7fe8ff` | one long trail, violet `#b48cff` at ~55% | uneven, sputtering flares, orange `#ff7a50`, two sizes |
-| Mood | clean, calm, engineered | elegant, alien: a mirror of you | crude, dangerous, opportunist |
+| Highlight | canopy `#e8fbff` | core `#f1e6ff` | window `#ffd9a0` |
+| Accent | cyan `#7fe8ff`; wingtips `#ff6b6b` / `#6cf0a0` | the core | rust `#c4683c`, amber `#e8b04a` |
+| Engines | twin round, steady cyan | one long violet trail ~55% | uneven orange `#ff7a50` flares |
+| Mood | clean, calm, engineered | elegant, alien | crude, dangerous |
 
-Life cargo is the same everywhere: a green `#6cf0a0` core (Colonizer), so "this ship carries life" reads across
-factions.
+Life cargo is a green `#6cf0a0` core everywhere (Colonizer).
 
 #### Classes
 
-Lengths relative to a fighter (1.0 ≈ 14 px at the start zoom). The design doc's names; Tip = unlock tier.
+Length relative to a fighter (≈ 14 px at the start zoom); Tip = unlock tier.
 
-| Class | Tip | Length | You | Rivals | Pirates | Role today |
-|---|---|---|---|---|---|---|
-| Probe | 0 | 0.6 | a compact T with a white sensor pill | a four-point lacewing round a small diamond core | — | yours: the light laser class, cap = tier, breaks ≤ 0.5%; rivals': circle you 10 s, harmless |
-| Miner | 0 | 0.9 | a squat cargo hexagon, three ore wells | two hooked claw blades cradling an amber ore crystal | **Hauler** 1.25: an enclosed cargo safe, rust patches, two flares | your shuttles to moons and sites; rival miners strip free rocks; pirate haulers carry loot |
-| Fighter | I | 1.0 | a cruciform interceptor, long white canopy | two tall moth wings, a short beak | **Raider** 1.0: a stepped gunboat with paired cannons | your patrols (2 at LIFE), break ≤ 2%; rival patrols and waves; pirate raiders |
-| Frigate | I | 1.5 | an elongated shield hull, three armour bands, twin engines | a six-point carapace shield round the core | — | yours from tier 3, a 3-bolt lance every 10 s at 2–25% rocks or an enemy world; rivals' a battery at home (0/1/1/2 at L1–4), 2 hits |
-| Colonizer | I | 1.1 | a rounded greenhouse ark | a faceted flower halo round a green garden | — | carries life ([stargameplay.md](stargameplay.md)) |
-| Carrier | II | 2.2 | a long bracket hull with two launch mouths | a blade crown with two open hangars | **Marauder** 2.5: a castellated fortress with six turret blocks | the colony ship's escort (no fighters); the marauder is the pirate capital in fleets of 10+ (4 hulls, a heavy gun) |
-| Dyson builder | II | 1.5 | a frame with solar fins (to draw) | — | — | today star-page haulers |
+| Class | Tip | Length | You | Rivals | Pirates |
+|---|---|---|---|---|---|
+| Probe | 0 | 0.6 | compact T, sensor pill | four-point lacewing | — |
+| Miner | 0 | 0.9 | cargo hexagon, three ore wells | claw blades round an ore crystal | **Hauler** 1.25: cargo safe, two flares |
+| Fighter | I | 1.0 | cruciform interceptor | tall moth wings | **Raider** 1.0: stepped gunboat |
+| Frigate | I | 1.5 | banded shield hull, twin engines | six-point carapace | — |
+| Colonizer | I | 1.1 | greenhouse ark | flower halo, green garden | — |
+| Carrier | II | 2.2 | bracket hull, two launch mouths | blade crown, two hangars | **Marauder** 2.5: fortress, six turrets (fleets of 10+) |
+| Dyson builder | II | 1.5 | to draw | — | — |
 
 #### Rendering
 
-- **Baked in colour, not white:** each faction's cells carry their own palette; tint stays free for hit flashes and
-  the harmed state.
-- **Shading through value, not lines** (2026-11-13, from concept art; v2 for you and pirates, v3 for rivals): one linear gradient per faction, broad value planes, glowing engines and cores. The gradients do not
-  render (Open issues).
-- **Texture:** 15 cells of 128 × 80 on the page's lower half, one seed each, no tendency layers yet.
-- **Readability target:** every class recognised at 8 px with colour off, factions told apart at 14 px; still one draw
-  call for all ships.
+- Baked in colour (tint stays free for hit flashes). Shading by value planes, one gradient per faction (2026-11-13; v2
+  you and pirates, v3 rivals) — the gradients do not render (Open issues). Target: every class recognised at 8 px colour
+  off, factions told apart at 14 px.
 
 ## Planned
 
-- **Tendency layers** (the design doc: a civilization's style comes from its planet's tendency), one add-on per
-  tendency over any class, in each side's palette (pirates have none):
-
-  | Tendency (doc rule) | Add-on | Stat it shows |
-  |---|---|---|
-  | Industry (metal ≥ 35%) | armour plates along both sides | hull +40% |
-  | Ocean (ocean world) | one or two shield arcs ahead | shield and repair |
-  | Swarm (gas + water ≥ 40%) | ships drawn at 0.55× and built ×3 | many, fragile |
-  | Energy (radioactive / volcanic) | a long beam spine with a glowing tip | range, energy cost |
-
-- **Lights and flares as dots:** engine flares, wingtip lights and the rival ion trail as `dot` sprites in the same
-  container, so they can flicker or pulse without a re-bake.
-- **The Dyson builder** art.
-- **The 8 px colour-off readability check.**
-- Every class flies the one flight model; roles differ only in route and weapon. No guided rocket that cannot be
-  dodged (concept 8): distance, speed and an early burn across beat rockets.
+- **Tendency layers** (design doc: style from the planet's tendency), one add-on over any class (pirates none): Industry
+  (metal ≥ 35%) armour plates, hull +40%; Ocean shield arcs, shield and repair; Swarm (gas + water ≥ 40%) 0.55× ships
+  built ×3; Energy (radioactive / volcanic) a long beam spine, range.
+- Flares, wingtip lights and the ion trail as `dot` sprites (flicker without a re-bake); Dyson builder art; the 8 px
+  colour-off check.
 
 ## Open issues
 
-- **Flying your world fast through a belt costs fighters:** 0.85–1.17 wrecks a fighter-minute at 8 R/s and 0.10–0.23 at
-  2 R/s (crowd.test.ts, 2026-11-16), against the plan's 0.5 and 0.1. Not yet seen in the game.
-- **Ship gradients dropped:** Pixi's SVG parser skips `<defs>` / `<linearGradient>` at the ship-page bake, so every ship
-  draws without its gradient fills (bake warnings: [techandperformance.md](techandperformance.md)).
-- The bank's look at 8 px is unchecked (drop it if it reads as wobble).
+- **Fast flight through a belt costs fighters:** 0.85–1.17 wrecks a fighter-minute at 8 R/s (plan 0.5). Not seen in game.
+- **Ship gradients dropped:** Pixi's SVG parser skips `<linearGradient>` at bake ([techandperformance.md](techandperformance.md)).
+- The bank's look at 8 px is unchecked.
 
 ## Decisions
 
 - **Ships ≥ 8 px; you cyan, rivals violet** (user, standing).
-- **Ship art** (user, 2026-11-13): "design better 2D"; one-winged looked weird. Built: the faction spec above.
-- **Flight of all ships** (user, 2026-11-13, concept 7): "We also need to change the flight behavior of all spaceships.
-  They do not necessarily have to fly in planetary orbits; simply flying around and following the planet, as in the old
-  game, is sufficient. This will allow early-stage players to hit pirate ships using moons. If they try to fly in low
-  orbit, the player can never reach them. Bring back a similar mechanic from the old game." Built: the first version
-  copied the old game's ship rules (eased turning, moving waypoints, strafing passes, die on touch); the nose-first
-  model replaced it; still kept: ships fly relative to their world, enemy ships away die on any touch.
-- **Ships fly and fire like spaceships** (user, 2026-11-14): "Our destroyer ships are attacking like rockets—actually,
-  they need to open fire, fix that. … I want ships that move more like actual spaceships, with visible propulsion from
-  their rear thrusters. This should apply to all ships: our ships, alien ships, and pirate ships." Built: the nose-first
-  model, circuits in pairs, formations and strafing runs, attack runs that break off, one pool of aimed rounds, live
-  engine plumes.
-- **Pirate fleets redesigned from scratch** (user, 2026-11-14): "Pirate groups still aren't following proper flight
-  paths. They end up flying straight into planets. … every pirate group should have at least one cargo ship … Let's
-  completely redesign and improve their entire lifecycle from scratch". Built: Pirate flight (formation, steering, the
-  moon-system keep-out, gun runs, jinks); the fleet's lifecycle in [gameevents.md](gameevents.md) → Pirates. Keep them
-  dangerous, but never flying into planets.
-- **Ships collide with consequences and navigate** (user, 2026-11-14): "They should still be able to collide with
-  objects, and those collisions should have consequences. However, their flight paths need to dynamically adjust to
-  their surroundings. … The goal isn't to eliminate collisions entirely, but to make their navigation intelligent and
-  visually convincing." Built: Navigation and collisions.
-- **Tops in space** (user, 2026-11-15): pirates and rival ships away have a top speed and never ride your velocity; fly
-  faster than ~10 R/s and you outrun a raid, and you can run ships down. Built: Pirate flight, Rival ships away from home.
+- **One flight model, no undodgeable rocket** (concept 8): roles differ only in route and weapon; distance, speed and an
+  early burn beat rockets.
+- **Ship art** (user, 2026-11-13): "design better 2D".
+- **Flight of all ships** (user, 2026-11-13, concept 7): ships follow their planet as in the old game, not low orbits, so
+  early players can hit pirates with moons. Kept: ships fly relative to their world; enemy ships away die on any touch.
+- **Ships fly and fire like spaceships** (user, 2026-11-14): open fire instead of ramming, visible rear thrust, for every
+  faction.
+- **Pirate fleets redesigned** (user, 2026-11-14): proper flight paths, never into planets, every group with a cargo ship;
+  keep them dangerous.
+- **Ships collide with consequences and navigate** (user, 2026-11-14): collisions stay, paths adapt intelligently.
+- **Tops in space** (user, 2026-11-15): pirates and rival ships away have a top speed and never ride your velocity; over
+  ~10 R/s you outrun a raid and can run ships down.

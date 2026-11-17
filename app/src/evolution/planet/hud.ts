@@ -8,7 +8,7 @@ import type { WorldState } from './stage';
 import { bar as pct, finder, throttle } from '../../ui/panel';
 
 // Age II in your card (asteroid/hud.ts): it writes the head (tier, mass) and the goal bar (life; the civilization's tier; the gas
-// line's brown dwarf), and fills the World section: its summary (temperature, air, the worst condition, moons), the climate
+// line's brown dwarf), and fills the World section: its summary (temperature, air, the worst condition), the climate
 // cells (temperature, air, water, magnetic field), the Moons row (with the next ring), and the nearest limit ahead while it
 // matters (seas boil or gas world, the other in its tooltip), a scale with you as the needle.
 // Every scale reads the same way: the needle is you, the band is where life wants it, the value is green inside.
@@ -150,10 +150,10 @@ export function createWorldHud() {
       const m = w.mass, next = nextMoonMass(m);
       $('.moons .v').textContent = `${w.moons}/${w.slots}${next ? ` · next ${times(next / m)}` : ''}`;
 
-      // The header's summary: temperature, air, the worst condition if it is water or the field, moons; the worst one coloured.
+      // The header's summary: temperature, air, the worst condition if it is water or the field; the worst one coloured (moons have their own row).
       const parts: [number, string][] = [[w.scores.temp, value0('.temp')], [w.scores.air, value0('.air')], [w.scores.water, `Water ${value0('.water')}`], [w.scores.magnet, `Field ${value0('.magnet').toLowerCase()}`]];
       const worst = parts.reduce((a, b, i) => (b[0] < parts[a][0] ? i : a), 0), shown = w.envelope ? [] : worst > 1 && parts[worst][0] < 0.6 ? [0, 1, worst] : [0, 1];
-      const html = [...shown.map((i) => (i === worst && parts[i][0] < 0.6 ? `<b class="${grade(parts[i][0])}">${parts[i][1]}</b>` : parts[i][1])), `Moons ${w.moons}/${w.slots}`].join(' · ');
+      const html = shown.map((i) => (i === worst && parts[i][0] < 0.6 ? `<b class="${grade(parts[i][0])}">${parts[i][1]}</b>` : parts[i][1])).join(' · ');
       if (html !== sum) $('.hd .v').innerHTML = sum = html;
 
       // Limits ahead, each its own state colour (no alert): seas boil while they are liquid on a rocky world (the band from where

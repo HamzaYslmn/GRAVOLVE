@@ -9,7 +9,7 @@ The authoritative list of user decisions is `.claude/CLAUDE.md` → Design prefe
 | File | Purpose |
 |---|---|
 | [README.md](README.md) | This index: files, labels, doc layout, standing decisions, stages, code → doc map |
-| [vision.md](vision.md) | The concept (verbatim), Kardashev mapping, audience, pillars, goals, roadmap, wave plan, open decisions Q1–Q7, cross-cutting open issues |
+| [vision.md](vision.md) | The concept (verbatim), audience, fun and goals, roadmap, wave plan (with the Kardashev steps and concept status), open decisions Q1–Q7, cross-cutting open issues |
 | [asteroidgameplay.md](asteroidgameplay.md) | Age I: tiers, bodies and collisions, heat, gravity, flight and camera, shapes |
 | [worldgen.md](worldgen.md) | The field every stage shares: chunks, spawn masses, biomes, regions, cosmic web |
 | [planetgameplay.md](planetgameplay.md) | Age II: world tiers, gas line, water, air, climate, life, moons, survival |
@@ -20,7 +20,7 @@ The authoritative list of user decisions is `.claude/CLAUDE.md` → Design prefe
 | [aliencivilizations.md](aliencivilizations.md) | Rivals: Age I cores, roster and ledger, rival worlds, strategy, defeat |
 | [hudandcontrols.md](hudandcontrols.md) | Controls, HUD, hints, toasts, game over, score, debug mode, achievements, settings, YouTube Playables |
 | [techandperformance.md](techandperformance.md) | Stack, rendering, bakes, audio, budget, measured costs, testing |
-| [gamedesign.html](gamedesign.html) | The original design doc (Turkish), untouched. `asteroid/rules.ts` stays in sync with its "Çarpışma ve Dönüşüm" section; each deliberate difference is stated in the topic doc |
+| [gamedesign.html](gamedesign.html) | The original design doc (Turkish). `asteroid/rules.ts` stays in sync with its "Çarpışma ve Dönüşüm" section; each deliberate difference is stated in the topic doc |
 
 ## Labels
 
@@ -48,7 +48,8 @@ The authoritative list of user decisions is `.claude/CLAUDE.md` → Design prefe
 - Package tags **[A]–[M]** are listed in vision.md → Wave plan; open decisions **Q1–Q7** in vision.md → Open decisions.
   Planned items are proposals until built; the user can change them.
 - Cross-references name the file and a heading (`stargameplay.md` → Link), never a section number or anchor.
-- History and measurement logs belong in git; the docs keep the current rule, its numbers and the dated decisions.
+- The docs keep the current rule, its numbers, the dated decisions and each measurement's result line with its date;
+  the history and full logs live in git. Code comments stay short.
 
 ## Standing decisions (user)
 
@@ -74,8 +75,11 @@ Short form. Numbers and details live in the linked doc.
 - **Priority target** (user, 2026-11-15): one right-click / E / tap sets one fleet priority; it fires nothing by itself; each weapon takes it when it can ([civilizationgameplay.md](civilizationgameplay.md) → Priority target).
 - **Weapons read by shape and motion;** hue says the faction. Rockets fly with a flame ([shipsandflight.md](shipsandflight.md)).
 - **Moons:** at most 5, caught by flying (match speed on a free ring), never by a click; never thrown (no Sling); ore for your miners, guards by orbiting ([planetgameplay.md](planetgameplay.md) → Moons).
-- **Fire** launches a guided rocket from your surface (one rocket for you and rival worlds).
-- **Pirates never destroy a world or kill you:** harm is capped (shield, stock, ≤ ~2% water/air a raid) ([gameevents.md](gameevents.md) → Pirates).
+- **Fire** (user, 2026-11-17) launches a guided rocket from your surface, one rocket for you and rival worlds: limited turning, range 2 × the mining reach, no shots across the map ([civilizationgameplay.md](civilizationgameplay.md) → Rockets).
+- **Rival worlds have their own goals** (user, 2026-11-17): they follow you only within 30 R, give up an outflown chase by temper, and arrive by travel × local density, so empty space stays lonely ([aliencivilizations.md](aliencivilizations.md) → Rival civilizations).
+- **Salvage** (user, 2026-11-17): enemy wrecks within your fire range give what the ship was made of, burned and carried; your own wrecks give nothing ([civilizationgameplay.md](civilizationgameplay.md) → Stocks).
+- **Home mines** (user, 2026-11-15; gated 2026-11-17): your people dig their own world only while nothing else is minable ([civilizationgameplay.md](civilizationgameplay.md) → Stocks).
+- **Pirates never destroy a world or kill you:** harm is capped (shield, stock, ≤ ~2% water/air a raid). Keep them as harsh as this (user, 2026-11-17); their ships carry light shields, and a losing fleet that is pressed jumps away to light speed ([gameevents.md](gameevents.md) → Pirates).
 - **Look:** you cyan, rivals violet; BASE_ZOOM 1.02 (`main.ts`); ship cell floor `SHIP_MIN_PX` 8 screen px (`render/tech.ts`), so a fighter can draw at ~4 px far out.
 
 Where the concept changed earlier rules: vision.md → Concept vs standing decisions.
@@ -107,9 +111,9 @@ Where the concept changed earlier rules: vision.md → Concept vs standing decis
 | `evolution/asteroid/rival.ts`, `evolution/rivals/ledger.ts` | aliencivilizations |
 | `evolution/asteroid/hud.ts`, `planet/hud.ts`, `civilization/hud.ts`, `civilization/slots.ts`, `star/hud.ts` (+ `hud.css`) | hudandcontrols |
 | `evolution/planet/rules.ts`, `stage.ts`, `moons.ts` | planetgameplay |
-| `evolution/civilization/rules.ts`, `stage.ts`, `view.ts`, `lattice.ts`, `combat.ts`, `mining.ts`, `orders.ts` | civilizationgameplay |
+| `evolution/civilization/rules.ts` (its pirate block: gameevents; its rival block: aliencivilizations), `stage.ts`, `view.ts`, `lattice.ts`, `combat.ts`, `mining.ts`, `orders.ts` | civilizationgameplay |
 | `evolution/civilization/flight.ts`, `nav.ts`, `crash.ts`, `guns.ts`, `ships.ts`, `bolts.ts` | shipsandflight |
-| `evolution/civilization/pirates.ts` | gameevents |
+| `evolution/civilization/pirates.ts`, `escape.ts` | gameevents |
 | `evolution/civilization/rivals.ts`, `away.ts` | aliencivilizations |
 | `evolution/star/rules.ts`, `stage.ts`, `look.ts`, `system.ts`, `dyson.ts`, `colony.ts` | stargameplay |
 | `render/shipArt.ts` | shipsandflight |

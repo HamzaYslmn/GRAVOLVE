@@ -14,7 +14,7 @@ const { createAsteroidField } = await import('../../src/evolution/asteroid/field
 const { absorb, drop, rockBody, tickBody } = await import('../../src/evolution/asteroid/body.ts');
 const { makeRival, tendMoon } = await import('../../src/evolution/asteroid/rival.ts');
 const { roster } = await import('../../src/evolution/rivals/ledger.ts');
-const { AGE_GOAL, COMP, radiusOf, START_R } = await import('../../src/evolution/asteroid/rules.ts');
+const { AGE_GOAL, airR, COMP, radiusOf, START_R } = await import('../../src/evolution/asteroid/rules.ts');
 type Body = import('../../src/evolution/asteroid/body.ts').Body;
 type Field = ReturnType<typeof createAsteroidField>;
 type Hit = import('../../src/evolution/asteroid/body.ts').Hit & { ma: number; ka: number; kb: number };
@@ -32,9 +32,9 @@ const finite = (b: Body) => Number.isFinite(b.motion.x + b.motion.y + b.motion.v
 /** One seeded run: `seconds` of play, the player flying a fixed course (`course(t)`: velocity), Age II from `age2` s; `each` after every update. */
 function run(seed: number, seconds = 60, age2 = 30, course = (t: number) => [t < 20 ? 220 : 0, t < 20 ? 0 : 160], each = (_f: Field) => {}) {
   Math.random = rng(seed * 31 + 7);
-  let p = you(0, 700), hits = 0, deaths = 0, bad = 0, guards = 0;
+  let p = you(0, 700), hits = 0, deaths = 0, bad = 0, guards = 0, low = 0, burns = 0; // low: burns below the air's edge (1%: the dust grows you first)
   const named = new Set<Body>();
-  const field = createAsteroidField(new Container(), atlas as never, Texture.EMPTY, spheres, seed, p, (h) => void (hits++, Number.isFinite(h.speed) || bad++), () => {});
+  const field = createAsteroidField(new Container(), atlas as never, Texture.EMPTY, spheres, seed, p, (h) => void (hits++, Number.isFinite(h.speed) || bad++), (_b, x, y) => void (burns++, Math.hypot(x - p.motion.x, y - p.motion.y) < airR(p.r) * 0.99 && low++));
   for (const e of field.roster) e.life.progress = 1; // alive: a named world on the map catches a guard moon
   for (let t = 0; t < seconds; t += DT) {
     if (!p.m) field.follow((p = you(p.motion.x, p.motion.y), deaths++, p)); // eaten: a fresh body in the same field
@@ -53,6 +53,7 @@ function run(seed: number, seconds = 60, age2 = 30, course = (t: number) => [t <
       if (b.held && !b.rival && !b.comet) assert.ok(field.bodies.some((w) => w.rival?.moon === b), 'nothing plain stays held once its world is gone');
     }
   }
+  assert.ok(!low && (seed !== 8211 || burns > 0), "small bodies burn at the air's edge (airR), never lower");
   let h = 2166136261;
   for (const b of [p, ...field.bodies]) for (const v of [b.motion.x, b.motion.y, b.m * 100]) h = Math.imul(h ^ Math.round(v), 16777619) >>> 0;
   return { field, p, hits, deaths, bad, guards, named: named.size, n: field.bodies.length, hash: h.toString(16) };

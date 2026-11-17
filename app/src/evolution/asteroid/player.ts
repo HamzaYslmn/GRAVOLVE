@@ -4,7 +4,7 @@ import type { Axis } from '../../core/input';
 import { clamp, smoothstep } from '../../core/rng';
 import { boil as boilWater, K_PER_HEAT, LATENT, pressure } from '../../core/water';
 import type { Rock } from './atlas';
-import { gap, phys, rockBody, shed, tickBody, type Body } from './body';
+import { gap, heatGlow, phys, rockBody, shed, tickBody, type Body } from './body';
 import type { Spheres } from './sphere';
 import { createWells } from './wells';
 import { EXTINCT } from '../planet/rules';
@@ -69,9 +69,8 @@ export function createPlayer(layer: Container, rock: Rock, glow: Texture, sphere
   body.spin = 0.3;
   body.fertile = ROCK_BONUS;
   const halo = new Sprite({ texture: glow, anchor: 0.5, tint: 0x7fc8ff, alpha: 0.35, blendMode: 'add' });
-  const heat = new Sprite({ texture: glow, anchor: 0.5, tint: 0xe0400e, alpha: 0, blendMode: 'add' }); // hot rock, not a star
   const wells = createWells(glow);
-  layer.addChild(wells.layer, halo, heat, body.view); // heat glow behind the body: on top it blows the disc out to white
+  layer.addChild(wells.layer, halo, body.view); // heat shows as a rim on your outline (body.ts heatGlow), as on any rock
 
   /**
    * What touching `t` would do, falling in included (rules.ts collide regimes, by worldOpts): green merge, yellow partial
@@ -125,13 +124,13 @@ export function createPlayer(layer: Container, rock: Rock, glow: Texture, sphere
     },
     /** Removes everything the player drew (its rock parts may live on inside whatever ate it). */
     destroy() {
-      for (const o of [halo, heat, body.view]) if (!o.destroyed) o.destroy({ children: true }); // its sphere and city lights free their bakes (sphere.ts begin)
+      for (const o of [halo, body.view]) if (!o.destroyed) o.destroy({ children: true }); // its sphere and city lights free their bakes (sphere.ts begin)
       wells.destroy();
     },
     /** `around`: bodies near you, for the wells; `inView`: whether a body is on screen (the target panel picks from those). */
     update(dt: number, zoom: number, around: Body[], inView: (b: Body) => boolean) {
       if (!body.m) {
-        halo.visible = heat.visible = wells.layer.visible = false; // eaten or destroyed
+        halo.visible = wells.layer.visible = false; // eaten or destroyed
         return;
       }
       if (around.some((t) => t.moon)) around = around.filter((t) => !t.moon); // your moons never touch you
@@ -169,10 +168,8 @@ export function createPlayer(layer: Container, rock: Rock, glow: Texture, sphere
       spheres.update(body, dt, true);
       halo.position.copyFrom(body.view.position);
       halo.scale.set((body.r * (body.comet ? 6 : 4)) / glow.width); // a comet's coma is wider
-      heat.position.copyFrom(body.view.position);
-      heat.scale.set((body.r * 3) / glow.width);
-      heat.alpha = clamp((body.heat - 0.2) / 3, 0, 0.55);
-      halo.alpha *= 1 - heat.alpha; // the cool halo gives way to the heat glow (both together read as a star)
+      heatGlow(body);
+      halo.alpha *= 1 - clamp((body.heat - 0.2) / 3, 0, 0.55); // the cool halo gives way to the heat rim (both together read as a star)
 
       // Sensing: the nearest rock once close, anything on your course within LOOKAHEAD s, and heavier
       // bodies close by. The most urgent one is the aim (HUD target panel).

@@ -26,13 +26,12 @@ const pitchOf = (r: number) => Math.sqrt(START_R / r); // 1 at your starting siz
  * through the air shell and a small flash just above your limb at (x, y). `whole`: nothing was left to land.
  */
 export function burnStreak(fx: Fx, me: Body, rock: Body, x: number, y: number, ux: number, uy: number, whole: boolean) {
-  const len = me.r * 1.4, grain = Math.max(rock.r * 0.8, me.r * 0.05), n = 12;
-  const lx = x + (x - me.motion.x) * 0.08, ly = y + (y - me.motion.y) * 0.08; // just above the limb
-  for (let i = 0; i < n; i++) {
-    const t = i / (n - 1), j = (Math.random() - 0.5) * grain * 0.4; // t 0 at the limb .. 1 where it entered the air
-    fx.ember(lx - ux * len * t + j, ly - uy * len * t + j, me.motion.vx, me.motion.vy, grain * (1 - 0.6 * t), mixRgb(0xfff2d8, 0xff8a3a, t, false), 0.5 + 0.5 * (1 - t));
+  const len = me.r * 0.15, grain = Math.max(rock.r * 0.8, me.r * 0.05), n = 12;
+  for (let i = 0; i < n; i++) { // (x, y): the air's edge (field.ts burn); the grains fall on into the air, not out into space
+    const t = i / (n - 1), j = (Math.random() - 0.5) * grain * 0.4; // t 0 where it burnt .. 1 a little deeper
+    fx.ember(x + ux * len * t + j, y + uy * len * t + j, me.motion.vx, me.motion.vy, grain * (1 - 0.6 * t), mixRgb(0xfff2d8, 0xff8a3a, t, false), 0.5 + 0.5 * (1 - t));
   }
-  fx.flash(lx, ly, grain * (whole ? 2.5 : 1.6), whole ? 5 : 3, grain * 6);
+  fx.flash(x, y, grain * (whole ? 2.5 : 1.6), whole ? 5 : 3, grain * 6);
 }
 
 const SPARKS = 12; // rock pairs' rub: sparks per touch-at-the-stick-speed of energy lost

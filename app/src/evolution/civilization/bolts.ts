@@ -1,6 +1,6 @@
 import type { Texture } from 'pixi.js';
 import type { Fx } from '../../render/fx';
-import { RUST, VIOLET, YOU, type Fleet, type Put } from '../../render/tech';
+import { RUST, SHIP_PX, SHIP_SCALE, VIOLET, YOU, type Fleet, type Put } from '../../render/tech';
 import { ART_W } from '../../render/shipArt';
 import type { Body } from '../asteroid/body';
 import { JUMP, type Wake, type Warp } from './escape';
@@ -94,25 +94,24 @@ export function drawBolts(o: BoltsIn) {
     const t = age / MUZZLE.s, w = heavy(s.gun) ? least(MUZZLE.heavyK, MUZZLE.heavyPx, u, z) : least(MUZZLE.k, MUZZLE.px, u, z);
     add(dot, s.x - rvx * age, s.y - rvy * age, 0, w * (1 - 0.5 * t), s.gun.tint, 0.9 * (1 - t));
   }
-  // Rockets (ROCKET, render/shipArt.ts rocket): the baked hull on the normal layer, ROCKET.len of their unit long, never
-  // under ROCKET.px nor over 0.6 of its unit (zoomed far out); behind it a flickering flame in the side's hue round a
-  // white-yellow jet (longer while the motor runs up), a nozzle glow and embers left hanging in the launch frame; off the
-  // pad a flash and a puff of dust along the ground.
+  // Rockets (ROCKET, render/shipArt.ts rocket): the baked hull on the normal layer, ROCKET.len R long in the ships' unit
+  // (smaller than any ship); behind it a flickering flame in the side's hue round a white-yellow jet, both growing with
+  // the thrust (m.burn), a nozzle glow and embers streaming back from the nozzle; off the pad a flash and a puff of dust.
   for (const m of o.rockets.live) {
-    const len = Math.min(Math.max(ROCKET.len * m.R, ROCKET.px / z), 0.6 * m.R);
+    const len = (ROCKET.len / SHIP_SCALE) * SHIP_PX * u;
     if (!o.onScreen(m.x, m.y, 3 * len)) continue;
-    const c = Math.cos(m.heading), sn = Math.sin(m.heading), tint = m.team === 'you' ? YOU : VIOLET, tx = m.x - c * len * 0.57, ty = m.y - sn * len * 0.57;
+    const c = Math.cos(m.heading), sn = Math.sin(m.heading), tint = m.team === 'you' ? YOU : VIOLET, tx = m.x - c * len * 0.5, ty = m.y - sn * len * 0.5;
+    const on = m.fuel > 0 ? 0.5 + 0.5 * m.burn : 0, fl = 0.85 + 0.3 * Math.random(), w = Math.max(0.5 * len, 1.5 / z), L = w * (1 + 1.5 * on) * fl;
     if (!m.lit) {
       m.lit = true;
-      fx.flash(tx, ty, len * 0.6, 0, 0);
-      fx.puff(tx, ty, c, sn, 6, len * 0.2, len * 1.5, 0x8a8478);
+      fx.flash(tx, ty, 2 * w, 0, 0);
+      fx.puff(tx, ty, c, sn, 6, 0.5 * w, 5 * w, 0x8a8478);
     }
-    const on = m.fuel > 0 ? 0.55 + 0.45 * m.burn : 0, fl = 0.85 + 0.3 * Math.random(), w = Math.min(Math.max(0.3 * len, 4 / z), 0.45 * len), L = len * (0.45 + (m.age < ROCKET.boost + 1 ? 0.75 : 0.45) * on) * fl;
     add(dot, tx - c * L * 0.45, ty - sn * L * 0.45, m.heading, 2 * w, tint, 0.85 * on, Math.max(1, (2 * L) / (2 * w)));
     add(dot, tx - c * L * 0.25, ty - sn * L * 0.25, m.heading, 1.1 * w, JET, on, Math.max(1, L / (1.1 * w)));
     add(dot, tx, ty, 0, 2.2 * w, tint, 0.5 * on * fl);
-    o.put(o.fleet[m.team === 'you' ? 'you' : 'rival'].rocket, m.x, m.y, m.heading, (len * ART_W) / 120, 0xffffff, 1);
-    if (on && Math.random() < dt * 20) fx.ember(tx - c * L * 0.7, ty - sn * L * 0.7, m.v0x - c * len, m.v0y - sn * len, Math.max(0.06 * len, 1.5 / z), 0x6a6258, 0.4);
+    o.put(o.fleet[m.team === 'you' ? 'you' : 'rival'].rocket, m.x, m.y, m.heading, (len * ART_W) / 128, 0xffffff, 1);
+    if (on && Math.random() < dt * 30 * on) fx.ember(tx - c * L * 0.7, ty - sn * L * 0.7, m.vx - c * 6 * m.R, m.vy - sn * 6 * m.R, Math.max(0.3 * w, 1.5 / z), 0x6a6258, 0.4);
   }
   // Your frigates' noses charging.
   for (const f of civ?.frigates ?? []) if (f.glow > 0) {

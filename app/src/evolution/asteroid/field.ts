@@ -5,12 +5,12 @@ import { between, clamp, hashSeed, logBetween, poissonGap, rng } from '../../cor
 import type { Rock } from './atlas';
 import { pressure } from '../../core/water';
 import { bombardment, SETTLE_V } from '../planet/rules';
-import { absorb, asDebris, cluster, drop, gap, hitKelvin, keepShape, mixRgb, phys, resolve, rockBody, shatter, shed, sweep, tickBody, type Body, type Events, type Hit } from './body';
+import { absorb, asDebris, cluster, drop, gap, heatGlow, hitKelvin, keepShape, mixRgb, phys, resolve, rockBody, shatter, shed, sweep, tickBody, type Body, type Events, type Hit } from './body';
 import { makeRival, steerRival, tendMoon } from './rival';
 import { live, next, roster, struck, tick, type Entry } from '../rivals/ledger';
 import { beltFlow, density, groupDrift, KINDS, kindMix, nearStart, palette, place, rapidsFlow, tintBy, web, type Biome, type Place } from './web';
 import type { Spheres } from './sphere';
-import { AGE_GOAL, BURN_HEAT, BURN_MAX, burnShare, SPECK, EATEN_MARGIN, impactHeat, worldOpts, damage, COMP, G_WORLD, gravitates, pairPull, START_M, pullMass, rank, reachGround, stickSpeed, youPull, V_STICK, radiusOf, START_R, type Element, type Comp } from './rules';
+import { AGE_GOAL, airR, contactTime, BURN_HEAT, BURN_MAX, burnShare, SPECK, EATEN_MARGIN, impactHeat, worldOpts, damage, COMP, G_WORLD, gravitates, pairPull, START_M, pullMass, rank, reachGround, stickSpeed, youPull, V_STICK, radiusOf, START_R, type Element, type Comp } from './rules';
 
 // Asteroid field in world chunks, Minecraft-style: a chunk is generated once from the seed, stored as it is on unload
 // (eaten rocks stay eaten) and restored on load. A rock belongs to the chunk it is in; only loaded chunks simulate.
@@ -585,26 +585,25 @@ export function createAsteroidField(layer: Container, atlas: Rock[], glow: Textu
   }
 
   /**
-   * Atmosphere shield (rules.ts burnShare): a body reaching your surface (Age I: at ≥ the stick speed) and under 4 × the burn-up
-   * share of you loses (1 − reachGround) of its mass in your air, which joins you as dust (no hit) and warms you by
-   * BURN_HEAT of what that mass would have delivered. Each body burns once.
-   * Returns true when nothing is left to land.
+   * Atmosphere (rules.ts burnShare), the outermost layer: a body crossing your air's edge (airR, outside the shield shell;
+   * Age I: at ≥ the stick speed) and under 4 × the burn-up share of you loses (1 − reachGround) of its mass there, which joins
+   * you as dust (no hit) and warms you by BURN_HEAT of what that mass would have delivered. Each body burns once; one born
+   * inside the air (debris) or shed by the shell lands unburnt, so nothing burns at the ground.
    */
-  function burn(b: Body) {
-    if (b.burnt || !player.m) return false;
-    const sb = burnShare(pressure(player.m, player.comp.gas ?? 0)), s = b.m / player.m;
-    if (s >= Math.min(4 * sb, BURN_MAX)) return false; // only small bodies burn: a moon is not slowed by air
-    const pm = player.motion, dx = b.motion.x - pm.x, dy = b.motion.y - pm.y, d = Math.hypot(dx, dy) || 1;
-    const rvx = b.motion.vx - pm.vx, rvy = b.motion.vy - pm.vy, w = Math.hypot(rvx, rvy), vm = stickSpeed(phys(player), phys(b));
-    if (rvx * dx + rvy * dy >= 0 || (player.m < AGE_GOAL && w < vm * 2 * player.r)) return false; // leaving, or slow in Age I: it lands untouched
+  function burn(b: Body, dt: number) {
+    if (b.burnt || !player.m || b.m >= BURN_MAX * player.m) return; // a moon is not slowed by air
+    const pm = player.motion, rvx = b.motion.vx - pm.vx, rvy = b.motion.vy - pm.vy, qx = b.motion.x - pm.x, qy = b.motion.y - pm.y;
+    const t = contactTime(qx, qy, rvx * dt, rvy * dt, airR(player.r) + b.r);
+    if (t < 0) return; // not crossing the edge this frame
+    const sb = burnShare(pressure(player.m, player.comp.gas ?? 0)), s = b.m / player.m, w = Math.hypot(rvx, rvy), vm = stickSpeed(phys(player), phys(b));
+    if (s >= 4 * sb || (player.m < AGE_GOAL && w < vm * 2 * player.r)) return; // too big for this air, or slow in Age I: it lands untouched
     b.burnt = true;
-    const f = reachGround(s, sb);
+    const f = reachGround(s, sb), x = qx - rvx * dt * (1 - t), y = qy - rvy * dt * (1 - t), d = Math.hypot(x, y) || 1, a = airR(player.r) / d;
     player.heat += BURN_HEAT * impactHeat(s * (1 - f), w / (2 * player.r), vm, player.r); // a little warmth, no hit
     absorb(player, b.m * (1 - f), b.comp);
-    onBurn(b, pm.x + (dx / d) * player.r, pm.y + (dy / d) * player.r, rvx / w, rvy / w, f <= 0);
-    if (f <= 0) return drop(b), true;
-    shed(b, b.m * (1 - f));
-    return false;
+    onBurn(b, pm.x + x * a, pm.y + y * a, rvx / w, rvy / w, f <= 0); // at the air's edge
+    if (f <= 0) drop(b);
+    else shed(b, b.m * (1 - f));
   }
 
   const chunks = chunkSet(
@@ -786,12 +785,12 @@ export function createAsteroidField(layer: Container, atlas: Rock[], glow: Textu
       }
       // Off screen: not drawn, and its parts are not settled or recoloured.
       const on = Math.abs(b.motion.x - center.x) < halfW + 3 * b.r && Math.abs(b.motion.y - center.y) < halfH + 3 * b.r; // 3r: halos and comas
-      b.view.visible = on;
-      tickBody(b, dt, on);
+      tickBody(b, dt, (b.view.visible = on));
       if (!b.meteor) spheres.update(b, dt); // a passer-by is gone in seconds: no sphere bake
-      if (!b.moon || player.guard?.own?.(b) === false) { sweep(player, b, dt); if (b.metShell === player) b.moon = false; } // nothing tunnels through you; a rival's rock meets your shell and leaves its circle
+      if (on) heatGlow(b);
+      if (!b.moon || player.guard?.own?.(b) === false) { burn(b, dt); sweep(player, b, dt); if (b.metShell === player) b.moon = false; } // nothing tunnels through you; a rival's rock meets your shell and leaves its circle
     }
-    for (const s of swept) for (const b of rocks) if (s !== b && !(s.moon && b.moon)) sweep(s, b, dt); // after every body moved
+    for (const s of swept) { if (s.guard) sweep(s, player, dt); for (const b of rocks) if (s !== b && !(s.moon && b.moon)) sweep(s, b, dt); } // after every body moved; you meet a rival's shell
     // Broadphase: sort and sweep along x (by left edge; each body is tested only against those whose left edge lies before
     // its right edge), then a y check. Each pair once. The order is kept from the last frame (bodies barely move), so an
     // insertion sort is nearly linear.
@@ -813,7 +812,7 @@ export function createAsteroidField(layer: Container, atlas: Rock[], glow: Textu
       if (!a.m || !b.m) return;
       const dx = b.motion.x - a.motion.x, dy = b.motion.y - a.motion.y, rr = a.r + b.r;
       if (dx * dx + dy * dy >= rr * rr) return;
-      if (a === player) return (b.moon && a.guard?.own?.(b) !== false) || burn(b) ? undefined : ((b.moon = false), hitWorld(player, b)); // yours never touch you; a rival's rock lands like any body
+      if (a === player) return b.moon && a.guard?.own?.(b) !== false ? undefined : ((b.moon = false), hitWorld(player, b)); // yours never touch you; a rival's rock lands like any body
       if (a.moon && b.moon) return; // moons keep their slots
       if (a.guard && ((b.moon && !a.guard.own?.(b)) || b.metShell === a)) return hitWorld(a, b); // another world's moon (shed loose by its shell too) lands as a body lands on you
       if (a.rival || b.rival || a.moon || b.moon) return a.m >= b.m ? resolve(a, b, events) : resolve(b, a, events); // a moon eats like you do: a guard swallows slow infall

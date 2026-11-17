@@ -126,7 +126,7 @@ export function createRivals(ctx: Ctx) {
     for (let i = 0; i < rivalShips(level); i++) r.ships.push(newShip(b.r, (i / rivalShips(level)) * Math.PI * 2));
     b.guard = { r: 0, own, meet(q, v, x, y) { // its shell, as yours (its own rock passes; another world's moon meets it)
       const s0 = r.sh.s, st = strike(b, q, burnShare(AIR)), k = shieldMeet(r.sh, st.kelvin, st.share, v / st.vs);
-      if (k) [veil(r, s0, x, y), ctx.fx.flash(x, y, q.r * 2, 8, q.r * 3)];
+      if (k) [veil(r, s0, x, y), ctx.fx.flash(x, y, Math.min(q.r, 0.2 * b.r) * 2, 8, q.r * 3)];
       return k;
     } };
     list.push(r);

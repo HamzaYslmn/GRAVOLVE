@@ -14,8 +14,8 @@
 #game-hud .civ .row.home > .v { display: none; }
 #game-hud .civ .row.home.idle > .t { color: var(--ui-muted); }
 
-/* Three-up cells (People when open; the stock amounts always): icon · value, People's track under them; the state class
-   colours the cell. Their labels show only on phones (no tooltips there): People, Rad dose, Shield. */
+/* Cells: People's two (icon · label · value, the track under them, like the World's climate cells) and the stock amounts'
+   three-up (icon · value; labels only on phones, no tooltips there); the state class colours the cell. */
 #game-hud .civ .cells.c3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 #game-hud .civ .cell { color: #9fd0ff; }
 #game-hud .civ .cell:is(.ok, .warn, .bad) .v { color: inherit; }
@@ -23,8 +23,6 @@
 #game-hud .civ .cell.warn { color: var(--warn); }
 #game-hud .civ .cell.bad { color: var(--bad); }
 #game-hud .civ .cell .bar > i { background: currentColor; }
-#game-hud .civ .people .cell > .lb { display: none; }
-#game-hud .civ .people .cell > .v { grid-column: 3; }
 /* Stocks: icon · amount · its net rate a minute (attached, small, muted), a hairline between the three equal cells. */
 #game-hud .civ .cells.amt { column-gap: var(--ui-s3); }
 #game-hud .civ .st { grid-template-columns: var(--ui-icon-lg) auto minmax(0, 1fr); }
@@ -39,6 +37,7 @@
 #game-hud .civ .track > i { flex: none; transition: width 0.25s; }
 #game-hud .civ .track em { font-style: normal; }
 #game-hud .civ .track > i.bare .icon, #game-hud .civ .track em:empty { display: none; }
+#game-hud .civ .energy.open > .track > i > * { display: none; } /* opened, the Sources list names each colour */
 #game-hud .civ .track > u { position: absolute; top: 0; bottom: 0; background: var(--bad); }
 #game-hud .civ .track > .need { position: absolute; bottom: 0; height: var(--ui-track); width: 2px; margin-left: -1px; background: #fff; box-shadow: 0 0 2px #000; } /* a notch at the bottom edge, never across a label */
 #game-hud .civ .s-geo { background: #ff7a4a; }
@@ -69,7 +68,7 @@
 /* Phones (asteroid/hud.css): Energy's bar and the stock amounts fold into their headers' summaries; opened, every cell spells
    out its label on one row of the card's columns (icon · label · amount · rate). */
 @media (pointer: coarse) and (max-width: 640px), (max-height: 500px) {
-  #game-hud .civ .energy:not(.open) > .track, #game-hud .civ .stocks:not(.open) > .amt { display: none; }
+  #game-hud .civ .energy:not(.open) > .track, #game-hud .civ .stocks:not(.open) > .amt, #game-hud .civ .fleet:not(.open) > .shield { display: none; }
   #game-hud .civ .cells.c3 { grid-template-columns: minmax(0, 1fr); }
   #game-hud .civ .people .cell > .lb { display: inline; }
   #game-hud .civ .st { grid-template-columns: var(--ui-icon-lg) var(--ui-label) minmax(0, 1fr) var(--ui-val); }
@@ -80,14 +79,14 @@
   #game-hud .civ .tab > .per { visibility: visible; }
 }
 
-/* Fleet: per class its art (ships 2:1, rockets and missiles square, all an icon tall) in a double icon column, so tracks and
+/* Fleet: per class its art (ships 2:1, rockets square, all an icon tall) in a double icon column, so tracks and
    values stay on the card's columns; one pip per ship filled by its own reload, faint hollow pips for unbuilt cap; on takes
    the priority, off cannot, none: nothing yet. */
 #game-hud .civ .ships { display: grid; gap: var(--ui-gap); }
 #game-hud .civ .ships:empty { display: none; }
 #game-hud .civ .ship { grid-template-columns: calc(2 * var(--ui-icon)) calc(var(--ui-label) + var(--ui-icon-lg) - 2 * var(--ui-icon)) minmax(0, 1fr) var(--ui-val); color: #7fe8ff; }
 #game-hud .civ .ship .art { display: block; justify-self: center; width: calc(2 * var(--ui-icon)); height: var(--ui-icon); }
-#game-hud .civ .ship:is(.rocket, .missile) .art { width: var(--ui-icon); }
+#game-hud .civ .ship.rocket .art { width: var(--ui-icon); }
 #game-hud .civ .ship .pips { gap: var(--ui-s1); }
 #game-hud .civ .ship .pips i { width: var(--ui-s3); height: var(--ui-s3); border-radius: 50%; box-shadow: none; background: conic-gradient(currentColor calc(var(--p, 0) * 1turn), rgb(255 255 255 / 0.1) 0); }
 #game-hud .civ .ship .pips i.e { background: none; box-shadow: inset 0 0 0 1px rgb(127 232 255 / 0.3); }

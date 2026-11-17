@@ -6,6 +6,7 @@ import { DRAG, thrustOf } from './player';
 import { AGE_GOAL, G_WORLD, need, V_STICK } from './rules';
 import { wrap } from '../../core/orbits';
 import { want, type Entry } from '../rivals/ledger';
+import { markFreed } from '../planet/moons';
 
 // Rival cores: asteroids that steer like you and play by your rules. They hunt rocks they can safely swallow, run from
 // anything heavier, and hunt you once they outweigh you. Not missiles: they look around only every second or so and head
@@ -68,7 +69,7 @@ export function makeRival(b: Body, glow: Texture, heading: number, chase = CHASE
 
 // Guard moon (docs/aliencivilizations.md): once life starts, a named rival world catches one small body near it and keeps it on
 // a circle; the moon swings round to stand between its world and anything coming in fast (your moons.ts Guard, simpler).
-// Held, it is not yours to catch (moons.ts catchable); you can break it.
+// Held (ships and miners leave it), yet stolen like any moon: fly onto a free ring and match it (moons.ts); you can break it.
 const MOON_SHARE = [0.005, 0.05]; // × the world's mass
 const CATCH = 10; // world radii: how far it reaches for a moon
 const MOON_D = 3; // world radii: the moon's circle
@@ -79,7 +80,10 @@ const GUARD_LOOK = 3; // s ahead it watches for bodies on course
 export function tendMoon(b: Body, around: Body[], you: Body, dt: number) {
   const R = b.rival!, e = R.entry, bm = b.motion;
   let mo = R.moon;
-  if (mo && (!mo.m || mo.moon || !b.m || !e || e.life.progress <= 0)) [mo.held, mo, R.moon] = [false, undefined, undefined]; // stolen (now your moon), broken, or no life to guard
+  if (mo && (!mo.m || mo.moon || !b.m || !e || e.life.progress <= 0)) {
+    if (mo.m && !mo.moon) markFreed(mo); // let go: caught within STOLEN_S it is stolen
+    [mo.held, mo, R.moon] = [false, undefined, undefined]; // stolen (now your moon), broken, or no life to guard
+  }
   if (!e || !b.m || e.life.progress <= 0) return;
   if (!mo) {
     let best = CATCH * b.r;

@@ -4,7 +4,7 @@ import { boil, boilingK, heatOfK, kelvin, pressure, waterState } from '../../src
 import { AGE_GOAL, blend, COOL, G_WORLD, GIANT_HIT, radiusOf, START_R, youPull, type Comp } from '../../src/evolution/asteroid/rules.ts';
 import { slotRadius } from '../../src/core/orbits.ts';
 import {
-  AIR_LO, airLimits, FEED, fedAir, gripWindow, HOT_RAMP, nextMoonMass, LANE, matchWindow, moonCap, MOON_R, MOON_SHARE, beforeClimate, bombardment, climate, climateK, envelope, fieldParts, habitability, impact, lifeSpeed, lifeStep, LIFE_S, magnet, moonSlots, nextGoal, pickSlot, onGasLine, radioLife, SOFT_S, stageOf, tierIndex, tierName,
+  AIR_LO, airLimits, FEED, fedAir, gripWindow, handsOff, HOT_RAMP, nextMoonMass, LANE, matchWindow, moonCap, MOON_R, MOON_SHARE, beforeClimate, bombardment, climate, climateK, envelope, fieldParts, habitability, impact, lifeSpeed, lifeStep, LIFE_S, magnet, moonSlots, nextGoal, pickSlot, onGasLine, radioLife, SOFT_S, stageOf, tierIndex, tierName,
   type Life, type Sky, type World,
 } from '../../src/evolution/planet/rules.ts';
 
@@ -251,4 +251,7 @@ assert.ok(pressure(airless.suffer, 0.05) >= AIR_LO * (1 - 1e-5) && pressure(airl
 const more = airLimits(125e3, 0.1), warmer = airLimits(125e3, 0.077, 20);
 assert.ok(more.boil < shotLim.boil && more.suffer < shotLim.suffer && warmer.boil < shotLim.boil && warmer.suffer < shotLim.suffer, 'more gas or warmth lowers both');
 assert.ok(airLimits(125e3, 0.5).boil === 125e3 && airLimits(125e3, 0).boil === Infinity, 'already boiling: m; no gas: never');
+// handsOff: held and never caught (a great comet, a rival civilization's world); a guard moon is held alone and can be stolen.
+for (const [b, want] of [[{}, false], [{ held: true }, false], [{ comet: true }, false], [{ pulls: true }, false], [{ held: true, comet: true }, true], [{ held: true, pulls: true }, true]] as const)
+  assert.equal(handsOff(b), want, `handsOff ${JSON.stringify(b)}`);
 console.log(`planet ok: outer slot vs view half height ${[10 ** 3.5, 1e4, 10 ** 4.5, 1e5, 10 ** 5.5, 1e6].map((m) => `${outer(m).toFixed(1)}/${halfH(m).toFixed(1)}`).join(' ')} R; match window ${[10 ** 3.5, 10 ** 5.5, 10 ** 6.5, 1e7].map((m) => { const w = circAt(m); return (matchWindow(w.r, w.circ) / (2 * w.r)).toFixed(2); }).join(' / ')} D/s at 10^3.5 / 10^5.5 / 10^6.5 / 10^7; widest moon (stony/icy/gas-rich/metallic) ${widest.map((w) => w.map((s) => `${(100 * s).toFixed(1)}%`).join('/')).join(' · ')} of 10^4 · 10^6 · 10^7`);

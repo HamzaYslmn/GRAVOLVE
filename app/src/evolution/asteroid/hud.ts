@@ -12,7 +12,7 @@ import { createTip } from '../../ui/tip';
 import type { Controls } from '../../core/input';
 import type { Biome } from './web';
 import { habOf, type Entry } from '../rivals/ledger';
-import { lifeName, moonCap, MOON, MOON_SHARE } from '../planet/rules';
+import { handsOff, lifeName, moonCap, MOON, MOON_SHARE } from '../planet/rules';
 import { AGE_GOAL, shapeOf, MAX_HEAT, mealsTo, MOLTEN, TAGS, tierAt, TIERS, V_STICK, type Comp, type Element } from './rules';
 
 // The stage HUD, plain DOM over the canvas: every readout is an icon with a label on the card's shared columns (ui/rows.ts,
@@ -21,7 +21,8 @@ import { AGE_GOAL, shapeOf, MAX_HEAT, mealsTo, MOLTEN, TAGS, tierAt, TIERS, V_ST
 //     each only once its stage exists: World (speed, composition; planet/ adds climate, moons, limits), the civilization's
 //     People, Energy, Stocks, Fleet (civilization/), the Star (star/), and one tip. Each section is a header with a live
 //     one-line summary and a body a click on the header opens or folds (Energy's bar and the stock amounts always show).
-//     Defaults: World open (from 900 px tall also People and Energy); your own toggles win (gravolve.hudOpen); under 900 px
+//     Defaults: World open; with a civilization Defence instead (from 900 px tall World and Defence); your own toggles win
+//     (gravolve.hudOpen); under 900 px
 //     one section besides World is open at a time. Phones (PHONE): compact, every section folded to its header (speed stays),
 //     a tap opens one at a time, not saved (hud.css).
 //   target card (top right): the body you are heading for, with the same corner brackets as the marker in the world.
@@ -149,10 +150,11 @@ export function createHud(input?: Controls, surface?: HTMLElement) {
   let phoneOpen = '';
   const opened = () => {
     if (PHONE.matches) return new Set(phoneOpen ? [phoneOpen] : []);
-    const tall = innerHeight >= OPEN_ONE, on = new Set(tall ? ['world', 'people', 'energy'] : ['world']);
+    const tall = innerHeight >= OPEN_ONE, civ = !!card.querySelector('.sec[data-s="fleet"]');
+    const on = new Set(civ ? (tall ? ['world', 'fleet'] : ['fleet']) : ['world']);
     for (const [k, v] of picks) v ? on.add(k) : on.delete(k);
     if (!tall) {
-      const keep = picks.filter(([k, v]) => v && k !== 'world').at(-1)?.[0];
+      const keep = picks.filter(([k, v]) => v && k !== 'world').at(-1)?.[0] ?? (civ ? 'fleet' : undefined);
       for (const k of [...on]) if (k !== 'world' && k !== keep) on.delete(k);
     }
     return on;
@@ -315,7 +317,7 @@ export function createHud(input?: Controls, surface?: HTMLElement) {
       $('.target .name').textContent = who ?? tierOf(t.m)[1];
       const r = t.m / me.m, cap = moonCap(t.m, t.r, me.m, me.r);
       $('.target .ratio').textContent = r < 0.001 ? '×<0.001' : `×${r >= 10 ? Math.round(r) : r.toPrecision(2)}`;
-      moonsize.classList.toggle('on', t.m >= Math.min(MOON_SHARE[0] * me.m, 0.25 * cap) && t.m <= 1.01 * cap && !t.held && !t.rival); // planet/moons.ts sizeOk's bounds
+      moonsize.classList.toggle('on', t.m >= Math.min(MOON_SHARE[0] * me.m, 0.25 * cap) && t.m <= 1.01 * cap && !handsOff(t) && !t.rival); // planet/moons.ts sizeOk's bounds
       $('.target .sub').textContent = moon ? `Moon · ${rockName(t)}` : who ? `${tierOf(t.m)[1]} · ${rockName(t)}` : rockName(t);
       const tm = mixBar(t.comp, MIX_TARGET);
       if (tm !== theirs) $('.target .mix').innerHTML = theirs = tm;

@@ -8,7 +8,7 @@ registerHooks({ // src imports leave out '.ts' (Vite resolves them)
   resolve: (spec, ctx, next) => next(ctx.parentURL?.includes('/src/') && /^\.\.?\//.test(spec) && !/\.[a-z]+$/.test(spec) ? `${spec}.ts` : spec, ctx),
 });
 const { Texture } = await import('pixi.js');
-const { phys, resolve, rockBody, tickBody } = await import('../../src/evolution/asteroid/body.ts');
+const { phys, resolve, rockBody, sweep, tickBody } = await import('../../src/evolution/asteroid/body.ts');
 const { COMP, G_WORLD, rank, radiusOf, V_STICK } = await import('../../src/evolution/asteroid/rules.ts');
 type Body = import('../../src/evolution/asteroid/body.ts').Body;
 type Hit = import('../../src/evolution/asteroid/body.ts').Hit;
@@ -95,3 +95,57 @@ for (const hz of RATES) for (const ph of [0, 0.25, 0.5, 0.75]) {
   for (const q of [hits[0].heat, hits[0].heatB!]) assert.ok(Math.abs(q - 3.2) < 0.3, `head-on ${hz} Hz phase ${ph}: heat ${q}`);
 }
 console.log('head-on ok: equal rocks at 16 diameters/s bounce once, +3.2 heat each, at 30/60/144 Hz and any phase');
+// Heat seen (heatGlow): one halo per part, under the pile (a rival's halo stays children[0]), from deep red to ember, never white; gone when cold.
+{
+  const { heatGlow } = await import('../../src/evolution/asteroid/body.ts');
+  const { heatOfK } = await import('../../src/core/water.ts');
+  const { rockGlow } = await import('../../src/evolution/asteroid/atlas.ts');
+  const { Sprite } = await import('pixi.js');
+  rockGlow.set(Texture.EMPTY, Texture.WHITE);
+  const a = rock(500, COMP.stony, 0, 0), b = rock(100, COMP.stony, 30, 0);
+  a.view.addChildAt(new Sprite(), 0); // a rival's halo
+  const kids = a.view.children.length;
+  heatGlow(a);
+  assert.equal(a.view.children.length, kids, 'cold: no halo');
+  a.heat = heatOfK(790);
+  heatGlow(a);
+  assert.equal(a.view.children.length, kids, 'below 800 K (real rock glows from there): no halo');
+  a.heat = 2;
+  heatGlow(a);
+  const g = a.hot![0];
+  assert.ok(a.hot!.length === 1 && a.view.getChildIndex(g) > 0 && a.view.getChildIndex(g) < a.view.getChildIndex(a.parts[0].s), 'hot: one halo under the rock, over the rival halo');
+  assert.ok(g.rotation === a.parts[0].s.rotation && g.alpha > 0 && g.alpha <= 0.75);
+  resolve(a, b, { hit: () => {}, debris: () => {} }, { lead: true, rub: 1 / 60 });
+  heatGlow(a);
+  assert.equal(a.hot!.length, a.parts.length, 'a meal brings its halo along');
+  a.heat = 10;
+  heatGlow(a);
+  assert.ok(a.hot!.every((h) => h.alpha <= 0.75 && ((h.tint >> 8) & 0xff) < 0x80), 'never white');
+  a.heat = 0.1;
+  heatGlow(a);
+  assert.ok(!a.hot!.length && a.view.children.length === 1 + a.parts.length, 'cool: halos gone');
+  console.log('heat glow ok: a halo per part under the pile, ember at most, gone when cold');
+}
+// Three layers (user, 2026-11-17): a world closing on your shield breaks it at the shell, with a gap still to the ground, and
+// comes on whole; a 5% rock it cannot pay for loses that share there and goes on slower. At 30/60/144 Hz.
+for (const hz of [30, 60, 144]) {
+  const dt = 1 / hz, mk = (m: number, x: number, vx: number) => Object.assign(rockBody({ texture: Texture.EMPTY, comp: COMP.stony }, radiusOf(m, COMP.stony), x, 0), { m });
+  for (const [share, k] of [[1.1, 0.02], [0.05, 0.5]]) {
+    const w = mk(1000, 0, 0), b = mk(1000 * share, 6 * w.r, 0), met: number[] = [];
+    b.motion.vx = -0.5 * w.r;
+    w.guard = { r: 1.18 * w.r, meet: (_q, _v, x, y) => (met.length ? 0 : (met.push(Math.hypot(x, y)), k)) }; // down after one meet, as a real shield below 0;
+    let gapAtMeet = -1, v0 = 0, m0 = 0;
+    for (let t = 0; t < 20 && Math.hypot(b.motion.x, b.motion.y) > w.r + b.r; t += dt) {
+      tickBody(b, dt, false); // the shell alone, not the step, is judged
+      [v0, m0] = [b.motion.vx, b.m];
+      const before = met.length;
+      sweep(w, b, dt);
+      if (met.length > before) gapAtMeet = Math.hypot(b.motion.x, b.motion.y) - w.r - b.r;
+      if (met.length > before && share > 1) assert.ok(b.m === m0 && Math.abs(b.motion.vx - v0) < 1e-9, `${hz} Hz: a world comes on whole through the shell`);
+      if (met.length > before && share < 1) assert.ok(b.m < m0 && b.motion.vx > v0, `${hz} Hz: a 5% rock loses its share at the shell and slows`);
+    }
+    assert.equal(met.length, 1, `${hz} Hz: met the shell once`);
+    assert.ok(Math.abs(met[0] - w.guard.r) < 1e-6 * w.r && gapAtMeet > 0.1 * w.r, `${hz} Hz: met at the shell, ${(gapAtMeet / w.r).toFixed(2)} R above the ground`);
+  }
+}
+console.log('three layers ok: a world breaks the shield at the shell with a gap to the ground and comes on whole; a 5% rock is cut there');
