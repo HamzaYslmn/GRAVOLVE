@@ -1,4 +1,4 @@
-import { Geometry, Mesh, Shader, type UniformGroup } from 'pixi.js';
+import { Container, Geometry, Mesh, Rectangle, RenderTexture, Shader, Texture, type Renderer, type UniformGroup } from 'pixi.js';
 
 // One-time GPU bakes (background chunks, rock atlas, spheres, overlays, the tech page, star looks): a quad whose fragment shader fills a texture.
 // ES 3.0 for integer math (Pixi treats shaders without #version as WebGL1 GLSL).
@@ -13,6 +13,24 @@ export function bakeMesh(size: number, fragment: string, uniforms: UniformGroup)
     }),
     shader: Shader.from({ gl: { vertex: BAKE_VERTEX, fragment }, resources: { uniforms } }),
   });
+}
+
+/** Mipmapped atlas cells; destroy the bake quad after the last cell, then update the page's mipmaps. */
+export function bakePage(renderer: Renderer, page: number, unit: number, fragment: string, uniforms: UniformGroup) {
+  const mesh = bakeMesh(unit, fragment, uniforms), holder = new Container();
+  holder.addChild(mesh);
+  const rt = RenderTexture.create({ width: page, height: page, autoGenerateMipmaps: true });
+  let first = true;
+  const cell = (x: number, y: number, size: number, kind: number, v = 0) => {
+    (uniforms.uniforms.uCell as Float32Array).set([kind, v, 0, 0]);
+    uniforms.update();
+    mesh.position.set(x, y);
+    mesh.scale.set(size / unit);
+    renderer.render({ container: holder, target: rt, clear: first });
+    first = false;
+    return new Texture({ source: rt.source, frame: new Rectangle(x, y, size, size) });
+  };
+  return { rt, cell, destroy: () => holder.destroy({ children: true }) };
 }
 
 const BAKE_VERTEX = /* glsl */ `#version 300 es

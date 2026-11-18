@@ -71,7 +71,7 @@ type D = Disc;
         for (const b of bodies) [b.motion.x, b.motion.y] = [b.motion.x + b.motion.vx * h, b.motion.y + b.motion.vy * h];
       }
       for (const b of bodies) {
-        hit ||= touch(c.x, c.y, c.vx, c.vy, b, b.r + 0.5 * SR, dt);
+        hit ||= touch(c.x, c.y, c.vx, c.vy, b, b.r + 0.5 * SR, dt) >= 0;
         low = Math.min(low, (Math.hypot(c.x - b.motion.x, c.y - b.motion.y) - b.r) / SR);
       }
     }

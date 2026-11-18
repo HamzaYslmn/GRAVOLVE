@@ -1,19 +1,17 @@
-import { clamp } from '../../core/rng.ts';
+import { contactTime } from '../asteroid/rules.ts';
 import { keepOut, SPECK, type Craft } from './flight.ts';
 import type { Disc } from './nav.ts';
 
 // Collisions: `bump` finds the first body a ship touched over the frame (swept, so nothing tunnels at any frame rate),
 // with the contact normal and closing speed; `crash` grades it. Pirates and rivals' ships away die on any touch.
+/** First contact share of a step (dx, dy) ending at (px, py), 0 if inside at the start, -1 if it never enters r (rules.ts contactTime). */
+export const sweptAt = (px: number, py: number, dx: number, dy: number, r: number) => ((px - dx) ** 2 + (py - dy) ** 2 <= r * r ? 0 : contactTime(px, py, dx, dy, r));
 /** Did a body that moved (dx, dy) relative to a ship this frame, ending at (px, py) from it, pass within `r` of it? */
-export function swept(px: number, py: number, dx: number, dy: number, r: number) {
-  const ax = px - dx, ay = py - dy, l2 = dx * dx + dy * dy, t = l2 > 0 ? clamp(-(ax * dx + ay * dy) / l2, 0, 1) : 1;
-  const qx = ax + dx * t, qy = ay + dy * t;
-  return qx * qx + qy * qy < r * r;
-}
-/** Did body `b` pass within `rr` of a point now at (x, y) moving at (vx, vy) over the last `dt` s? (a box test, then `swept`) */
-export function touch(x: number, y: number, vx: number, vy: number, b: Disc, rr: number, dt: number) {
-  const dx = b.motion.x - x, dy = b.motion.y - y, mx = (b.motion.vx - vx) * dt, my = (b.motion.vy - vy) * dt;
-  return Math.abs(dx) < rr + Math.abs(mx) && Math.abs(dy) < rr + Math.abs(my) && swept(dx, dy, mx, my, rr);
+export function swept(px: number, py: number, dx: number, dy: number, r: number) { return sweptAt(px, py, dx, dy, r) >= 0; }
+/** Body `b`'s (`ahead` s on) first contact share over the last `dt` s, or -1: a box test, then `sweptAt`. */
+export function touch(x: number, y: number, vx: number, vy: number, b: Disc, rr: number, dt: number, ahead = 0): number {
+  const m = b.motion, dx = m.x + m.vx * ahead - x, dy = m.y + m.vy * ahead - y, mx = (m.vx - vx) * dt, my = (m.vy - vy) * dt;
+  return Math.abs(dx) < rr + Math.abs(mx) && Math.abs(dy) < rr + Math.abs(my) ? sweptAt(dx, dy, mx, my, rr) : -1;
 }
 
 /** A bump: the body, the normal off it toward the ship, the closing speed, the contact point; `miss`: only a near miss. */
@@ -36,12 +34,11 @@ export function bump<B extends Disc>(x: number, y: number, vx: number, vy: numbe
   for (const b of bodies) {
     if (!b.m || b.r < SPECK * sr || skip(b)) continue;
     const m = b.motion, rr = b.r + HULL * sr, px = m.x + m.vx * ahead - x, py = m.y + m.vy * ahead - y, mx = (m.vx - vx) * dt, my = (m.vy - vy) * dt;
-    if (Math.abs(px) < rr + Math.abs(mx) && Math.abs(py) < rr + Math.abs(my) && swept(px, py, mx, my, rr)) {
-      const ax = px - mx, ay = py - my, A = mx * mx + my * my, B = ax * mx + ay * my, C = ax * ax + ay * ay - rr * rr;
-      const tau = C <= 0 || A <= 0 ? 0 : clamp((-B - Math.sqrt(Math.max(0, B * B - A * C))) / A, 0, 1); // first contact, share of the frame
+    const tau = touch(x, y, vx, vy, b, rr, dt, ahead);
+    if (tau >= 0) {
       if (tau >= first) continue;
       first = tau;
-      const cx = ax + mx * tau, cy = ay + my * tau, cl = Math.hypot(cx, cy), u = Math.hypot(mx, my); // the body off the ship at contact
+      const cx = px + mx * (tau - 1), cy = py + my * (tau - 1), cl = Math.hypot(cx, cy), u = Math.hypot(mx, my); // the body off the ship at contact
       const [nx, ny] = cl > 1e-9 ? [-cx / cl, -cy / cl] : u > 1e-9 ? [mx / u, my / u] : [1, 0];
       hit = { b, nx, ny, vn: -((vx - m.vx) * nx + (vy - m.vy) * ny), x: x + px + nx * b.r, y: y + py + ny * b.r };
     } else if (!hit && !miss && b.r >= sr && Math.hypot(mx, my) > missV * dt && swept(px, py, mx, my, rr + MISS * sr)) {

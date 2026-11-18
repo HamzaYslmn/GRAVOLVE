@@ -1,6 +1,6 @@
 import { clamp } from '../../core/rng.ts';
 import { bearing, MAX_DT, SPECK, steps, wrap, type Craft } from './flight.ts';
-import { swept, touch } from './crash.ts';
+import { sweptAt, touch } from './crash.ts';
 import type { Disc } from './nav.ts';
 import { ROCKET } from './rules.ts';
 
@@ -104,18 +104,17 @@ export function createShots(cap = SHOTS, rnd = Math.random) {
         s.y += s.vy * dt;
         s.life -= dt;
         let gone = s.life <= 0;
-        for (const f of hulls) {
-          if (gone || f.team === s.gun.team || !swept(s.x - f.x, s.y - f.y, (s.vx - (f.vx ?? 0)) * dt, (s.vy - (f.vy ?? 0)) * dt, f.r)) continue;
-          f.kill();
-          hit(s, f.x, f.y, true);
-          gone = true;
-        }
-        for (const b of bodies) {
-          if (gone || !b.m || b.r < minR || s.gun.own?.(b) || !touch(s.x, s.y, s.vx, s.vy, b, b.r, dt)) continue;
-          const m = b.motion, dx = x0 - m.x, dy = y0 - m.y, d = Math.hypot(dx, dy) || 1, x = m.x + (dx / d) * b.r, y = m.y + (dy / d) * b.r; // where it struck
-          if (b === s.target || s.gun.takes?.(b)) s.gun.onBody?.(b, x, y);
-          hit(s, x, y, false);
-          gone = true;
+        if (!gone) {
+          const [th, hull] = firstHull(hulls, s.gun.team, s.x, s.y, s.vx, s.vy, dt), body = firstBody(bodies, s.x, s.y, s.vx, s.vy, dt, minR, s.gun.own, th);
+          if (body) {
+            const { x, y } = struck(body, x0, y0);
+            if (body === s.target || s.gun.takes?.(body)) s.gun.onBody?.(body, x, y);
+            hit(s, x, y, false);
+          } else if (hull) {
+            hull.kill();
+            hit(s, hull.x, hull.y, true);
+          }
+          gone = !!(body || hull);
         }
         if (!gone) continue;
         pool[i] = pool[--n]; // swap-remove: the last live round moves into its place
@@ -126,6 +125,32 @@ export function createShots(cap = SHOTS, rnd = Math.random) {
   };
 }
 export type Shots = ReturnType<typeof createShots>;
+
+/** The earliest enemy of `team` among `hulls` a point now at (x, y) moving at (vx, vy) passed over `dt` s: [share, hull] (Infinity: none). */
+function firstHull(hulls: readonly Hull[], team: Team, x: number, y: number, vx: number, vy: number, dt: number): [number, Hull | undefined] {
+  let first = Infinity, hull: Hull | undefined;
+  for (const f of hulls) {
+    if (f.team === team) continue;
+    const tau = sweptAt(x - f.x, y - f.y, (vx - (f.vx ?? 0)) * dt, (vy - (f.vy ?? 0)) * dt, f.r);
+    if (tau >= 0 && tau < first) [first, hull] = [tau, f];
+  }
+  return [first, hull];
+}
+/** The earliest of `bodies` (≥ `minR` across, not `own`) it touched before share `first`. */
+function firstBody<B extends Disc>(bodies: readonly B[], x: number, y: number, vx: number, vy: number, dt: number, minR: number, own: ((b: Disc) => boolean) | undefined, first: number) {
+  let body: B | undefined;
+  for (const b of bodies) {
+    if (!b.m || b.r < minR || own?.(b)) continue;
+    const tau = touch(x, y, vx, vy, b, b.r, dt);
+    if (tau >= 0 && tau < first) [first, body] = [tau, b];
+  }
+  return body;
+}
+/** Where a projectile from (x0, y0) struck body `b`: its surface toward the start. */
+function struck(b: Disc, x0: number, y0: number) {
+  const m = b.motion, dx = x0 - m.x, dy = y0 - m.y, d = Math.hypot(dx, dy) || 1;
+  return { x: m.x + (dx / d) * b.r, y: m.y + (dy / d) * b.r };
+}
 
 /** The nearest of `foes` within `range` of (x, y): what a gun is aimed at. */
 export function nearest<F extends { x: number; y: number }>(foes: readonly F[], x: number, y: number, range: number) {
@@ -282,7 +307,7 @@ export function createRockets(cap = ROCKET.max, rnd: () => number = Math.random)
       return m;
     },
     /**
-     * Flies every rocket `dt` s and sweeps it: an enemy hull it touches, its locked ship within the fuze, or the first body
+     * Flies every rocket `dt` s and sweeps it: the earliest enemy hull, locked ship's fuze, or body
      * (≥ `minR` across, not its own) bursts it (its target gets its own `hit`, else `hit` hears a body). Then `gone(m, x, y,
      * end)` for each that ends: 'burst', 'shot' (dead: a round got it) or 'out' (fuel spent).
      */
@@ -295,19 +320,16 @@ export function createRockets(cap = ROCKET.max, rnd: () => number = Math.random)
           const l = m.scan?.(m), p = l?.seek(); // a point shot's scan found something: lock it, at full speed in its frame
           if (l && p) [m.seek, m.target, m.fuze, m.lock, m.fx, m.fy, m.V, m.scan] = [l.seek, l.target, !!l.fuze, true, p.vx, p.vy, q.speed * m.R, undefined];
           for (let k = 0; k < n && m.fuel > 0; k++) guide(m, h, q);
-          for (const f of hulls) if (!at && f.team !== m.team && swept(m.x - f.x, m.y - f.y, (m.vx - (f.vx ?? 0)) * T, (m.vy - (f.vy ?? 0)) * T, f.r)) [at, direct] = [{ x: f.x, y: f.y }, f];
-          const t = !at && m.fuze && m.lock ? m.seek?.() : undefined, fz = q.fuze * m.R + (t?.r ?? 0);
-          if (t && swept(m.x - t.x, m.y - t.y, (m.vx - t.vx) * T, (m.vy - t.vy) * T, fz)) {
-            at = { x: m.x, y: m.y };
-            direct = nearest(hulls.filter((f) => f.team !== m.team), t.x, t.y, fz);
-          }
-          for (const b of bodies) {
-            if (at || !b.m || b.r < minR || m.own?.(b) || !touch(m.x, m.y, m.vx, m.vy, b, b.r, T)) continue;
-            const p = b.motion, dx = x0 - p.x, dy = y0 - p.y, d = Math.hypot(dx, dy) || 1;
-            at = { x: p.x + (dx / d) * b.r, y: p.y + (dy / d) * b.r };
-            if (!m.hit) hit(m, b, at.x, at.y);
-            else if (b === m.target) m.hit(b, at.x, at.y);
-          }
+          const [th, hull] = firstHull(hulls, m.team, m.x, m.y, m.vx, m.vy, T);
+          const t = m.fuze && m.lock ? m.seek?.() : undefined, fz = q.fuze * m.R + (t?.r ?? 0);
+          const tf = t ? sweptAt(m.x - t.x, m.y - t.y, (m.vx - t.vx) * T, (m.vy - t.vy) * T, fz) : -1, fuzed = tf >= 0 && tf < th;
+          const body = firstBody(bodies, m.x, m.y, m.vx, m.vy, T, minR, m.own, fuzed ? tf : th);
+          if (body) {
+            at = struck(body, x0, y0);
+            if (!m.hit) hit(m, body, at.x, at.y);
+            else if (body === m.target) m.hit(body, at.x, at.y);
+          } else if (fuzed && t) [at, direct] = [{ x: m.x, y: m.y }, nearest(hulls.filter((f) => f.team !== m.team), t.x, t.y, fz)];
+          else if (hull) [at, direct] = [{ x: hull.x, y: hull.y }, hull];
         }
         if (at) {
           direct?.kill(true);

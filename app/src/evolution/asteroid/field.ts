@@ -778,7 +778,7 @@ export function createAsteroidField(layer: Container, atlas: Rock[], glow: Textu
         if (e) { // on the map the body owns its numbers; a rival world runs its climate and life here (cooling: tickBody)
           [e.m, e.comp, e.heat, e.diff] = [b.m, b.comp, b.heat, b.diff ?? e.diff];
           live(e, dt, false);
-          [b.comp, b.heat] = [e.comp, e.heat];
+          [b.comp, b.heat] = [e.comp, e.heat]; if (e.m < b.m) shed(b, b.m - e.m); // what boiled off or leaked to space leaves
         }
       }
       // Off screen: not drawn, and its parts are not settled or recoloured.

@@ -1,5 +1,5 @@
-import { Container, Graphics, Particle, Rectangle, RenderTexture, Texture, UniformGroup, type ParticleContainer, type Renderer } from 'pixi.js';
-import { BAKE_FRAGMENT_HEAD, bakeMesh } from './bake';
+import { Container, Graphics, Particle, Rectangle, Texture, UniformGroup, type ParticleContainer, type Renderer } from 'pixi.js';
+import { BAKE_FRAGMENT_HEAD, bakePage } from './bake';
 import { ART_H, ART_W, ENGINES, SHIP_ART } from './shipArt';
 
 // The tech page: one mipmapped 1024² texture baked once, so one ParticleContainer draws every ship, satellite and grain.
@@ -90,21 +90,9 @@ let page: TechPage | undefined;
 export function techPage(renderer: Renderer): TechPage {
   if (page) return page;
   const uniforms = new UniformGroup({ uCell: { value: new Float32Array(4), type: 'vec4<f32>' }, uSeed: { value: 13, type: 'f32' } });
-  const mesh = bakeMesh(UNIT, fragment, uniforms), holder = new Container();
-  holder.addChild(mesh);
-  const rt = RenderTexture.create({ width: PAGE, height: PAGE, autoGenerateMipmaps: true });
-  let first = true;
-  const cell = (x: number, y: number, size: number, kind: number) => {
-    (uniforms.uniforms.uCell as Float32Array).set([kind, 0, 0, 0]);
-    uniforms.update();
-    mesh.position.set(x, y);
-    mesh.scale.set(size / UNIT);
-    renderer.render({ container: holder, target: rt, clear: first });
-    first = false;
-    return new Texture({ source: rt.source, frame: new Rectangle(x, y, size, size) });
-  };
+  const { rt, cell, destroy } = bakePage(renderer, PAGE, UNIT, fragment, uniforms);
   const veil = cell(256, 0, 256, 1), ripple = cell(0, 256, 128, 2), ring = cell(128, 256, 128, 3), dot = cell(256, 256, 64, 4), hex = cell(320, 256, 64, 5), panel = cell(384, 256, 64, 6);
-  holder.destroy({ children: true });
+  destroy();
   // The fleet: each ship's SVG as Pixi Graphics, drawn into its cell at one scale (so classes stay to scale).
   const art = new Container();
   let i = 0;

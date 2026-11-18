@@ -1,5 +1,5 @@
-import { Container, Particle, ParticleContainer, Rectangle, RenderTexture, Sprite, Texture, UniformGroup, type Renderer } from 'pixi.js';
-import { BAKE_FRAGMENT_HEAD, bakeMesh } from '../../render/bake';
+import { Container, Particle, ParticleContainer, Sprite, UniformGroup, type Renderer, type Texture } from 'pixi.js';
+import { BAKE_FRAGMENT_HEAD, bakePage } from '../../render/bake';
 import { FAR_BOUNDS } from '../../render/fx';
 import { YOU } from '../../render/tech';
 import { mixRgb } from '../asteroid/body';
@@ -162,24 +162,12 @@ let page: StarPage | undefined;
 export function starPage(renderer: Renderer): StarPage {
   if (page) return page;
   const uniforms = new UniformGroup({ uCell: { value: new Float32Array(4), type: 'vec4<f32>' }, uSeed: { value: 41, type: 'f32' } });
-  const mesh = bakeMesh(UNIT, fragment, uniforms), holder = new Container();
-  holder.addChild(mesh);
-  const rt = RenderTexture.create({ width: PAGE, height: PAGE, autoGenerateMipmaps: true });
-  let first = true;
-  const cell = (x: number, y: number, size: number, kind: number, v = 0) => {
-    (uniforms.uniforms.uCell as Float32Array).set([kind, v, 0, 0]);
-    uniforms.update();
-    mesh.position.set(x, y);
-    mesh.scale.set(size / UNIT);
-    renderer.render({ container: holder, target: rt, clear: first });
-    first = false;
-    return new Texture({ source: rt.source, frame: new Rectangle(x, y, size, size) });
-  };
+  const { rt, cell, destroy } = bakePage(renderer, PAGE, UNIT, fragment, uniforms);
   const photo = [0, 1, 2].map((v) => cell(v * 256, 0, 256, 0, v)), gran = cell(768, 0, 256, 1, 0);
   const granFine = cell(0, 256, 256, 1, 1), corona = cell(256, 256, 256, 2, 0), corona2 = cell(512, 256, 256, 2, 1), limb = cell(768, 256, 256, 3);
   const halo = cell(0, 512, 256, 4), haze = cell(256, 512, 256, 5), flare = cell(512, 512, 128, 6), far = cell(640, 512, 128, 7);
   const shadow = cell(768, 512, 128, 8), panel = cell(896, 512, 64, 9), hauler = cell(960, 512, 64, 10), dot = cell(896, 576, 64, 11);
-  holder.destroy({ children: true });
+  destroy();
   rt.source.updateMipmaps();
   page = { photo, gran, granFine, corona, corona2, limb, halo, haze, panel, hauler, dot, shadow, flare, far };
   return page;

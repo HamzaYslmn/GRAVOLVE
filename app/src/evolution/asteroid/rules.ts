@@ -5,7 +5,7 @@
 // weighted geometric mean of phases (weak phases cost more than their share); loose piles are weaker; radii are capped at
 // R_CAP (stylised scale: no planet as big as a star), while the doc's sizes grow without limit.
 import { clamp, clamp01, rng, smoothstep } from '../../core/rng.ts';
-import { K_PER_HEAT } from '../../core/water.ts';
+import { boil, K_PER_HEAT } from '../../core/water.ts';
 
 // Elements: metal, rock (all stony kinds; the doc's carbon is folded in), ice (water), gas, and a trace of
 // radioactive heavy elements (rare, heavy: a civilization's fuel).
@@ -221,6 +221,12 @@ export function blend(a: Comp, ma: number, b: Comp, mb: number): Comp {
     if (f > 0) out[e] = f;
   }
   return out;
+}
+/** Hot water boils (core/water.ts boil): it cools the body, what its gravity keeps becomes gas. Returns the mass lost to space. */
+export function boilOff(w: { m: number; heat: number; comp: Comp }, dt: number) {
+  const { boiled, kept, cool } = boil(w.m, w.heat, w.comp.ice ?? 0, w.comp.gas ?? 0, dt);
+  if (boiled) [w.heat, w.comp] = [Math.max(0, w.heat - cool), blend(blend(w.comp, w.m, { ice: 1 }, -boiled), w.m - boiled, { gas: 1 }, kept)];
+  return boiled - kept;
 }
 
 /** Speed (actor diameters/s) gained falling from far away into contact, for mass ratio q = mb/ma (a = you). */

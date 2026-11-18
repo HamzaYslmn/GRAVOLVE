@@ -61,8 +61,10 @@ R_T/(R_T+R_P)):
   a skim until it sticks and set both spinning; a skim at 0.55–0.65 of escape merges in 0.3–1.6 s at any tick rate
   (body.test.ts). Near-equal masses: the tougher is T (`rank` = m·(D·(0.5 + H))^0.1; never under 1/1.4 of the other).
   Rub sparks scale with the energy lost.
-- Restitution: solid 0.5, rubble to 0.15, molten ~0. MAX_SPIN 1 rad/s. Every loaded rock is swept against you
-  (`contactTime`): no tunnelling.
+- Restitution: solid 0.5, rubble to 0.15, molten ~0. MAX_SPIN 1 rad/s. Every loaded rock is swept against you,
+  your moons and shielded worlds (`contactTime`): nothing tunnels through those. Plain rock pairs are tested at frame
+  end only, so two fast rocks can pass through each other (2026-11-18: a swept pair test was tried and dropped; it
+  resolved pairs in found order, not earliest first, and broke shield bounces).
 - **Shared mass helpers** (`body.ts`): `absorb`, `shed`, `drop` (m = 0). `shatter` keeps `BURST_KEEP` 0.4 as ≤ 6
   fragments on a ring wide enough that none touch at birth (`burstRing`), used for a body a world repels. Your guns use
   their own cut (`KEEP` 0.9: [civilizationgameplay.md](civilizationgameplay.md) → Breaking into food).

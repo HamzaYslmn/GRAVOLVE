@@ -1,7 +1,7 @@
 // node test/planet/rules.test.ts: Age II tiers, climate (greenhouse, rain, boiling), habitability, life.
 import assert from 'node:assert/strict';
-import { boil, boilingK, heatOfK, kelvin, pressure, waterState } from '../../src/core/water.ts';
-import { AGE_GOAL, blend, COOL, G_WORLD, GIANT_HIT, radiusOf, START_R, youPull, type Comp } from '../../src/evolution/asteroid/rules.ts';
+import { boilingK, heatOfK, kelvin, pressure, waterState } from '../../src/core/water.ts';
+import { AGE_GOAL, blend, boilOff, COOL, G_WORLD, GIANT_HIT, radiusOf, START_R, youPull, type Comp } from '../../src/evolution/asteroid/rules.ts';
 import { slotRadius } from '../../src/core/orbits.ts';
 import {
   AIR_LO, airLimits, FEED, fedAir, gripWindow, handsOff, HOT_RAMP, nextMoonMass, LANE, matchWindow, moonCap, MOON_R, MOON_SHARE, beforeClimate, bombardment, climate, climateK, envelope, fieldParts, habitability, impact, lifeSpeed, lifeStep, LIFE_S, magnet, moonSlots, nextGoal, pickSlot, onGasLine, radioLife, SOFT_S, stageOf, tierIndex, tierName,
@@ -36,18 +36,13 @@ const restTemp = [0.3, 0.4, 0.6, 1, 2.5].map((p) => {
 assert.ok(restTemp[0] === 0 && restTemp.slice(1, 4).every((t) => t > 0.7) && restTemp[4] > 0, restTemp.join(' ')); // 2.5 atm: liquid, close to boiling
 console.log(`planet ok: climate at rest 0.3 / 0.4 / 0.6 / 1 / 2.5 atm -> ${rest.join(' / ')} K, temperature score ${restTemp.map((t) => t.toFixed(2)).join(' / ')}`);
 
-/** The player's frame: tickBody cooling + core/water.ts boiling (player.ts), then Age II's climate. */
+/** The player's frame: tickBody cooling + boiling (rules.ts boilOff, as player.ts), then Age II's climate. */
 function run(b: World, sky: Sky, seconds: number, dt = 0.05) {
   let leaked = 0;
   for (let t = 0; t < seconds; t += dt) {
     beforeClimate(sky, b);
     b.heat *= Math.exp((-COOL * START_R * dt) / b.r);
-    const ice = b.comp.ice ?? 0, { boiled, kept, cool } = boil(b.m, b.heat, ice, b.comp.gas ?? 0, dt);
-    if (boiled) {
-      b.heat = Math.max(0, b.heat - cool);
-      b.comp = blend(blend(b.comp, b.m, { ice: 1 }, -boiled), b.m - boiled, { gas: 1 }, kept);
-      b.m -= boiled - kept;
-    }
+    b.m -= boilOff(b, dt);
     leaked += climate(sky, b, dt);
     b.r = radiusOf(b.m, b.comp);
   }

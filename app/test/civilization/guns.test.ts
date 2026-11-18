@@ -3,11 +3,42 @@
 // (nose ≤ ROCKET.turn, push ≤ ROCKET.acc), fly exactly their range, alternate pads, keep to a clicked point's ray and scan
 // past your mining reach, hit a clicked rock from a moving world, and come round onto fast or late-breaking ships.
 import assert from 'node:assert/strict';
+import { test } from 'node:test';
 import { craft, disc, fighterGun, q, R, rocketAt, seeded, SR } from './fakes.ts';
 import { BURST, F_PATROL_V, F_TURN, GAP, GUN, GUN_ARC, leadAt, RATE, SHOT_S, SHOT_V, SPREAD, wrap } from '../../src/evolution/civilization/flight.ts';
 import { BOLT, createRockets, createShots, DOT_GLOW, DOT_LIT, least, MAX_GLOW, pick, nearest, pull, SHOTS, spot, trigger, type Gun, type Hull, type Lock, type Rocket } from '../../src/evolution/civilization/guns.ts';
 import { ARMS, FLEET, FRAG, PREY, ROCKET } from '../../src/evolution/civilization/rules.ts';
 import { fireRange, reach } from '../../src/evolution/civilization/mining.ts';
+
+test('rounds hit nearer cover regardless of body order', () => {
+  const near = disc(3, 0, 0.5), far = disc(6, 0, 0.5);
+  for (const bodies of [[near, far], [far, near]]) {
+    const shots = createShots(), got: unknown[] = [];
+    let killed = false;
+    const ship: Hull = { x: 9, y: 0, r: 0.1, team: 'pirate', kill: () => void (killed = true) };
+    const gun = { ...fighterGun((b) => got.push(b)), u: 300, spread: 0 };
+    assert.ok(shots.fire(gun, trigger(), true, 0, 0, 0, 0, 0, ship.x, ship.y, 0, 0, near));
+    shots.step(1 / 30, bodies, [ship], 0, (_s, x, y, hull) => assert.deepEqual([x, y, hull], [2.5, 0, false]));
+    assert.deepEqual(got, [near]);
+    assert.equal(killed, false);
+    assert.equal(shots.n, 0);
+  }
+});
+test('rockets hit nearer cover before hulls or fuzes regardless of body order', () => {
+  const near = disc(3, 0, 0.5), far = disc(6, 0, 0.5);
+  for (const fuze of [false, true]) for (const bodies of [[near, far], [far, near]]) {
+    const rockets = createRockets(), got: unknown[] = [], ended: unknown[] = [];
+    let killed = false;
+    const ship = { x: 9, y: 0, vx: 0, vy: 0, r: 0.1, team: 'pirate' as const, kill: () => void (killed = true) };
+    const m = rockets.launch(rocketAt(1, { r: 0, tx: ship.x, fuze, seek: () => ship }))!;
+    Object.assign(m, { x: 0, y: 0, vx: 300, vy: 0, heading: 0 });
+    rockets.step(1 / 30, bodies, [ship], 0, (_m, b) => got.push(b), (_m, x, y, end) => ended.push([x, y, end]));
+    assert.deepEqual(got, [near]);
+    assert.deepEqual(ended, [[2.5, 0, 'burst']]);
+    assert.equal(killed, false);
+    assert.equal(rockets.live.length, 0);
+  }
+});
 
 // Rounds (flight.ts createShots): the pool holds SHOTS at most; a SHOT_V (22 R/s) round cannot tunnel through a 0.09 R ship at 30
 // fps; nothing fires at a lead point outside the arc; bursts at a ship crossing at 4 R/s from 5 R kill some of the time.

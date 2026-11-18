@@ -11,7 +11,7 @@ const { rng } = await import('../../src/core/rng.ts');
 const { createAsteroidField } = await import('../../src/evolution/asteroid/field.ts');
 const { absorb, drop, rockBody, tickBody } = await import('../../src/evolution/asteroid/body.ts');
 const { makeRival, tendMoon } = await import('../../src/evolution/asteroid/rival.ts');
-const { roster } = await import('../../src/evolution/rivals/ledger.ts');
+const { live, roster } = await import('../../src/evolution/rivals/ledger.ts');
 const { AGE_GOAL, airR, bakes, COMP, radiusOf, START_R } = await import('../../src/evolution/asteroid/rules.ts');
 type Body = import('../../src/evolution/asteroid/body.ts').Body;
 type Field = ReturnType<typeof createAsteroidField>;
@@ -162,6 +162,36 @@ if (process.argv.includes('--bench')) {
     assert.ok(peak <= 2, 'few spheres share a late world\'s screen'); // measured 1/1/0 (2026-11-17); the absolute rule gave 7/12/3
   }
   assert.ok(greats > 0, 'a great comet passed');
+
+  // A quiet field (warmed up 120 frames): `step(keep)` drops every body but `keep`, parks the player, then updates once.
+  const quiet = (seed: number) => {
+    Math.random = rng(seed);
+    const pq = you(0, 700), f = createAsteroidField(new Container(), atlas as never, Texture.EMPTY, spheres, seed, pq, () => {}, () => {});
+    for (let i = 0; i < 120; i++) f.update(pq.motion, HALF[0], HALF[1], DT, () => {}, HALF[0]);
+    const step = (keep: Body[]) => {
+      for (const b of f.bodies) if (!keep.includes(b)) drop(b);
+      Object.assign(pq.motion, { x: 0, y: 700, vx: 0, vy: 0 });
+      f.update(pq.motion, HALF[0], HALF[1], DT, () => {}, HALF[0]);
+    };
+    step([]);
+    return { f, step };
+  };
+
+  // A named world boils its water the same on the map (field.ts: live, then tickBody cools) as off it (ledger.ts live alone).
+  {
+    const comp = { rock: 0.6, metal: 0.1, ice: 0.3 }, M = 1e5, { f, step } = quiet(7);
+    const e = { ...roster(1, M, comp)[0], m: M, heat: 4, out: true }, twin = { ...e, comp: { ...comp }, sky: { ...e.sky }, life: { ...e.life }, out: false };
+    const w = makeRival(f.spawn(500, 700, 0, 0, M, comp), Texture.EMPTY, 0);
+    [w.rival!.entry, w.heat] = [e, e.heat];
+    for (let t = 0; t < 30; t += DT) {
+      step([w]);
+      Object.assign(w.motion, { x: 500, y: 700, vx: 0, vy: 0 });
+      live(twin, DT, true);
+    }
+    console.log(`world water on the map ${(100 * w.comp.ice!).toFixed(2)}%, off ${(100 * twin.comp.ice!).toFixed(2)}%; mass ${w.m.toFixed(0)} / ${twin.m.toFixed(0)}`);
+    assert.ok(w.comp.ice! < 0.29 && Math.abs(w.comp.ice! - twin.comp.ice!) < 0.003, 'the same water boils off on and off the map');
+    assert.ok(Math.abs(w.m / twin.m - 1) < 0.003, 'and the same mass leaves');
+  }
 
   // Giants you leave behind pass out of meteor reach and are gone for good (m 0): nothing keeps a ghost of them.
   Math.random = rng(3);

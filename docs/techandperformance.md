@@ -81,6 +81,7 @@ Latest per row; "not re-run" = measured once, code changed since.
 | What | Number | Note |
 |---|---|---|
 | Bench, field | `field.update` at rest 0.333 ms, 446 bodies | 2026-11-16, machine not idle |
+| Earliest hits (crash.ts `sweptAt`) | nav unchanged against HEAD (p95 0.36 both, over its 0.3 assert on this slow machine) | 2026-11-18 |
 | Bench, nav | 30 home ships among 400 bodies 0.100 ms (p95 0.133) | 2026-11-16 |
 | Bench, pirates | 14 ships, 400 bodies 0.136 ms mean | 2026-11-16 |
 | Pirate shields and jumps | no measurable cost; 14 jumping: frame 1.75 ms mean (1.83 before) | 2026-11-17, not idle |

@@ -1,6 +1,6 @@
 import { between, clamp, rng, smoothstep } from '../../core/rng.ts';
-import { boil, kelvin } from '../../core/water.ts';
-import { AGE_GOAL, blend, COOL, MOLTEN, radiusOf, START_R, type Comp } from '../asteroid/rules.ts';
+import { kelvin } from '../../core/water.ts';
+import { AGE_GOAL, blend, boilOff, COOL, MOLTEN, radiusOf, START_R, type Comp } from '../asteroid/rules.ts';
 import { beforeClimate, climate, FIELD_METAL, habitability, impact, lifeStep, type Life, type Sky, type World } from '../planet/rules.ts';
 import { waveFighters } from '../civilization/rules.ts';
 
@@ -101,8 +101,8 @@ export function want(e: Entry): Want {
 }
 
 /**
- * Climate and life for `dt` s, the player's frame on a world (test/planet/rules.test.ts `run`): `alone` adds the cooling and
- * water boiling the field does for bodies on the map (tickBody) and the player does for itself (player.ts).
+ * Climate, water boiling and life for `dt` s, the player's frame on a world (test/planet/rules.test.ts `run`): `alone` adds the
+ * cooling and metal sinking the field does for bodies on the map (tickBody). On the map the field sheds the mass lost.
  */
 export function live(e: Entry, dt: number, alone: boolean) {
   if (e.m < AGE_GOAL) return;
@@ -112,13 +112,8 @@ export function live(e: Entry, dt: number, alone: boolean) {
   if (alone) {
     w.heat *= Math.exp((-COOL * START_R * dt) / w.r);
     e.diff = Math.min(1, e.diff + (dt / 20) * smoothstep(MOLTEN, 5, w.heat)); // metal sinks while molten (body.ts)
-    const { boiled, kept, cool } = boil(w.m, w.heat, w.comp.ice ?? 0, w.comp.gas ?? 0, dt);
-    if (boiled) {
-      w.heat = Math.max(0, w.heat - cool);
-      w.comp = blend(blend(w.comp, w.m, { ice: 1 }, -boiled), w.m - boiled, { gas: 1 }, kept);
-      w.m -= boiled - kept;
-    }
   }
+  w.m -= boilOff(w, dt);
   climate(e.sky, w, dt);
   [e.m, e.comp, e.heat] = [w.m, w.comp, w.heat];
   lifeStep(e.life, habitability(w), dt);

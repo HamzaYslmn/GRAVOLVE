@@ -2,13 +2,13 @@ import { Sprite, type Container, type Texture } from 'pixi.js';
 import { shapeThrust, stickThrust, type Vec } from '../../core/entity';
 import type { Axis } from '../../core/input';
 import { clamp, smoothstep } from '../../core/rng';
-import { boil as boilWater, K_PER_HEAT, LATENT, pressure } from '../../core/water';
+import { K_PER_HEAT, LATENT, pressure } from '../../core/water';
 import type { Rock } from './atlas';
 import { gap, heatGlow, phys, rockBody, shed, tickBody, type Body } from './body';
 import type { Spheres } from './sphere';
 import { createWells } from './wells';
 import { EXTINCT } from '../planet/rules';
-import { blend, BURN_MAX, burnShare, collide, COMP, MOLTEN, critSpeed, DEATH_D, density, fallSpeed, GRAZE, reachGround, START_R, TOP, worldOpts } from './rules';
+import { blend, boilOff, BURN_MAX, burnShare, collide, COMP, MOLTEN, critSpeed, DEATH_D, density, fallSpeed, GRAZE, reachGround, START_R, TOP, worldOpts } from './rules';
 
 // The player: an asteroid body steered by input, growing by eating rocks (body.ts). Thrust rises slower
 // than size, so you get more sluggish in your own diameters as you grow. Space handling: no drag, momentum is
@@ -153,13 +153,7 @@ export function createPlayer(layer: Container, rock: Rock, glow: Texture, sphere
         body.comp = blend(body.comp, body.m, { ice: 1 }, -lost);
         shrink(lost);
       } else if (ice) {
-        // Hot water boils (core/water.ts): it cools you, what your gravity keeps becomes gas, the rest is lost.
-        const { boiled, kept, cool } = boilWater(body.m, body.heat, ice, body.comp.gas ?? 0, dt);
-        if (boiled) {
-          body.heat = Math.max(0, body.heat - cool);
-          body.comp = blend(blend(body.comp, body.m, { ice: 1 }, -boiled), body.m - boiled, { gas: 1 }, kept);
-          shrink(boiled - kept);
-        }
+        shrink(boilOff(body, dt)); // hot water boils (rules.ts boilOff)
       }
       body.motion.accel = thrustOf(body) * (1 + JET * Math.min(1, boil));
       halo.tint = body.comet ? 0x9ff0ff : 0x7fc8ff;

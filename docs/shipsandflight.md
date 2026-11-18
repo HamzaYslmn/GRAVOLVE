@@ -101,7 +101,8 @@ body takes the effect (pirates: also their fleet's rocks, `Gun.takes`). A pirate
   frigate 0.7, fighter 1, probe and miner 1.5) for your home ships and wave fighters; `nearest` for pirates.
 - Checked (guns / pirates tests, 2026-11-16): a fighter burst kills a 4 R/s crosser at 5 R 58%; a burst from 6 R behind
   kills a straight raider 73%, a jinking one 41%, on a bare hull (shields: [gameevents.md](gameevents.md) → Pirates); no
-  tunnelling at 30 fps; ≤ 10 rounds in flight of 96.
+  tunnelling at 30 fps; ≤ 10 rounds in flight of 96. Rounds and rockets take the earliest contact (crash.ts `sweptAt`):
+  a rock in front covers a ship behind it, whatever the body order (guns test, 2026-11-18).
 
 #### Rockets
 
